@@ -1,6 +1,6 @@
 module gin-auth-app
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
