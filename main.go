@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +47,10 @@ var errEmailExists = errors.New("email already exists")
 const (
 	SessionCookieName = "session_id"
 	SessionDuration   = 24 * time.Hour
+)
+
+const (
+	DefaultMarkdownDir = "data/markdown"
 )
 
 func initDB() {
@@ -158,6 +165,32 @@ func hashPassword(password string) (string, error) {
 func checkPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+func sanitizeFilename(input string) string {
+	if input == "" {
+		return "untitled"
+	}
+	var b strings.Builder
+	for _, r := range input {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "untitled"
+	}
+	return out
+}
+
+func markdownDir() string {
+	if dir := os.Getenv("MARKDOWN_DIR"); dir != "" {
+		return dir
+	}
+	return DefaultMarkdownDir
 }
 
 func getUserByEmail(email string) (*User, error) {
@@ -657,6 +690,7 @@ func main() {
 		api.POST("/login", handleLogin)
 		api.POST("/logout", handleLogout)
 		api.GET("/me", AuthMiddleware(), handleMe)
+		api.POST("/markdown", AuthMiddleware(), handleMarkdownSubmit)
 	}
 
 	r.Run(":8080")
@@ -781,6 +815,49 @@ func handleMe(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"user_id":  userID,
+		"username": username,
+	})
+}
+
+// 文本提交：保存 Markdown 文件
+func handleMarkdownSubmit(c *gin.Context) {
+	var req struct {
+		Title   string `json:"title" binding:"required"`
+		Content string `json:"content" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	userID, _ := c.Get("user_id")
+	username, _ := c.Get("username")
+
+	dir := markdownDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	safeTitle := sanitizeFilename(req.Title)
+	timestamp := time.Now().Format("20060102_150405")
+	filename := safeTitle + "_" + timestamp + "_" + sanitizeFilename(fmt.Sprintf("%v", userID)) + ".md"
+	path := filepath.Join(dir, filename)
+
+	content := req.Content
+	if !strings.HasPrefix(strings.TrimSpace(content), "#") {
+		content = "# " + req.Title + "\n\n" + content
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "保存成功",
+		"file":     path,
 		"username": username,
 	})
 }
