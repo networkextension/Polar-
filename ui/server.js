@@ -16,6 +16,10 @@ app.get("/register", (req, res) => {
   res.redirect("/register.html");
 });
 
+app.get("/dashboard", (req, res) => {
+  res.redirect("/dashboard.html");
+});
+
 app.use(express.static("public"));
 
 function proxyRequest(req, res) {
@@ -44,7 +48,6 @@ function proxyRequest(req, res) {
 }
 
 app.use("/api", proxyRequest);
-app.use("/dashboard", proxyRequest);
 
 app.listen(PORT, () => {
   console.log(`UI running on http://localhost:${PORT}`);

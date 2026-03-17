@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="dashboard">
+      <div class="dashboard-header">
+        <div>
+          <h1>控制台</h1>
+          <p id="welcomeText">正在加载用户信息...</p>
+        </div>
+        <button id="logoutBtn" type="button">退出登录</button>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="badge">Markdown 记录</div>
+          <ul id="entryList" class="list"></ul>
+        </div>
+        <div class="panel">
+          <div class="badge">内容预览</div>
+          <div id="entryContent" class="content-box">请选择左侧记录</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const welcomeText = document.getElementById("welcomeText");
+      const entryList = document.getElementById("entryList");
+      const entryContent = document.getElementById("entryContent");
+      const logoutBtn = document.getElementById("logoutBtn");
+
+      async function loadProfile() {
+        const res = await fetch("/api/me");
+        if (!res.ok) {
+          window.location.href = "/login.html";
+          return;
+        }
+        const data = await res.json();
+        welcomeText.textContent = `你好，${data.username}`;
+      }
+
+      async function loadEntries() {
+        const res = await fetch("/api/markdown?limit=20");
+        if (!res.ok) {
+          entryList.innerHTML = "<li>无法加载记录</li>";
+          return;
+        }
+        const data = await res.json();
+        entryList.innerHTML = "";
+
+        if (!data.entries || data.entries.length === 0) {
+          entryList.innerHTML = "<li>暂无记录</li>";
+          return;
+        }
+
+        data.entries.forEach((entry) => {
+          const li = document.createElement("li");
+          li.textContent = `${entry.title} (${new Date(entry.uploaded_at).toLocaleString()})`;
+          li.addEventListener("click", () => loadEntry(entry.id));
+          entryList.appendChild(li);
+        });
+      }
+
+      async function loadEntry(id) {
+        const res = await fetch(`/api/markdown/${id}`);
+        if (!res.ok) {
+          entryContent.textContent = "读取失败";
+          return;
+        }
+        const data = await res.json();
+        entryContent.textContent = data.content || "空内容";
+      }
+
+      logoutBtn.addEventListener("click", async () => {
+        await fetch("/api/logout", { method: "POST" });
+        window.location.href = "/login.html";
+      });
+
+      loadProfile();
+      loadEntries();
+    </script>
+  </body>
+</html>
