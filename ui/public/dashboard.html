@@ -19,6 +19,15 @@
         </div>
       </div>
 
+      <div class="panel passkey-panel">
+        <div class="badge">Passkey</div>
+        <p>绑定 Passkey 后可使用指纹或人脸快速登录。</p>
+        <div class="toolbar">
+          <button id="passkeyRegisterBtn" class="btn-inline btn-secondary" type="button">绑定 Passkey</button>
+        </div>
+        <div id="passkeyStatus" class="status-text"></div>
+      </div>
+
       <div class="grid">
         <div class="panel">
           <div class="badge">Markdown 记录</div>
@@ -38,6 +47,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
+      const API_BASE = "http://localhost:8080";
       const welcomeText = document.getElementById("welcomeText");
       const entryList = document.getElementById("entryList");
       const entryContent = document.getElementById("entryContent");
@@ -46,13 +56,15 @@
       const loadMoreBtn = document.getElementById("loadMoreBtn");
       const editBtn = document.getElementById("editBtn");
       const deleteBtn = document.getElementById("deleteBtn");
+      const passkeyRegisterBtn = document.getElementById("passkeyRegisterBtn");
+      const passkeyStatus = document.getElementById("passkeyStatus");
 
       let nextOffset = 0;
       let hasMore = true;
       let activeEntryId = null;
 
       async function loadProfile() {
-        const res = await fetch("/api/me");
+        const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
         if (!res.ok) {
           window.location.href = "/login.html";
           return;
@@ -72,7 +84,9 @@
           return;
         }
 
-        const res = await fetch(`/api/markdown?limit=10&offset=${nextOffset}`);
+        const res = await fetch(`${API_BASE}/api/markdown?limit=10&offset=${nextOffset}`, {
+          credentials: "include",
+        });
         if (!res.ok) {
           entryList.innerHTML = "<li>无法加载记录</li>";
           return;
@@ -98,7 +112,7 @@
       }
 
       async function loadEntry(id) {
-        const res = await fetch(`/api/markdown/${id}`);
+        const res = await fetch(`${API_BASE}/api/markdown/${id}`, { credentials: "include" });
         if (!res.ok) {
           entryContent.textContent = "读取失败";
           return;
@@ -110,7 +124,7 @@
       }
 
       logoutBtn.addEventListener("click", async () => {
-        await fetch("/api/logout", { method: "POST" });
+        await fetch(`${API_BASE}/api/logout`, { method: "POST", credentials: "include" });
         window.location.href = "/login.html";
       });
 
@@ -136,7 +150,10 @@
         if (!confirm("确定要删除该记录吗？")) {
           return;
         }
-        const res = await fetch(`/api/markdown/${activeEntryId}`, { method: "DELETE" });
+        const res = await fetch(`${API_BASE}/api/markdown/${activeEntryId}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
         if (res.ok) {
           activeEntryId = null;
           entryContent.textContent = "请选择左侧记录";
@@ -146,6 +163,104 @@
 
       loadProfile();
       loadEntries(true);
+
+      passkeyRegisterBtn.addEventListener("click", async () => {
+        if (!window.PublicKeyCredential) {
+          passkeyStatus.textContent = "当前浏览器不支持 Passkey。";
+          return;
+        }
+
+        passkeyStatus.textContent = "正在启动 Passkey...";
+        try {
+          const beginRes = await fetch(`${API_BASE}/api/passkey/register/begin`, {
+            method: "POST",
+            credentials: "include",
+          });
+          const beginResult = await beginRes.json();
+          if (!beginRes.ok) {
+            passkeyStatus.textContent = beginResult.error || "无法发起 Passkey 绑定";
+            return;
+          }
+
+          const publicKey = beginResult.publicKey;
+          publicKey.challenge = base64URLToBuffer(publicKey.challenge);
+          publicKey.user.id = base64URLToBuffer(publicKey.user.id);
+          if (publicKey.excludeCredentials) {
+            publicKey.excludeCredentials = publicKey.excludeCredentials.map((cred) => ({
+              ...cred,
+              id: base64URLToBuffer(cred.id),
+            }));
+          }
+
+          const credential = await navigator.credentials.create({ publicKey });
+          const payload = credentialToJSON(credential);
+
+          const finishRes = await fetch(`${API_BASE}/api/passkey/register/finish`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Passkey-Session": beginResult.session_id,
+            },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          });
+          const finishResult = await finishRes.json();
+
+          if (finishRes.ok) {
+            passkeyStatus.textContent = "Passkey 绑定成功！";
+          } else {
+            passkeyStatus.textContent = finishResult.error || "Passkey 绑定失败";
+          }
+        } catch (err) {
+          passkeyStatus.textContent = "网络错误，请重试";
+        }
+      });
+
+      function base64URLToBuffer(value) {
+        const padding = "=".repeat((4 - (value.length % 4)) % 4);
+        const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+        const raw = atob(base64);
+        const buffer = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+          buffer[i] = raw.charCodeAt(i);
+        }
+        return buffer;
+      }
+
+      function bufferToBase64URL(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      }
+
+      function credentialToJSON(credential) {
+        if (!credential) return null;
+        const obj = {
+          id: credential.id,
+          rawId: bufferToBase64URL(credential.rawId),
+          type: credential.type,
+          response: {
+            clientDataJSON: bufferToBase64URL(credential.response.clientDataJSON),
+          },
+        };
+
+        if (credential.response.attestationObject) {
+          obj.response.attestationObject = bufferToBase64URL(credential.response.attestationObject);
+        }
+        if (credential.response.authenticatorData) {
+          obj.response.authenticatorData = bufferToBase64URL(credential.response.authenticatorData);
+        }
+        if (credential.response.signature) {
+          obj.response.signature = bufferToBase64URL(credential.response.signature);
+        }
+        if (credential.response.userHandle) {
+          obj.response.userHandle = bufferToBase64URL(credential.response.userHandle);
+        }
+        return obj;
+      }
     </script>
   </body>
 </html>

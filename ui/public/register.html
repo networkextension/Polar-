@@ -24,6 +24,7 @@
     </div>
 
     <script>
+      const API_BASE = "http://localhost:8080";
       const form = document.getElementById("registerForm");
       const alertBox = document.getElementById("alert");
 
@@ -39,9 +40,10 @@
         };
 
         try {
-          const res = await fetch("/api/register", {
+          const res = await fetch(`${API_BASE}/api/register`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify(payload),
           });
           const data = await res.json();
@@ -55,7 +57,7 @@
           alertBox.className = "alert success";
           alertBox.textContent = "注册成功，正在跳转...";
           setTimeout(() => {
-            window.location.href = "/dashboard";
+            window.location.href = "/dashboard.html";
           }, 600);
         } catch (err) {
           alertBox.className = "alert error";

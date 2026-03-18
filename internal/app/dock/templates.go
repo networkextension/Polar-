@@ -77,6 +77,29 @@ const layoutTemplate = `<!DOCTYPE html>
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
         .btn:active { transform: translateY(0); }
+        .btn-secondary {
+            width: 100%;
+            padding: 14px;
+            margin-top: 12px;
+            background: #f4f6fb;
+            color: #333;
+            border: 1px solid #d7dced;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-secondary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(30, 41, 59, 0.12);
+        }
+        .text-muted {
+            color: #888;
+            font-size: 13px;
+            text-align: center;
+            margin-top: 10px;
+        }
         .links {
             text-align: center;
             margin-top: 20px;
@@ -206,6 +229,8 @@ const loginTemplate = `{{define "content"}}
             </div>
             <button type="submit" class="btn">登录</button>
         </form>
+        <button type="button" id="passkeyLoginBtn" class="btn-secondary">使用 Passkey 登录</button>
+        <div class="text-muted">需先在账户内绑定 Passkey</div>
         <div class="links">
             还没有账户？ <a href="/register">立即注册</a>
         </div>
@@ -213,6 +238,8 @@ const loginTemplate = `{{define "content"}}
 </div>
 
 <script>
+const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -237,10 +264,113 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
+passkeyLoginBtn.addEventListener('click', async () => {
+    if (!window.PublicKeyCredential) {
+        showAlert('error', '当前浏览器不支持 Passkey');
+        return;
+    }
+
+    const email = document.querySelector('input[name="email"]').value.trim();
+    if (!email) {
+        showAlert('error', '请先输入邮箱地址');
+        return;
+    }
+
+    try {
+        const beginRes = await fetch('/api/passkey/login/begin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({email})
+        });
+        const beginResult = await beginRes.json();
+        if (!beginRes.ok) {
+            showAlert('error', beginResult.error || '无法发起 Passkey 登录');
+            return;
+        }
+
+        const publicKey = beginResult.publicKey;
+        publicKey.challenge = base64URLToBuffer(publicKey.challenge);
+        if (publicKey.allowCredentials) {
+            publicKey.allowCredentials = publicKey.allowCredentials.map(cred => ({
+                ...cred,
+                id: base64URLToBuffer(cred.id),
+            }));
+        }
+
+        const credential = await navigator.credentials.get({publicKey});
+        const payload = credentialToJSON(credential);
+
+        const finishRes = await fetch('/api/passkey/login/finish', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Passkey-Session': beginResult.session_id
+            },
+            body: JSON.stringify(payload)
+        });
+        const finishResult = await finishRes.json();
+
+        if (finishRes.ok) {
+            showAlert('success', 'Passkey 登录成功！正在跳转...');
+            setTimeout(() => window.location.href = '/dashboard', 500);
+        } else {
+            showAlert('error', finishResult.error || 'Passkey 登录失败');
+        }
+    } catch (err) {
+        showAlert('error', '网络错误，请重试');
+    }
+});
+
 function showAlert(type, msg) {
     const alert = document.getElementById('alert');
     alert.className = 'alert ' + type;
     alert.textContent = msg;
+}
+
+function base64URLToBuffer(value) {
+    const padding = '='.repeat((4 - (value.length % 4)) % 4);
+    const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const buffer = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) {
+        buffer[i] = raw.charCodeAt(i);
+    }
+    return buffer;
+}
+
+function bufferToBase64URL(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function credentialToJSON(credential) {
+    if (!credential) return null;
+    const obj = {
+        id: credential.id,
+        rawId: bufferToBase64URL(credential.rawId),
+        type: credential.type,
+        response: {
+            clientDataJSON: bufferToBase64URL(credential.response.clientDataJSON)
+        }
+    };
+
+    if (credential.response.attestationObject) {
+        obj.response.attestationObject = bufferToBase64URL(credential.response.attestationObject);
+    }
+    if (credential.response.authenticatorData) {
+        obj.response.authenticatorData = bufferToBase64URL(credential.response.authenticatorData);
+    }
+    if (credential.response.signature) {
+        obj.response.signature = bufferToBase64URL(credential.response.signature);
+    }
+    if (credential.response.userHandle) {
+        obj.response.userHandle = bufferToBase64URL(credential.response.userHandle);
+    }
+    return obj;
 }
 </script>
 {{end}}`
@@ -336,6 +466,13 @@ const dashboardTemplate = `{{define "content"}}
             </div>
         </div>
     </div>
+
+    <div class="card">
+        <h2>Passkey</h2>
+        <p>绑定 Passkey 后可使用指纹/人脸快速登录。</p>
+        <button class="btn-secondary" id="passkeyRegisterBtn">绑定 Passkey</button>
+        <div id="passkeyStatus" class="text-muted"></div>
+    </div>
     
     <div class="card">
         <h2>会话信息</h2>
@@ -356,6 +493,102 @@ async function logout() {
     } catch (err) {
         alert('退出失败，请重试');
     }
+}
+
+const passkeyRegisterBtn = document.getElementById('passkeyRegisterBtn');
+const passkeyStatus = document.getElementById('passkeyStatus');
+
+passkeyRegisterBtn.addEventListener('click', async () => {
+    if (!window.PublicKeyCredential) {
+        passkeyStatus.textContent = '当前浏览器不支持 Passkey。';
+        return;
+    }
+
+    passkeyStatus.textContent = '正在启动 Passkey...';
+    try {
+        const beginRes = await fetch('/api/passkey/register/begin', {method: 'POST'});
+        const beginResult = await beginRes.json();
+        if (!beginRes.ok) {
+            passkeyStatus.textContent = beginResult.error || '无法发起 Passkey 绑定';
+            return;
+        }
+
+        const publicKey = beginResult.publicKey;
+        publicKey.challenge = base64URLToBuffer(publicKey.challenge);
+        publicKey.user.id = base64URLToBuffer(publicKey.user.id);
+        if (publicKey.excludeCredentials) {
+            publicKey.excludeCredentials = publicKey.excludeCredentials.map(cred => ({
+                ...cred,
+                id: base64URLToBuffer(cred.id),
+            }));
+        }
+
+        const credential = await navigator.credentials.create({publicKey});
+        const payload = credentialToJSON(credential);
+
+        const finishRes = await fetch('/api/passkey/register/finish', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Passkey-Session': beginResult.session_id
+            },
+            body: JSON.stringify(payload)
+        });
+        const finishResult = await finishRes.json();
+        if (finishRes.ok) {
+            passkeyStatus.textContent = 'Passkey 绑定成功！';
+        } else {
+            passkeyStatus.textContent = finishResult.error || 'Passkey 绑定失败';
+        }
+    } catch (err) {
+        passkeyStatus.textContent = '网络错误，请重试';
+    }
+});
+
+function base64URLToBuffer(value) {
+    const padding = '='.repeat((4 - (value.length % 4)) % 4);
+    const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const buffer = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) {
+        buffer[i] = raw.charCodeAt(i);
+    }
+    return buffer;
+}
+
+function bufferToBase64URL(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function credentialToJSON(credential) {
+    if (!credential) return null;
+    const obj = {
+        id: credential.id,
+        rawId: bufferToBase64URL(credential.rawId),
+        type: credential.type,
+        response: {
+            clientDataJSON: bufferToBase64URL(credential.response.clientDataJSON)
+        }
+    };
+
+    if (credential.response.attestationObject) {
+        obj.response.attestationObject = bufferToBase64URL(credential.response.attestationObject);
+    }
+    if (credential.response.authenticatorData) {
+        obj.response.authenticatorData = bufferToBase64URL(credential.response.authenticatorData);
+    }
+    if (credential.response.signature) {
+        obj.response.signature = bufferToBase64URL(credential.response.signature);
+    }
+    if (credential.response.userHandle) {
+        obj.response.userHandle = bufferToBase64URL(credential.response.userHandle);
+    }
+    return obj;
 }
 </script>
 {{end}}`

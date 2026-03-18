@@ -3,10 +3,15 @@ package dock
 import (
 	"database/sql"
 	"html/template"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 type Server struct {
@@ -14,6 +19,13 @@ type Server struct {
 	router      *gin.Engine
 	addr        string
 	markdownDir string
+	webAuthn        *webauthn.WebAuthn
+	passkeyAuto    bool
+	passkeyRPID    string
+	passkeyOrigin  string
+	passkeyRPName  string
+	passkeySessions map[string]passkeySession
+	passkeyMu       sync.Mutex
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -28,7 +40,41 @@ func NewServer(cfg Config) (*Server, error) {
 		markdownDir: cfg.MarkdownDir,
 	}
 
+	server.passkeyRPID = cfg.PasskeyRPID
+	server.passkeyOrigin = cfg.PasskeyOrigin
+	server.passkeyRPName = cfg.PasskeyRPName
+	server.passkeyAuto = cfg.PasskeyOrigin == DefaultPasskeyOrigin && cfg.PasskeyRPID == DefaultPasskeyRPID
+
+	rpID := cfg.PasskeyRPID
+	if rpID == DefaultPasskeyRPID {
+		if parsed, err := url.Parse(cfg.PasskeyOrigin); err == nil && parsed.Host != "" {
+			host := parsed.Host
+			if strings.Contains(host, ":") {
+				if splitHost, _, err := net.SplitHostPort(host); err == nil && splitHost != "" {
+					host = splitHost
+				}
+			}
+			if host != "" {
+				rpID = host
+			}
+		}
+	}
+
+	webAuthn, err := webauthn.New(&webauthn.Config{
+		RPDisplayName: cfg.PasskeyRPName,
+		RPID:          rpID,
+		RPOrigins:     []string{cfg.PasskeyOrigin},
+	})
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	server.webAuthn = webAuthn
+	server.passkeySessions = make(map[string]passkeySession)
+
 	server.router = gin.Default()
+	server.router.Use(corsMiddleware())
 	server.registerRoutes()
 
 	go server.cleanupSessions()
@@ -87,6 +133,10 @@ func (s *Server) registerRoutes() {
 		api.POST("/register", s.handleRegister)
 		api.POST("/login", s.handleLogin)
 		api.POST("/logout", s.handleLogout)
+		api.POST("/passkey/register/begin", s.AuthMiddleware(), s.handlePasskeyRegisterBegin)
+		api.POST("/passkey/register/finish", s.AuthMiddleware(), s.handlePasskeyRegisterFinish)
+		api.POST("/passkey/login/begin", s.GuestMiddleware(), s.handlePasskeyLoginBegin)
+		api.POST("/passkey/login/finish", s.GuestMiddleware(), s.handlePasskeyLoginFinish)
 		api.GET("/me", s.AuthMiddleware(), s.handleMe)
 		api.POST("/markdown", s.AuthMiddleware(), s.handleMarkdownSubmit)
 		api.GET("/markdown", s.AuthMiddleware(), s.handleMarkdownList)

@@ -4,9 +4,11 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -70,8 +72,17 @@ CREATE TABLE IF NOT EXISTS markdown_entries (
 	uploaded_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS webauthn_credentials (
+	credential_id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	credential_json JSONB NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_markdown_entries_user_id ON markdown_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id);
 `
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
@@ -165,6 +176,21 @@ func (s *Server) getUserByEmail(email string) (*User, error) {
 	return &user, nil
 }
 
+func (s *Server) getUserByID(userID string) (*User, error) {
+	var user User
+	err := s.db.QueryRow(
+		`SELECT id, username, email, password_hash, created_at FROM users WHERE id = $1`,
+		userID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (s *Server) createUser(user *User) error {
 	_, err := s.db.Exec(
 		`INSERT INTO users (id, username, email, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)`,
@@ -207,6 +233,55 @@ func (s *Server) createMarkdownEntryReturningID(userID, title, filePath string, 
 		return 0, err
 	}
 	return id, nil
+}
+
+func (s *Server) listWebAuthnCredentials(userID string) ([]webauthn.Credential, error) {
+	rows, err := s.db.Query(
+		`SELECT credential_json FROM webauthn_credentials WHERE user_id = $1`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var creds []webauthn.Credential
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var cred webauthn.Credential
+		if err := json.Unmarshal(payload, &cred); err != nil {
+			return nil, err
+		}
+		creds = append(creds, cred)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return creds, nil
+}
+
+func (s *Server) upsertWebAuthnCredential(userID string, credential *webauthn.Credential) error {
+	if credential == nil {
+		return errors.New("credential is nil")
+	}
+	payload, err := json.Marshal(credential)
+	if err != nil {
+		return err
+	}
+	credentialID := base64.RawURLEncoding.EncodeToString(credential.ID)
+	_, err = s.db.Exec(
+		`INSERT INTO webauthn_credentials (credential_id, user_id, credential_json, created_at, updated_at)
+		 VALUES ($1, $2, $3, NOW(), NOW())
+		 ON CONFLICT (credential_id)
+		 DO UPDATE SET credential_json = EXCLUDED.credential_json, updated_at = NOW()`,
+		credentialID,
+		userID,
+		payload,
+	)
+	return err
 }
 
 func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]MarkdownEntry, bool, error) {

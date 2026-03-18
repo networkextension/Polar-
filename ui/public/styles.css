@@ -197,6 +197,16 @@ button:hover {
   flex-wrap: wrap;
 }
 
+.passkey-panel {
+  margin-bottom: 16px;
+}
+
+.status-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .toolbar input {
   flex: 1;
   margin-bottom: 0;

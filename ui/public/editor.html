@@ -37,6 +37,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
+      const API_BASE = "http://localhost:8080";
       const alertBox = document.getElementById("alert");
       const titleInput = document.getElementById("titleInput");
       const contentInput = document.getElementById("contentInput");
@@ -47,7 +48,7 @@
       const entryId = params.get("id");
 
       async function ensureLogin() {
-        const res = await fetch("/api/me");
+        const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
         if (!res.ok) {
           window.location.href = "/login.html";
         }
@@ -57,7 +58,7 @@
         if (!entryId) {
           return;
         }
-        const res = await fetch(`/api/markdown/${entryId}`);
+        const res = await fetch(`${API_BASE}/api/markdown/${entryId}`, { credentials: "include" });
         if (!res.ok) {
           alertBox.className = "alert error";
           alertBox.textContent = "无法加载记录";
@@ -97,11 +98,12 @@
         }
 
         try {
-          const targetUrl = entryId ? `/api/markdown/${entryId}` : "/api/markdown";
+          const targetUrl = entryId ? `${API_BASE}/api/markdown/${entryId}` : `${API_BASE}/api/markdown`;
           const method = entryId ? "PUT" : "POST";
           const res = await fetch(targetUrl, {
             method,
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ title, content }),
           });
           const data = await res.json();
