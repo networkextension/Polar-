@@ -48,6 +48,7 @@
       const postSubmitBtn = document.getElementById("postSubmitBtn");
 
       let activePost = null;
+      let currentUserId = "";
 
       function getPostId() {
         const params = new URLSearchParams(window.location.search);
@@ -71,6 +72,7 @@
           return;
         }
         const data = await res.json();
+        currentUserId = data.user_id;
         postWelcome.textContent = `你好，${data.username}`;
       }
 
@@ -103,9 +105,16 @@
           .map((url) => `<img src="${buildAssetUrl(url)}" alt="post image" />`)
           .join("");
 
+        const isSelf = currentUserId && post.user_id === currentUserId;
+        const authorLabel = isSelf
+          ? `<span class="post-author-name">${post.username}</span>`
+          : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
+              post.user_id
+            )}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
+
         postDetail.innerHTML = `
           <div class="post-header">
-            <div class="post-author">${post.username}</div>
+            <div class="post-author">${authorLabel}</div>
             <div class="post-time">${formatTime(post.created_at)}</div>
           </div>
           <div class="post-content">${post.content}</div>
@@ -226,8 +235,12 @@
         }
       });
 
-      loadProfile();
-      loadPost();
+      async function init() {
+        await loadProfile();
+        await loadPost();
+      }
+
+      init();
     </script>
   </body>
 </html>

@@ -34,6 +34,7 @@
 
       let nextOffset = 0;
       let hasMore = true;
+      let currentUserId = "";
 
       function buildAssetUrl(url) {
         if (!url) return "";
@@ -52,6 +53,7 @@
           return;
         }
         const data = await res.json();
+        currentUserId = data.user_id;
         postWelcome.textContent = `你好，${data.username}，发布你的第一篇帖子吧。`;
       }
 
@@ -93,9 +95,16 @@
           .map((url) => `<img src="${buildAssetUrl(url)}" alt="post image" />`)
           .join("");
 
+        const isSelf = currentUserId && post.user_id === currentUserId;
+        const authorLabel = isSelf
+          ? `<span class="post-author-name">${post.username}</span>`
+          : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
+              post.user_id
+            )}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
+
         card.innerHTML = `
           <div class="post-header">
-            <div class="post-author">${post.username}</div>
+            <div class="post-author">${authorLabel}</div>
             <div class="post-time">${formatTime(post.created_at)}</div>
           </div>
           <div class="post-content">${post.content}</div>
@@ -160,8 +169,12 @@
 
       postLoadMoreBtn.addEventListener("click", () => loadPosts(false));
 
-      loadProfile();
-      loadPosts(true);
+      async function init() {
+        await loadProfile();
+        await loadPosts(true);
+      }
+
+      init();
     </script>
   </body>
 </html>
