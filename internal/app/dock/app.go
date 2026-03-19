@@ -1,6 +1,7 @@
 package dock
 
 import (
+	"context"
 	"database/sql"
 	"html/template"
 	"log"
@@ -14,12 +15,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
 	geoip2 "github.com/oschwald/geoip2-golang/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 type Server struct {
 	db              *sql.DB
+	redis           *redis.Client
 	router          *gin.Engine
 	addr            string
+	redisPrefix     string
 	markdownDir     string
 	geoLiteDBPath   string
 	geoIPReader     *geoip2.Reader
@@ -41,8 +45,19 @@ func NewServer(cfg Config) (*Server, error) {
 	server := &Server{
 		db:            db,
 		addr:          cfg.Addr,
+		redisPrefix:   cfg.RedisPrefix,
 		markdownDir:   cfg.MarkdownDir,
 		geoLiteDBPath: cfg.GeoLiteDBPath,
+		redis: redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+		}),
+	}
+
+	if err := server.redis.Ping(context.Background()).Err(); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 
 	if cfg.GeoLiteDBPath != "" {
@@ -91,8 +106,6 @@ func NewServer(cfg Config) (*Server, error) {
 	server.router.Use(corsMiddleware())
 	server.registerRoutes()
 
-	go server.cleanupSessions()
-
 	return server, nil
 }
 
@@ -103,6 +116,9 @@ func (s *Server) Run() error {
 func (s *Server) Close() error {
 	if s.geoIPReader != nil {
 		_ = s.geoIPReader.Close()
+	}
+	if s.redis != nil {
+		_ = s.redis.Close()
 	}
 	if s.db == nil {
 		return nil

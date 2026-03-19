@@ -68,13 +68,6 @@ CREATE TABLE IF NOT EXISTS users (
 	created_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS sessions (
-	id TEXT PRIMARY KEY,
-	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-	username TEXT NOT NULL,
-	expires_at TIMESTAMPTZ NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS markdown_entries (
 	id BIGSERIAL PRIMARY KEY,
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -102,7 +95,6 @@ CREATE TABLE IF NOT EXISTS login_records (
 	logged_in_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_markdown_entries_user_id ON markdown_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_records_user_id_logged_in_at ON login_records(user_id, logged_in_at DESC);
@@ -120,51 +112,6 @@ func generateSessionID() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)
-}
-
-func (s *Server) createSession(user *User) (string, error) {
-	sessionID := generateSessionID()
-	session := &Session{
-		ID:        sessionID,
-		UserID:    user.ID,
-		Username:  user.Username,
-		ExpiresAt: time.Now().Add(SessionDuration),
-	}
-
-	_, err := s.db.Exec(
-		`INSERT INTO sessions (id, user_id, username, expires_at) VALUES ($1, $2, $3, $4)`,
-		session.ID,
-		session.UserID,
-		session.Username,
-		session.ExpiresAt,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return sessionID, nil
-}
-
-func (s *Server) getSession(sessionID string) *Session {
-	var session Session
-	err := s.db.QueryRow(
-		`SELECT id, user_id, username, expires_at FROM sessions WHERE id = $1`,
-		sessionID,
-	).Scan(&session.ID, &session.UserID, &session.Username, &session.ExpiresAt)
-	if err != nil {
-		return nil
-	}
-
-	if time.Now().After(session.ExpiresAt) {
-		_ = s.deleteSession(sessionID)
-		return nil
-	}
-	return &session
-}
-
-func (s *Server) deleteSession(sessionID string) error {
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE id = $1`, sessionID)
-	return err
 }
 
 func (s *Server) createLoginRecord(record *LoginRecord) error {
@@ -224,13 +171,6 @@ func (s *Server) listLoginRecords(userID string, limit int) ([]LoginRecord, erro
 		return nil, err
 	}
 	return records, nil
-}
-
-func (s *Server) cleanupSessions() {
-	for {
-		time.Sleep(1 * time.Hour)
-		_, _ = s.db.Exec(`DELETE FROM sessions WHERE expires_at < NOW()`)
-	}
 }
 
 func hashPassword(password string) (string, error) {

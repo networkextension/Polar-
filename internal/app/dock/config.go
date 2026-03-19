@@ -4,6 +4,9 @@ import "time"
 
 const (
 	SessionCookieName    = "session_id"
+	DefaultRedisAddr     = "localhost:6379"
+	DefaultRedisDB       = 0
+	DefaultRedisPrefix   = "polar"
 	SessionDuration      = 24 * time.Hour
 	DefaultMarkdownDir   = "data/markdown"
 	DefaultGeoLiteDBPath = "data/GeoLite2-City.mmdb"
@@ -17,6 +20,10 @@ const (
 type Config struct {
 	Addr          string
 	PostgresDSN   string
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
+	RedisPrefix   string
 	MarkdownDir   string
 	GeoLiteDBPath string
 	PasskeyRPID   string

@@ -3,14 +3,28 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"gin-auth-app/internal/app/dock"
 )
 
 func main() {
+	redisDB := dock.DefaultRedisDB
+	if value := os.Getenv("REDIS_DB"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			log.Fatalf("invalid REDIS_DB: %v", err)
+		}
+		redisDB = parsed
+	}
+
 	cfg := dock.Config{
 		Addr:          envOrDefault("ADDR", dock.DefaultAddr),
 		PostgresDSN:   envOrDefault("POSTGRES_DSN", dock.DefaultPostgresDSN),
+		RedisAddr:     envOrDefault("REDIS_ADDR", dock.DefaultRedisAddr),
+		RedisPassword: os.Getenv("REDIS_PASSWORD"),
+		RedisDB:       redisDB,
+		RedisPrefix:   envOrDefault("REDIS_PREFIX", dock.DefaultRedisPrefix),
 		MarkdownDir:   envOrDefault("MARKDOWN_DIR", dock.DefaultMarkdownDir),
 		GeoLiteDBPath: envOrDefault("GEOLITE_DB_PATH", dock.DefaultGeoLiteDBPath),
 		PasskeyRPID:   envOrDefault("PASSKEY_RP_ID", dock.DefaultPasskeyRPID),

@@ -22,7 +22,7 @@ Today, the project includes account authentication, Markdown content management,
 - Email/password registration and login
 - Cookie + server-side session management
 - Logout and authenticated user lookup
-- PostgreSQL-backed session persistence
+- Redis-backed session persistence
 
 ### Markdown Workspace
 
@@ -82,6 +82,7 @@ The value of the repository is not only in the code itself, but in the workflow 
 - Go
 - Gin
 - PostgreSQL
+- Redis
 - WebAuthn
 - GeoLite2
 
@@ -129,7 +130,7 @@ Authentication is intentionally session-based:
 - straightforward server-side control
 - well suited to a prototype with evolving auth requirements
 
-Passkey support is layered on top of this foundation rather than replacing it.
+Redis is used as the session store to keep authentication checks fast and lightweight on the API path. Passkey support is layered on top of this foundation rather than replacing it.
 
 ### 4. Lightweight frontend by choice
 
@@ -196,6 +197,14 @@ Default UI address:
 
 - `POSTGRES_DSN`
   - PostgreSQL connection string
+- `REDIS_ADDR`
+  - Redis server address
+- `REDIS_PASSWORD`
+  - Redis password, if required
+- `REDIS_DB`
+  - Redis logical database index
+- `REDIS_PREFIX`
+  - key prefix used for session records
 - `MARKDOWN_DIR`
   - directory used to store Markdown source files
 - `GEOLITE_DB_PATH`
