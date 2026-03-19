@@ -21,6 +21,7 @@ func (s *Server) createSession(user *User) (string, error) {
 		ID:        sessionID,
 		UserID:    user.ID,
 		Username:  user.Username,
+		Role:      user.Role,
 		ExpiresAt: time.Now().Add(SessionDuration),
 	}
 

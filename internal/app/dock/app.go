@@ -153,10 +153,17 @@ func (s *Server) registerRoutes() {
 	s.router.GET("/dashboard", s.AuthMiddleware(), func(c *gin.Context) {
 		username, _ := c.Get("username")
 		userID, _ := c.Get("user_id")
+		role, _ := c.Get("role")
+		roleLabel := "普通用户组"
+		if roleStr, ok := role.(string); ok && roleStr == "admin" {
+			roleLabel = "管理用户组"
+		}
 		c.HTML(http.StatusOK, "dashboard", gin.H{
 			"Title":     "控制台",
 			"Username":  username,
 			"UserID":    userID,
+			"Role":      role,
+			"RoleLabel": roleLabel,
 			"LoginTime": time.Now().Format("2006-01-02 15:04:05"),
 		})
 	})
@@ -177,5 +184,9 @@ func (s *Server) registerRoutes() {
 		api.GET("/markdown/:id", s.AuthMiddleware(), s.handleMarkdownRead)
 		api.PUT("/markdown/:id", s.AuthMiddleware(), s.handleMarkdownUpdate)
 		api.DELETE("/markdown/:id", s.AuthMiddleware(), s.handleMarkdownDelete)
+		api.GET("/tags", s.AuthMiddleware(), s.handleTagList)
+		api.POST("/tags", s.AuthMiddleware(), s.AdminMiddleware(), s.handleTagCreate)
+		api.PUT("/tags/:id", s.AuthMiddleware(), s.AdminMiddleware(), s.handleTagUpdate)
+		api.DELETE("/tags/:id", s.AuthMiddleware(), s.AdminMiddleware(), s.handleTagDelete)
 	}
 }

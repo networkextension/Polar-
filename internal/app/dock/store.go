@@ -20,6 +20,7 @@ type User struct {
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Password  string    `json:"-"` // password_hash
+	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -27,6 +28,7 @@ type Session struct {
 	ID        string
 	UserID    string
 	Username  string
+	Role      string
 	ExpiresAt time.Time
 }
 
@@ -49,6 +51,16 @@ type LoginRecord struct {
 	LoggedInAt  time.Time `json:"logged_in_at"`
 }
 
+type Tag struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Slug        string    `json:"slug"`
+	Description string    `json:"description"`
+	SortOrder   int       `json:"sort_order"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 func openDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -65,8 +77,12 @@ CREATE TABLE IF NOT EXISTS users (
 	username TEXT NOT NULL,
 	email TEXT NOT NULL UNIQUE,
 	password_hash TEXT NOT NULL,
+	role TEXT NOT NULL DEFAULT 'user',
 	created_at TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 
 CREATE TABLE IF NOT EXISTS markdown_entries (
 	id BIGSERIAL PRIMARY KEY,
@@ -95,9 +111,20 @@ CREATE TABLE IF NOT EXISTS login_records (
 	logged_in_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS tags (
+	id BIGSERIAL PRIMARY KEY,
+	name TEXT NOT NULL,
+	slug TEXT NOT NULL UNIQUE,
+	description TEXT NOT NULL DEFAULT '',
+	sort_order INT NOT NULL DEFAULT 0,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_markdown_entries_user_id ON markdown_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_records_user_id_logged_in_at ON login_records(user_id, logged_in_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tags_sort_order_created_at ON tags(sort_order DESC, created_at DESC);
 `
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
@@ -186,9 +213,9 @@ func checkPassword(password, hash string) bool {
 func (s *Server) getUserByEmail(email string) (*User, error) {
 	var user User
 	err := s.db.QueryRow(
-		`SELECT id, username, email, password_hash, created_at FROM users WHERE email = $1`,
+		`SELECT id, username, email, password_hash, role, created_at FROM users WHERE email = $1`,
 		email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -201,9 +228,9 @@ func (s *Server) getUserByEmail(email string) (*User, error) {
 func (s *Server) getUserByID(userID string) (*User, error) {
 	var user User
 	err := s.db.QueryRow(
-		`SELECT id, username, email, password_hash, created_at FROM users WHERE id = $1`,
+		`SELECT id, username, email, password_hash, role, created_at FROM users WHERE id = $1`,
 		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -214,12 +241,16 @@ func (s *Server) getUserByID(userID string) (*User, error) {
 }
 
 func (s *Server) createUser(user *User) error {
+	if user.Role == "" {
+		user.Role = "user"
+	}
 	_, err := s.db.Exec(
-		`INSERT INTO users (id, username, email, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)`,
+		`INSERT INTO users (id, username, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5, $6)`,
 		user.ID,
 		user.Username,
 		user.Email,
 		user.Password,
+		user.Role,
 		user.CreatedAt,
 	)
 	if err != nil {
@@ -382,5 +413,101 @@ func (s *Server) deleteMarkdownEntry(userID string, id int64) error {
 		userID,
 		id,
 	)
+	return err
+}
+
+func (s *Server) createTag(tag *Tag) (*Tag, error) {
+	if tag == nil {
+		return nil, errors.New("tag is nil")
+	}
+	now := time.Now()
+	if tag.CreatedAt.IsZero() {
+		tag.CreatedAt = now
+	}
+	if tag.UpdatedAt.IsZero() {
+		tag.UpdatedAt = now
+	}
+	var id int64
+	err := s.db.QueryRow(
+		`INSERT INTO tags (name, slug, description, sort_order, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 RETURNING id`,
+		tag.Name,
+		tag.Slug,
+		tag.Description,
+		tag.SortOrder,
+		tag.CreatedAt,
+		tag.UpdatedAt,
+	).Scan(&id)
+	if err != nil {
+		return nil, err
+	}
+	tag.ID = id
+	return tag, nil
+}
+
+func (s *Server) listTags(limit, offset int) ([]Tag, bool, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.db.Query(
+		`SELECT id, name, slug, description, sort_order, created_at, updated_at
+		 FROM tags
+		 ORDER BY sort_order DESC, created_at DESC
+		 LIMIT $1 OFFSET $2`,
+		limit+1,
+		offset,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	tags := make([]Tag, 0, limit+1)
+	for rows.Next() {
+		var tag Tag
+		if err := rows.Scan(
+			&tag.ID,
+			&tag.Name,
+			&tag.Slug,
+			&tag.Description,
+			&tag.SortOrder,
+			&tag.CreatedAt,
+			&tag.UpdatedAt,
+		); err != nil {
+			return nil, false, err
+		}
+		tags = append(tags, tag)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	hasMore := false
+	if len(tags) > limit {
+		hasMore = true
+		tags = tags[:limit]
+	}
+	return tags, hasMore, nil
+}
+
+func (s *Server) updateTag(id int64, name, slug, description string, sortOrder int) error {
+	_, err := s.db.Exec(
+		`UPDATE tags
+		 SET name = $1, slug = $2, description = $3, sort_order = $4, updated_at = NOW()
+		 WHERE id = $5`,
+		name,
+		slug,
+		description,
+		sortOrder,
+		id,
+	)
+	return err
+}
+
+func (s *Server) deleteTag(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM tags WHERE id = $1`, id)
 	return err
 }
