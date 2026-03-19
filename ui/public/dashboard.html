@@ -14,7 +14,7 @@
           <p id="welcomeText">正在加载用户信息...</p>
         </div>
         <div class="header-actions">
-          <button id="drawerToggleBtn" class="btn-inline btn-secondary" type="button">记录抽屉</button>
+          <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button">记录列表</button>
           <button id="newEntryBtn" class="btn-inline btn-secondary" type="button">新建 Markdown</button>
         </div>
       </div>
@@ -32,6 +32,11 @@
           </div>
           <div class="drawer-footer">
             <div class="drawer-section">
+              <div class="badge">外观</div>
+              <p class="drawer-help">在默认风格和黑白样式之间切换。</p>
+              <button id="themeToggleBtn" class="btn-secondary drawer-action-btn" type="button">切换到黑白样式</button>
+            </div>
+            <div class="drawer-section">
               <div class="badge">Passkey</div>
               <p class="drawer-help">绑定 Passkey 后可使用指纹或人脸快速登录。</p>
               <button id="passkeyRegisterBtn" class="btn-secondary drawer-action-btn" type="button">绑定 Passkey</button>
@@ -42,7 +47,7 @@
         </aside>
         <div class="panel drawer-main">
           <div class="badge">内容预览</div>
-          <div id="entryContent" class="content-box">请选择抽屉中的记录</div>
+          <div id="entryContent" class="content-box">请选择侧边栏中的记录</div>
           <div class="toolbar" style="margin-top: 12px;">
             <button id="editBtn" class="btn-inline btn-secondary" type="button">编辑</button>
             <button id="deleteBtn" class="btn-inline" type="button">删除</button>
@@ -66,14 +71,25 @@
       const drawerCloseBtn = document.getElementById("drawerCloseBtn");
       const drawerBackdrop = document.getElementById("drawerBackdrop");
       const entryDrawer = document.getElementById("entryDrawer");
+      const themeToggleBtn = document.getElementById("themeToggleBtn");
       const passkeyRegisterBtn = document.getElementById("passkeyRegisterBtn");
       const passkeyStatus = document.getElementById("passkeyStatus");
 
+      const THEME_STORAGE_KEY = "dashboard-theme";
       let nextOffset = 0;
       let hasMore = true;
       let activeEntryId = null;
 
+      function isMobileLayout() {
+        return window.innerWidth <= 860;
+      }
+
       function setDrawerOpen(open) {
+        if (!isMobileLayout()) {
+          entryDrawer.classList.remove("open");
+          drawerBackdrop.classList.remove("open");
+          return;
+        }
         entryDrawer.classList.toggle("open", open);
         drawerBackdrop.classList.toggle("open", open);
       }
@@ -83,6 +99,17 @@
         items.forEach((item) => {
           item.classList.toggle("active", Number(item.dataset.entryId) === activeEntryId);
         });
+      }
+
+      function applyTheme(theme) {
+        const nextTheme = theme === "mono" ? "mono" : "default";
+        document.documentElement.dataset.theme = nextTheme;
+        localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        themeToggleBtn.textContent = nextTheme === "mono" ? "切换到默认样式" : "切换到黑白样式";
+      }
+
+      function initTheme() {
+        applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default");
       }
 
       async function loadProfile() {
@@ -145,7 +172,7 @@
         setActiveEntryItem();
         const rawContent = data.content || "空内容";
         entryContent.innerHTML = window.marked ? window.marked.parse(rawContent) : rawContent;
-        if (window.innerWidth <= 860) {
+        if (isMobileLayout()) {
           setDrawerOpen(false);
         }
       }
@@ -175,6 +202,12 @@
         setDrawerOpen(false);
       });
 
+      window.addEventListener("resize", () => {
+        if (!isMobileLayout()) {
+          setDrawerOpen(false);
+        }
+      });
+
       editBtn.addEventListener("click", () => {
         if (!activeEntryId) {
           return;
@@ -195,13 +228,19 @@
         });
         if (res.ok) {
           activeEntryId = null;
-          entryContent.textContent = "请选择抽屉中的记录";
+          entryContent.textContent = "请选择侧边栏中的记录";
           loadEntries(true);
         }
       });
 
       loadProfile();
       loadEntries(true);
+      initTheme();
+
+      themeToggleBtn.addEventListener("click", () => {
+        const currentTheme = document.documentElement.dataset.theme === "mono" ? "mono" : "default";
+        applyTheme(currentTheme === "mono" ? "default" : "mono");
+      });
 
       passkeyRegisterBtn.addEventListener("click", async () => {
         if (!window.PublicKeyCredential) {

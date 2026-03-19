@@ -116,11 +116,7 @@
 
           alertBox.className = "alert success";
           alertBox.textContent = entryId ? "更新成功" : `保存成功（ID: ${data.id}）`;
-          if (!entryId) {
-            titleInput.value = "";
-            contentInput.value = "";
-            preview.textContent = "暂无内容";
-          }
+          window.location.href = "/dashboard.html";
         } catch (err) {
           alertBox.className = "alert error";
           alertBox.textContent = "网络错误，请稍后重试";
