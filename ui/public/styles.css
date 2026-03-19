@@ -244,6 +244,10 @@ button:hover {
   padding-bottom: 12px;
 }
 
+.drawer-history-section {
+  margin-top: 16px;
+}
+
 .drawer-footer {
   flex-shrink: 0;
   margin-top: 12px;
@@ -258,6 +262,32 @@ button:hover {
 .drawer-help {
   margin: 10px 0 12px;
   font-size: 13px;
+}
+
+.meta-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.meta-list li {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+}
+
+.meta-title {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.meta-subtitle,
+.meta-time {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .drawer-action-btn {

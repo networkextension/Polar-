@@ -3,6 +3,7 @@ package dock
 import (
 	"database/sql"
 	"html/template"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,18 +13,21 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
+	geoip2 "github.com/oschwald/geoip2-golang/v2"
 )
 
 type Server struct {
-	db          *sql.DB
-	router      *gin.Engine
-	addr        string
-	markdownDir string
+	db              *sql.DB
+	router          *gin.Engine
+	addr            string
+	markdownDir     string
+	geoLiteDBPath   string
+	geoIPReader     *geoip2.Reader
 	webAuthn        *webauthn.WebAuthn
-	passkeyAuto    bool
-	passkeyRPID    string
-	passkeyOrigin  string
-	passkeyRPName  string
+	passkeyAuto     bool
+	passkeyRPID     string
+	passkeyOrigin   string
+	passkeyRPName   string
 	passkeySessions map[string]passkeySession
 	passkeyMu       sync.Mutex
 }
@@ -35,9 +39,19 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	server := &Server{
-		db:          db,
-		addr:        cfg.Addr,
-		markdownDir: cfg.MarkdownDir,
+		db:            db,
+		addr:          cfg.Addr,
+		markdownDir:   cfg.MarkdownDir,
+		geoLiteDBPath: cfg.GeoLiteDBPath,
+	}
+
+	if cfg.GeoLiteDBPath != "" {
+		reader, err := geoip2.Open(cfg.GeoLiteDBPath)
+		if err != nil {
+			log.Printf("geolite disabled: %v", err)
+		} else {
+			server.geoIPReader = reader
+		}
 	}
 
 	server.passkeyRPID = cfg.PasskeyRPID
@@ -87,6 +101,9 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) Close() error {
+	if s.geoIPReader != nil {
+		_ = s.geoIPReader.Close()
+	}
 	if s.db == nil {
 		return nil
 	}
@@ -138,6 +155,7 @@ func (s *Server) registerRoutes() {
 		api.POST("/passkey/login/begin", s.GuestMiddleware(), s.handlePasskeyLoginBegin)
 		api.POST("/passkey/login/finish", s.GuestMiddleware(), s.handlePasskeyLoginFinish)
 		api.GET("/me", s.AuthMiddleware(), s.handleMe)
+		api.GET("/login-history", s.AuthMiddleware(), s.handleLoginHistory)
 		api.POST("/markdown", s.AuthMiddleware(), s.handleMarkdownSubmit)
 		api.GET("/markdown", s.AuthMiddleware(), s.handleMarkdownList)
 		api.GET("/markdown/:id", s.AuthMiddleware(), s.handleMarkdownRead)

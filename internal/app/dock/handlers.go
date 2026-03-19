@@ -101,6 +101,7 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 	c.SetCookie(SessionCookieName, sessionID, int(SessionDuration.Seconds()), "/", "", false, true)
+	s.recordLoginEvent(c, user.ID, "register")
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message":  "注册成功",
@@ -136,6 +137,7 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 	c.SetCookie(SessionCookieName, sessionID, int(SessionDuration.Seconds()), "/", "", false, true)
+	s.recordLoginEvent(c, user.ID, "password")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "登录成功",
@@ -161,6 +163,35 @@ func (s *Server) handleMe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"user_id":  userID,
 		"username": username,
+	})
+}
+
+func (s *Server) handleLoginHistory(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	limit := 5
+	if limitStr := c.Query("limit"); limitStr != "" {
+		parsed, err := strconv.Atoi(limitStr)
+		if err != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+			return
+		}
+		limit = parsed
+	}
+
+	records, err := s.listLoginRecords(userIDStr, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"records": records,
 	})
 }
 

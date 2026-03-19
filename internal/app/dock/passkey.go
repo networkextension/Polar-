@@ -285,6 +285,7 @@ func (s *Server) handlePasskeyLoginFinish(c *gin.Context) {
 		return
 	}
 	c.SetCookie(SessionCookieName, sessionIDValue, int(SessionDuration.Seconds()), "/", "", false, true)
+	s.recordLoginEvent(c, user.ID, "passkey")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "登录成功",

@@ -9,9 +9,10 @@ import (
 
 func main() {
 	cfg := dock.Config{
-		Addr:        envOrDefault("ADDR", dock.DefaultAddr),
-		PostgresDSN: envOrDefault("POSTGRES_DSN", dock.DefaultPostgresDSN),
-		MarkdownDir: envOrDefault("MARKDOWN_DIR", dock.DefaultMarkdownDir),
+		Addr:          envOrDefault("ADDR", dock.DefaultAddr),
+		PostgresDSN:   envOrDefault("POSTGRES_DSN", dock.DefaultPostgresDSN),
+		MarkdownDir:   envOrDefault("MARKDOWN_DIR", dock.DefaultMarkdownDir),
+		GeoLiteDBPath: envOrDefault("GEOLITE_DB_PATH", dock.DefaultGeoLiteDBPath),
 		PasskeyRPID:   envOrDefault("PASSKEY_RP_ID", dock.DefaultPasskeyRPID),
 		PasskeyOrigin: envOrDefault("PASSKEY_ORIGIN", dock.DefaultPasskeyOrigin),
 		PasskeyRPName: envOrDefault("PASSKEY_RP_NAME", dock.DefaultPasskeyRPName),

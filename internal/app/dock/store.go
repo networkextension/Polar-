@@ -38,6 +38,17 @@ type MarkdownEntry struct {
 	UploadedAt time.Time `json:"uploaded_at"`
 }
 
+type LoginRecord struct {
+	ID          int64     `json:"id"`
+	UserID      string    `json:"user_id"`
+	IPAddress   string    `json:"ip_address"`
+	Country     string    `json:"country"`
+	Region      string    `json:"region"`
+	City        string    `json:"city"`
+	LoginMethod string    `json:"login_method"`
+	LoggedInAt  time.Time `json:"logged_in_at"`
+}
+
 func openDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -80,9 +91,21 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
 	updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS login_records (
+	id BIGSERIAL PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	ip_address TEXT NOT NULL,
+	country TEXT NOT NULL DEFAULT '',
+	region TEXT NOT NULL DEFAULT '',
+	city TEXT NOT NULL DEFAULT '',
+	login_method TEXT NOT NULL DEFAULT 'password',
+	logged_in_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_markdown_entries_user_id ON markdown_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id);
+CREATE INDEX IF NOT EXISTS idx_login_records_user_id_logged_in_at ON login_records(user_id, logged_in_at DESC);
 `
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
@@ -142,6 +165,65 @@ func (s *Server) getSession(sessionID string) *Session {
 func (s *Server) deleteSession(sessionID string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE id = $1`, sessionID)
 	return err
+}
+
+func (s *Server) createLoginRecord(record *LoginRecord) error {
+	if record == nil {
+		return errors.New("login record is nil")
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO login_records (user_id, ip_address, country, region, city, login_method, logged_in_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		record.UserID,
+		record.IPAddress,
+		record.Country,
+		record.Region,
+		record.City,
+		record.LoginMethod,
+		record.LoggedInAt,
+	)
+	return err
+}
+
+func (s *Server) listLoginRecords(userID string, limit int) ([]LoginRecord, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := s.db.Query(
+		`SELECT id, user_id, ip_address, country, region, city, login_method, logged_in_at
+		 FROM login_records
+		 WHERE user_id = $1
+		 ORDER BY logged_in_at DESC
+		 LIMIT $2`,
+		userID,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]LoginRecord, 0, limit)
+	for rows.Next() {
+		var record LoginRecord
+		if err := rows.Scan(
+			&record.ID,
+			&record.UserID,
+			&record.IPAddress,
+			&record.Country,
+			&record.Region,
+			&record.City,
+			&record.LoginMethod,
+			&record.LoggedInAt,
+		); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return records, nil
 }
 
 func (s *Server) cleanupSessions() {
