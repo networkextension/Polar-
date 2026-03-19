@@ -1166,6 +1166,21 @@ func (s *Server) markChatRead(threadID int64, userID string, readAt time.Time) e
 	return err
 }
 
+func (s *Server) getChatParticipants(threadID int64) (string, string, error) {
+	var userLow, userHigh string
+	err := s.db.QueryRow(
+		`SELECT user_low, user_high FROM chat_threads WHERE id = $1`,
+		threadID,
+	).Scan(&userLow, &userHigh)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	return userLow, userHigh, nil
+}
+
 func (s *Server) createChatMessage(threadID int64, senderID, content string, createdAt time.Time) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {

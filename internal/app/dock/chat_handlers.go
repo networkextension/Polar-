@@ -162,6 +162,17 @@ func (s *Server) handleChatMessages(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
+	if s.wsHub != nil {
+		if userLow, userHigh, err := s.getChatParticipants(threadID); err == nil {
+			readAt := time.Now()
+			s.broadcastChatEvent([]string{userLow, userHigh}, chatEvent{
+				Type:   "read",
+				ChatID: threadID,
+				UserID: userIDStr,
+				ReadAt: &readAt,
+			})
+		}
+	}
 
 	nextOffset := offset + len(messages)
 	c.JSON(http.StatusOK, gin.H{
@@ -209,10 +220,30 @@ func (s *Server) handleChatSend(c *gin.Context) {
 		return
 	}
 
-	msgID, err := s.createChatMessage(threadID, userIDStr, content, time.Now())
+	now := time.Now()
+	msgID, err := s.createChatMessage(threadID, userIDStr, content, now)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
+	}
+	if s.wsHub != nil {
+		username, _ := c.Get("username")
+		senderName, _ := username.(string)
+		if userLow, userHigh, err := s.getChatParticipants(threadID); err == nil {
+			message := &ChatMessage{
+				ID:             msgID,
+				ThreadID:       threadID,
+				SenderID:       userIDStr,
+				SenderUsername: senderName,
+				Content:        content,
+				CreatedAt:      now,
+			}
+			s.broadcastChatEvent([]string{userLow, userHigh}, chatEvent{
+				Type:    "message",
+				ChatID:  threadID,
+				Message: message,
+			})
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -263,6 +294,17 @@ func (s *Server) handleChatDelete(c *gin.Context) {
 	if !deleted {
 		c.JSON(http.StatusNotFound, gin.H{"error": "消息不存在或已撤回"})
 		return
+	}
+	if s.wsHub != nil {
+		if userLow, userHigh, err := s.getChatParticipants(threadID); err == nil {
+			deletedAt := time.Now()
+			s.broadcastChatEvent([]string{userLow, userHigh}, chatEvent{
+				Type:      "revoke",
+				ChatID:    threadID,
+				MessageID: messageID,
+				DeletedAt: &deletedAt,
+			})
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "已撤回"})

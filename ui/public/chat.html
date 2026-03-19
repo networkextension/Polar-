@@ -59,6 +59,8 @@
       let activeChat = null;
       let chatCache = [];
       let pollTimer = null;
+      let ws = null;
+      let wsConnected = false;
 
       function formatTime(value) {
         if (!value) return "";
@@ -219,6 +221,9 @@
       }
 
       function startPolling() {
+        if (wsConnected) {
+          return;
+        }
         if (pollTimer) {
           clearInterval(pollTimer);
         }
@@ -228,6 +233,77 @@
             await loadMessages(activeThreadId);
           }
         }, 5000);
+      }
+
+      function stopPolling() {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      }
+
+      function getWebSocketUrl() {
+        let base = API_BASE;
+        if (base.startsWith("https://")) {
+          base = base.replace("https://", "wss://");
+        } else if (base.startsWith("http://")) {
+          base = base.replace("http://", "ws://");
+        } else {
+          base = `ws://${base}`;
+        }
+        return `${base}/ws/chat`;
+      }
+
+      function connectWebSocket() {
+        try {
+          ws = new WebSocket(getWebSocketUrl());
+        } catch (err) {
+          startPolling();
+          return;
+        }
+
+        ws.addEventListener("open", () => {
+          wsConnected = true;
+          stopPolling();
+        });
+
+        ws.addEventListener("close", () => {
+          wsConnected = false;
+          startPolling();
+        });
+
+        ws.addEventListener("error", () => {
+          wsConnected = false;
+          startPolling();
+        });
+
+        ws.addEventListener("message", async (event) => {
+          let payload;
+          try {
+            payload = JSON.parse(event.data);
+          } catch (err) {
+            return;
+          }
+          if (!payload || !payload.type) return;
+          const chatId = payload.chat_id;
+          if (payload.type === "message") {
+            if (activeThreadId === chatId) {
+              await loadMessages(chatId);
+            }
+            await loadChats(activeThreadId);
+            return;
+          }
+          if (payload.type === "read") {
+            await loadChats(activeThreadId);
+            return;
+          }
+          if (payload.type === "revoke") {
+            if (activeThreadId === chatId) {
+              await loadMessages(chatId);
+            }
+            await loadChats(activeThreadId);
+          }
+        });
       }
 
       messageForm.addEventListener("submit", async (event) => {
@@ -259,6 +335,7 @@
       async function init() {
         await loadProfile();
         messageInput.disabled = true;
+        connectWebSocket();
         const target = getTargetFromQuery();
         if (target.userId) {
           if (target.userId === currentUserId) {

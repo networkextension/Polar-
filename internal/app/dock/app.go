@@ -35,6 +35,7 @@ type Server struct {
 	passkeyRPName   string
 	passkeySessions map[string]passkeySession
 	passkeyMu       sync.Mutex
+	wsHub           *wsHub
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -103,6 +104,8 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server.webAuthn = webAuthn
 	server.passkeySessions = make(map[string]passkeySession)
+	server.wsHub = newWSHub()
+	go server.wsHub.run()
 
 	server.router = gin.Default()
 	server.router.Use(corsMiddleware())
@@ -172,6 +175,7 @@ func (s *Server) registerRoutes() {
 			"LoginTime": time.Now().Format("2006-01-02 15:04:05"),
 		})
 	})
+	s.router.GET("/ws/chat", s.handleChatWS)
 
 	api := s.router.Group("/api")
 	{
