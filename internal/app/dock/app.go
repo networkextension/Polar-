@@ -201,6 +201,7 @@ func (s *Server) registerRoutes() {
 		api.POST("/posts", s.AuthMiddleware(), s.handlePostCreate)
 		api.GET("/posts", s.AuthMiddleware(), s.handlePostList)
 		api.GET("/posts/:id", s.AuthMiddleware(), s.handlePostRead)
+		api.DELETE("/posts/:id", s.AuthMiddleware(), s.handlePostDelete)
 		api.POST("/posts/:id/like", s.AuthMiddleware(), s.handlePostLike)
 		api.DELETE("/posts/:id/like", s.AuthMiddleware(), s.handlePostUnlike)
 		api.POST("/posts/:id/replies", s.AuthMiddleware(), s.handleReplyCreate)

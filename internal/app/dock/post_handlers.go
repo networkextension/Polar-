@@ -227,6 +227,50 @@ func (s *Server) handlePostRead(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"post": post})
 }
 
+func (s *Server) handlePostDelete(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	role, _ := c.Get("role")
+	roleStr, _ := role.(string)
+
+	postID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || postID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的帖子"})
+		return
+	}
+
+	post, err := s.getPostByID(userIDStr, postID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if post == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到帖子"})
+		return
+	}
+	if roleStr != "admin" && post.UserID != userIDStr {
+		c.JSON(http.StatusForbidden, gin.H{"error": "权限不足"})
+		return
+	}
+
+	deleted, err := s.deletePost(postID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"error": "未找到帖子"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "帖子已删除"})
+}
+
 func (s *Server) handlePostLike(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	userIDStr, ok := userID.(string)
@@ -353,7 +397,7 @@ func (s *Server) handleReplyList(c *gin.Context) {
 }
 
 func (s *Server) cleanupPostUpload(postID int64, files []string) {
-	_ = s.deletePost(postID)
+	_, _ = s.deletePost(postID)
 	for _, path := range files {
 		_ = os.Remove(path)
 	}

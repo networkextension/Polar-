@@ -59,6 +59,7 @@
       let nextOffset = 0;
       let hasMore = true;
       let currentUserId = "";
+      let currentUserRole = "user";
       let videoModal = null;
       let videoModalPlayer = null;
 
@@ -168,6 +169,7 @@
         }
         const data = await res.json();
         currentUserId = data.user_id;
+        currentUserRole = data.role || "user";
         postWelcome.textContent = `你好，${data.username}，发布你的第一篇帖子吧。`;
       }
 
@@ -225,6 +227,7 @@
         const videoSection = videos ? `<div class="post-videos">${videos}</div>` : "";
 
         const isSelf = currentUserId && post.user_id === currentUserId;
+        const canDelete = currentUserRole === "admin" || isSelf;
         const authorLabel = isSelf
           ? `<span class="post-author-name">${post.username}</span>`
           : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
@@ -249,10 +252,12 @@
               ${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}
             </button>
             <a class="btn-inline btn-secondary" href="/post.html?id=${post.id}">查看详情</a>
+            ${canDelete ? '<button class="btn-inline btn-secondary delete-post-btn" type="button">删除帖子</button>' : ""}
           </div>
         `;
 
         const likeBtn = card.querySelector(".like-btn");
+        const deleteBtn = card.querySelector(".delete-post-btn");
         enhancePostVideos(card);
 
         likeBtn.addEventListener("click", async () => {
@@ -265,6 +270,23 @@
           post.liked_by_me = !post.liked_by_me;
           post.like_count += post.liked_by_me ? 1 : -1;
           likeBtn.textContent = `${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}`;
+        });
+
+        deleteBtn?.addEventListener("click", async () => {
+          if (!window.confirm("确认删除这条帖子吗？此操作不可恢复。")) return;
+          deleteBtn.disabled = true;
+          const res = await fetch(`${API_BASE}/api/posts/${post.id}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          if (!res.ok) {
+            deleteBtn.disabled = false;
+            return;
+          }
+          card.remove();
+          if (!postList.querySelector(".post-card")) {
+            postList.innerHTML = "<div class='post-empty'>暂无帖子</div>";
+          }
         });
 
         return card;

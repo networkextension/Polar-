@@ -693,9 +693,16 @@ func (s *Server) createPost(userID string, tagID *int64, content string, created
 	return id, nil
 }
 
-func (s *Server) deletePost(postID int64) error {
-	_, err := s.db.Exec(`DELETE FROM posts WHERE id = $1`, postID)
-	return err
+func (s *Server) deletePost(postID int64) (bool, error) {
+	result, err := s.db.Exec(`DELETE FROM posts WHERE id = $1`, postID)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
 }
 
 func (s *Server) addPostImage(postID int64, fileURL string, createdAt time.Time) error {

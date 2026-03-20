@@ -77,6 +77,7 @@
 
       let activePost = null;
       let currentUserId = "";
+      let currentUserRole = "user";
       let videoModal = null;
       let videoModalPlayer = null;
 
@@ -191,6 +192,7 @@
         }
         const data = await res.json();
         currentUserId = data.user_id;
+        currentUserRole = data.role || "user";
         postWelcome.textContent = `你好，${data.username}`;
       }
 
@@ -235,6 +237,7 @@
         const videoSection = videos ? `<div class="post-videos">${videos}</div>` : "";
 
         const isSelf = currentUserId && post.user_id === currentUserId;
+        const canDelete = currentUserRole === "admin" || isSelf;
         const authorLabel = isSelf
           ? `<span class="post-author-name">${post.username}</span>`
           : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
@@ -258,6 +261,7 @@
             <button id="detailLikeBtn" class="btn-inline btn-secondary" type="button">
               ${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}
             </button>
+            ${canDelete ? '<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">删除帖子</button>' : ""}
           </div>
           <div class="reply-box open">
             <div class="reply-list" id="replyList"></div>
@@ -269,6 +273,7 @@
         `;
 
         const likeBtn = document.getElementById("detailLikeBtn");
+        const deleteBtn = document.getElementById("detailDeleteBtn");
         enhancePostVideos(postDetail);
 
         likeBtn.addEventListener("click", async () => {
@@ -281,6 +286,20 @@
           post.liked_by_me = !post.liked_by_me;
           post.like_count += post.liked_by_me ? 1 : -1;
           likeBtn.textContent = `${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}`;
+        });
+
+        deleteBtn?.addEventListener("click", async () => {
+          if (!window.confirm("确认删除这条帖子吗？此操作不可恢复。")) return;
+          deleteBtn.disabled = true;
+          const res = await fetch(`${API_BASE}/api/posts/${post.id}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          if (!res.ok) {
+            deleteBtn.disabled = false;
+            return;
+          }
+          window.location.href = "/posts.html";
         });
 
         const replyForm = document.getElementById("replyForm");
