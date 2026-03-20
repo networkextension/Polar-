@@ -45,7 +45,7 @@
     </div>
 
     <script>
-      const API_BASE = "http://localhost:8080";
+      const API_BASE = "";
       const chatWelcome = document.getElementById("chatWelcome");
       const chatList = document.getElementById("chatList");
       const chatTitle = document.getElementById("chatTitle");
@@ -302,15 +302,8 @@
       }
 
       function getWebSocketUrl() {
-        let base = API_BASE;
-        if (base.startsWith("https://")) {
-          base = base.replace("https://", "wss://");
-        } else if (base.startsWith("http://")) {
-          base = base.replace("http://", "ws://");
-        } else {
-          base = `ws://${base}`;
-        }
-        return `${base}/ws/chat`;
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        return `${protocol}//${window.location.host}/ws/chat`;
       }
 
       function connectWebSocket() {

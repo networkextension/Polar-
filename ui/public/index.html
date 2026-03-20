@@ -11,10 +11,28 @@
   <body>
     <div class="card">
       <h1>Gin Auth UI</h1>
-      <p>请选择操作</p>
+      <p id="statusText">正在检查登录状态...</p>
       <a class="link" href="/login.html">登录</a>
       <a class="link" href="/register.html">注册</a>
       <a class="link" href="/editor.html">新建 Markdown</a>
     </div>
+
+    <script>
+      const statusText = document.getElementById("statusText");
+
+      async function bootstrap() {
+        try {
+          const res = await fetch("/api/me", { credentials: "include" });
+          if (res.ok) {
+            window.location.replace("/dashboard.html");
+            return;
+          }
+        } catch (err) {
+        }
+        statusText.textContent = "请选择操作";
+      }
+
+      bootstrap();
+    </script>
   </body>
 </html>

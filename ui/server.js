@@ -1,6 +1,8 @@
 const express = require("express");
 const http = require("http");
 const https = require("https");
+const net = require("net");
+const tls = require("tls");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -54,7 +56,47 @@ function proxyRequest(req, res) {
 app.use("/api", proxyRequest);
 app.use("/uploads", proxyRequest);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`UI running on http://localhost:${PORT}`);
   console.log(`Proxying to ${API_BASE}`);
+});
+
+server.on("upgrade", (req, socket, head) => {
+  if (!req.url || !req.url.startsWith("/ws/")) {
+    socket.destroy();
+    return;
+  }
+
+  const port =
+    target.port || (target.protocol === "https:" ? "443" : "80");
+  const connect =
+    target.protocol === "https:"
+      ? tls.connect
+      : net.connect;
+  const upstream = connect(port, target.hostname, () => {
+    const forwardedHeaders = Object.entries(req.headers)
+      .filter(([key]) => key.toLowerCase() !== "host")
+      .map(([key, value]) => `${key}: ${value}`);
+    const headerLines = [
+      `GET ${req.url} HTTP/1.1`,
+      `Host: ${target.host}`,
+      ...forwardedHeaders,
+      "",
+      "",
+    ];
+    upstream.write(headerLines.join("\r\n"));
+    if (head && head.length > 0) {
+      upstream.write(head);
+    }
+  });
+
+  upstream.on("error", () => {
+    socket.destroy();
+  });
+  socket.on("error", () => {
+    upstream.destroy();
+  });
+
+  upstream.pipe(socket);
+  socket.pipe(upstream);
 });

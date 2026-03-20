@@ -26,7 +26,7 @@
     </div>
 
     <script>
-      const API_BASE = "http://localhost:8080";
+      const API_BASE = "";
       const form = document.getElementById("loginForm");
       const alertBox = document.getElementById("alert");
       const passkeyLoginBtn = document.getElementById("passkeyLoginBtn");
@@ -180,6 +180,18 @@
         }
         return obj;
       }
+
+      async function redirectIfLoggedIn() {
+        try {
+          const res = await fetch("/api/me", { credentials: "include" });
+          if (res.ok) {
+            window.location.replace("/dashboard.html");
+          }
+        } catch (err) {
+        }
+      }
+
+      redirectIfLoggedIn();
     </script>
   </body>
 </html>
