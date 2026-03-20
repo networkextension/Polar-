@@ -158,7 +158,7 @@
       const tagFormStatus = document.getElementById("tagFormStatus");
       const tagSubmitBtn = document.getElementById("tagSubmitBtn");
 
-      const THEME_STORAGE_KEY = "dashboard-theme";
+      const THEME_STORAGE_KEY = "app-theme";
       let nextOffset = 0;
       let hasMore = true;
       let activeEntryId = null;
@@ -184,15 +184,25 @@
         });
       }
 
-      function applyTheme(theme) {
+      function applyTheme(theme, persist = true) {
         const nextTheme = theme === "mono" ? "mono" : "default";
         document.documentElement.dataset.theme = nextTheme;
-        localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        if (persist) {
+          localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        }
         themeToggleBtn.textContent = nextTheme === "mono" ? "切换到默认样式" : "切换到黑白样式";
       }
 
       function initTheme() {
         applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default");
+      }
+
+      function bindThemeSync() {
+        window.addEventListener("storage", (event) => {
+          if (event.key === THEME_STORAGE_KEY) {
+            applyTheme(event.newValue || "default", false);
+          }
+        });
       }
 
       function formatLocation(record) {
@@ -545,6 +555,7 @@
       loadEntries(true);
       loadLoginHistory();
       initTheme();
+      bindThemeSync();
 
       themeToggleBtn.addEventListener("click", () => {
         const currentTheme = document.documentElement.dataset.theme === "mono" ? "mono" : "default";

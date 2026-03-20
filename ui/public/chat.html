@@ -54,6 +54,28 @@
       const messageForm = document.getElementById("messageForm");
       const messageInput = document.getElementById("messageInput");
       const chatRefreshBtn = document.getElementById("chatRefreshBtn");
+      const THEME_STORAGE_KEY = "app-theme";
+
+      function applyTheme(theme) {
+        const nextTheme = theme === "mono" ? "mono" : "default";
+        document.documentElement.dataset.theme = nextTheme;
+        return nextTheme;
+      }
+
+      function initTheme() {
+        applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default");
+      }
+
+      function bindThemeSync() {
+        window.addEventListener("storage", (event) => {
+          if (event.key === THEME_STORAGE_KEY) {
+            applyTheme(event.newValue || "default");
+          }
+        });
+      }
+
+      initTheme();
+      bindThemeSync();
 
       let currentUserId = "";
       let currentUsername = "";

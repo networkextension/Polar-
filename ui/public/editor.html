@@ -48,6 +48,28 @@
       const backBtn = document.getElementById("backBtn");
       const params = new URLSearchParams(window.location.search);
       const entryId = params.get("id");
+      const THEME_STORAGE_KEY = "app-theme";
+
+      function applyTheme(theme) {
+        const nextTheme = theme === "mono" ? "mono" : "default";
+        document.documentElement.dataset.theme = nextTheme;
+        return nextTheme;
+      }
+
+      function initTheme() {
+        applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default");
+      }
+
+      function bindThemeSync() {
+        window.addEventListener("storage", (event) => {
+          if (event.key === THEME_STORAGE_KEY) {
+            applyTheme(event.newValue || "default");
+          }
+        });
+      }
+
+      initTheme();
+      bindThemeSync();
 
       async function ensureLogin() {
         const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });

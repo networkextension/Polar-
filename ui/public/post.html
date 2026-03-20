@@ -52,6 +52,28 @@
       const postVideos = document.getElementById("postVideos");
       const postFormStatus = document.getElementById("postFormStatus");
       const postSubmitBtn = document.getElementById("postSubmitBtn");
+      const THEME_STORAGE_KEY = "app-theme";
+
+      function applyTheme(theme) {
+        const nextTheme = theme === "mono" ? "mono" : "default";
+        document.documentElement.dataset.theme = nextTheme;
+        return nextTheme;
+      }
+
+      function initTheme() {
+        applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default");
+      }
+
+      function bindThemeSync() {
+        window.addEventListener("storage", (event) => {
+          if (event.key === THEME_STORAGE_KEY) {
+            applyTheme(event.newValue || "default");
+          }
+        });
+      }
+
+      initTheme();
+      bindThemeSync();
 
       let activePost = null;
       let currentUserId = "";

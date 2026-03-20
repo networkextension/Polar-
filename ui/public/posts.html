@@ -33,6 +33,28 @@
       const postWelcome = document.getElementById("postWelcome");
       const postList = document.getElementById("postList");
       const postLoadMoreBtn = document.getElementById("postLoadMoreBtn");
+      const THEME_STORAGE_KEY = "app-theme";
+
+      function applyTheme(theme) {
+        const nextTheme = theme === "mono" ? "mono" : "default";
+        document.documentElement.dataset.theme = nextTheme;
+        return nextTheme;
+      }
+
+      function initTheme() {
+        applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default");
+      }
+
+      function bindThemeSync() {
+        window.addEventListener("storage", (event) => {
+          if (event.key === THEME_STORAGE_KEY) {
+            applyTheme(event.newValue || "default");
+          }
+        });
+      }
+
+      initTheme();
+      bindThemeSync();
 
       let nextOffset = 0;
       let hasMore = true;
