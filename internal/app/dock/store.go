@@ -66,18 +66,24 @@ type Tag struct {
 }
 
 type Post struct {
-	ID         int64     `json:"id"`
-	UserID     string    `json:"user_id"`
-	Username   string    `json:"username"`
-	UserIcon   string    `json:"user_icon"`
-	TagID      *int64    `json:"tag_id,omitempty"`
-	Content    string    `json:"content"`
-	CreatedAt  time.Time `json:"created_at"`
-	LikeCount  int       `json:"like_count"`
-	ReplyCount int       `json:"reply_count"`
-	LikedByMe  bool      `json:"liked_by_me"`
-	Images     []string  `json:"images"`
-	Videos     []string  `json:"videos"`
+	ID         int64       `json:"id"`
+	UserID     string      `json:"user_id"`
+	Username   string      `json:"username"`
+	UserIcon   string      `json:"user_icon"`
+	TagID      *int64      `json:"tag_id,omitempty"`
+	Content    string      `json:"content"`
+	CreatedAt  time.Time   `json:"created_at"`
+	LikeCount  int         `json:"like_count"`
+	ReplyCount int         `json:"reply_count"`
+	LikedByMe  bool        `json:"liked_by_me"`
+	Images     []string    `json:"images"`
+	Videos     []string    `json:"videos"`
+	VideoItems []PostVideo `json:"video_items,omitempty"`
+}
+
+type PostVideo struct {
+	URL       string `json:"url"`
+	PosterURL string `json:"poster_url,omitempty"`
 }
 
 type PostReply struct {
@@ -205,8 +211,12 @@ CREATE TABLE IF NOT EXISTS post_videos (
 	id BIGSERIAL PRIMARY KEY,
 	post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
 	file_url TEXT NOT NULL,
+	poster_url TEXT NOT NULL DEFAULT '',
 	created_at TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE post_videos
+	ADD COLUMN IF NOT EXISTS poster_url TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS post_likes (
 	post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -699,12 +709,13 @@ func (s *Server) addPostImage(postID int64, fileURL string, createdAt time.Time)
 	return err
 }
 
-func (s *Server) addPostVideo(postID int64, fileURL string, createdAt time.Time) error {
+func (s *Server) addPostVideo(postID int64, fileURL, posterURL string, createdAt time.Time) error {
 	_, err := s.db.Exec(
-		`INSERT INTO post_videos (post_id, file_url, created_at)
-		 VALUES ($1, $2, $3)`,
+		`INSERT INTO post_videos (post_id, file_url, poster_url, created_at)
+		 VALUES ($1, $2, $3, $4)`,
 		postID,
 		fileURL,
+		posterURL,
 		createdAt,
 	)
 	return err
@@ -807,7 +818,7 @@ func (s *Server) listPosts(userID string, limit, offset int) ([]Post, bool, erro
 	}
 
 	videoRows, err := s.db.Query(
-		`SELECT post_id, file_url FROM post_videos
+		`SELECT post_id, file_url, poster_url FROM post_videos
 		  WHERE post_id = ANY($1)
 		  ORDER BY id ASC`,
 		pq.Array(postIDs),
@@ -818,13 +829,16 @@ func (s *Server) listPosts(userID string, limit, offset int) ([]Post, bool, erro
 	defer videoRows.Close()
 
 	videoMap := make(map[int64][]string, len(postIDs))
+	videoItemMap := make(map[int64][]PostVideo, len(postIDs))
 	for videoRows.Next() {
 		var postID int64
 		var fileURL string
-		if err := videoRows.Scan(&postID, &fileURL); err != nil {
+		var posterURL string
+		if err := videoRows.Scan(&postID, &fileURL, &posterURL); err != nil {
 			return posts, hasMore, err
 		}
 		videoMap[postID] = append(videoMap[postID], fileURL)
+		videoItemMap[postID] = append(videoItemMap[postID], PostVideo{URL: fileURL, PosterURL: posterURL})
 	}
 	if err := videoRows.Err(); err != nil {
 		return posts, hasMore, err
@@ -833,6 +847,7 @@ func (s *Server) listPosts(userID string, limit, offset int) ([]Post, bool, erro
 	for i := range posts {
 		posts[i].Images = imageMap[posts[i].ID]
 		posts[i].Videos = videoMap[posts[i].ID]
+		posts[i].VideoItems = videoItemMap[posts[i].ID]
 	}
 
 	return posts, hasMore, nil
@@ -903,7 +918,7 @@ func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 	post.Images = images
 
 	videoRows, err := s.db.Query(
-		`SELECT file_url FROM post_videos WHERE post_id = $1 ORDER BY id ASC`,
+		`SELECT file_url, poster_url FROM post_videos WHERE post_id = $1 ORDER BY id ASC`,
 		postID,
 	)
 	if err != nil {
@@ -912,17 +927,21 @@ func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 	defer videoRows.Close()
 
 	var videos []string
+	var videoItems []PostVideo
 	for videoRows.Next() {
 		var url string
-		if err := videoRows.Scan(&url); err != nil {
+		var posterURL string
+		if err := videoRows.Scan(&url, &posterURL); err != nil {
 			return nil, err
 		}
 		videos = append(videos, url)
+		videoItems = append(videoItems, PostVideo{URL: url, PosterURL: posterURL})
 	}
 	if err := videoRows.Err(); err != nil {
 		return nil, err
 	}
 	post.Videos = videos
+	post.VideoItems = videoItems
 
 	return &post, nil
 }

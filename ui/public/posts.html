@@ -131,6 +131,35 @@
         videoModalPlayer.play().catch(() => {});
       }
 
+      function normalizeVideoItems(post) {
+        if (Array.isArray(post.video_items) && post.video_items.length > 0) {
+          return post.video_items
+            .filter((item) => item && item.url)
+            .map((item) => ({
+              url: buildAssetUrl(item.url),
+              posterUrl: item.poster_url ? buildAssetUrl(item.poster_url) : "",
+            }));
+        }
+        return (post.videos || []).map((url) => ({
+          url: buildAssetUrl(url),
+          posterUrl: "",
+        }));
+      }
+
+      function enhancePostVideos(container) {
+        const videoEls = container.querySelectorAll(".post-videos video");
+
+        videoEls.forEach((videoEl) => {
+          videoEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const src = videoEl.currentSrc || videoEl.querySelector("source")?.src || "";
+            videoEl.pause();
+            openVideoModal(src);
+          });
+        });
+      }
+
       async function loadProfile() {
         const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
         if (!res.ok) {
@@ -183,11 +212,11 @@
         const images = (post.images || [])
           .map((url) => `<img src="${buildAssetUrl(url)}" alt="post image" />`)
           .join("");
-        const videos = (post.videos || [])
+        const videos = normalizeVideoItems(post)
           .map(
-            (url) => `
-              <video controls preload="metadata">
-                <source src="${buildAssetUrl(url)}" />
+            (item) => `
+              <video controls preload="metadata" ${item.posterUrl ? `poster="${item.posterUrl}"` : ""}>
+                <source src="${item.url}" />
                 你的浏览器不支持 video 标签
               </video>
             `
@@ -224,17 +253,7 @@
         `;
 
         const likeBtn = card.querySelector(".like-btn");
-        const videoEls = card.querySelectorAll(".post-videos video");
-
-        videoEls.forEach((videoEl) => {
-          videoEl.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const src = videoEl.currentSrc || videoEl.querySelector("source")?.src || "";
-            videoEl.pause();
-            openVideoModal(src);
-          });
-        });
+        enhancePostVideos(card);
 
         likeBtn.addEventListener("click", async () => {
           const method = post.liked_by_me ? "DELETE" : "POST";

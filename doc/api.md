@@ -190,6 +190,12 @@
   "id": 12,
   "images": ["/uploads/20260319_120000_abcd1234.png"],
   "videos": ["/uploads/20260319_120001_efgh5678.mp4"],
+  "video_items": [
+    {
+      "url": "/uploads/20260319_120001_efgh5678.mp4",
+      "poster_url": "/uploads/20260319_120001_efgh5678_poster.jpg"
+    }
+  ],
   "content": "今天分享一个 Go 小技巧。",
   "tag_id": 1,
   "created": "2026-03-19T12:00:00Z"
@@ -216,7 +222,13 @@
       "reply_count": 2,
       "liked_by_me": true,
       "images": ["/uploads/20260319_120000_abcd1234.png"],
-      "videos": ["/uploads/20260319_120001_efgh5678.mp4"]
+      "videos": ["/uploads/20260319_120001_efgh5678.mp4"],
+      "video_items": [
+        {
+          "url": "/uploads/20260319_120001_efgh5678.mp4",
+          "poster_url": "/uploads/20260319_120001_efgh5678_poster.jpg"
+        }
+      ]
     }
   ],
   "has_more": false,
@@ -243,7 +255,13 @@
     "reply_count": 2,
     "liked_by_me": true,
     "images": ["/uploads/20260319_120000_abcd1234.png"],
-    "videos": ["/uploads/20260319_120001_efgh5678.mp4"]
+    "videos": ["/uploads/20260319_120001_efgh5678.mp4"],
+    "video_items": [
+      {
+        "url": "/uploads/20260319_120001_efgh5678.mp4",
+        "poster_url": "/uploads/20260319_120001_efgh5678_poster.jpg"
+      }
+    ]
   }
 }
 ```
@@ -317,6 +335,7 @@
 - 发帖请使用 `multipart/form-data`，媒体字段名固定为 `images` 和 `videos`。
 - `images`、`videos` 都允许为空数组或不传；仅 `content` 必填。
 - 帖子列表/详情中的媒体 URL 为相对路径（如 `/uploads/xxx.mp4`），iOS 侧请拼接服务端域名后再加载。
+- `videos` 字段保留为纯地址数组以兼容旧客户端；新客户端应优先使用 `video_items[].poster_url` 展示统一封面。
 
 ## 新建 Markdown 记录
 

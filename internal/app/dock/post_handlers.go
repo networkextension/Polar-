@@ -1,6 +1,8 @@
 package dock
 
 import (
+	"context"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -105,6 +107,7 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 	}
 
 	videoURLs := make([]string, 0, len(videoFiles))
+	videoItems := make([]PostVideo, 0, len(videoFiles))
 	for _, file := range videoFiles {
 		if file == nil {
 			continue
@@ -118,23 +121,40 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 		}
 
 		publicURL := "/uploads/" + filename
-		if err := s.addPostVideo(postID, publicURL, now); err != nil {
+		posterURL := ""
+		posterFilename := buildDerivedUploadFilename(filename, "poster", ".jpg")
+		posterPath := filepath.Join(s.uploadDir, posterFilename)
+		posterPublicURL := "/uploads/" + posterFilename
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		err := generateVideoPoster(ctx, dstPath, posterPath)
+		cancel()
+		if err != nil {
+			log.Printf("generate video poster failed for %s: %v", dstPath, err)
+		} else {
+			savedFiles = append(savedFiles, posterPath)
+			posterURL = posterPublicURL
+		}
+
+		if err := s.addPostVideo(postID, publicURL, posterURL, now); err != nil {
 			s.cleanupPostUpload(postID, append(savedFiles, dstPath))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 			return
 		}
 		savedFiles = append(savedFiles, dstPath)
 		videoURLs = append(videoURLs, publicURL)
+		videoItems = append(videoItems, PostVideo{URL: publicURL, PosterURL: posterURL})
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "发布成功",
-		"id":      postID,
-		"images":  imageURLs,
-		"videos":  videoURLs,
-		"content": content,
-		"tag_id":  tagID,
-		"created": now,
+		"message":     "发布成功",
+		"id":          postID,
+		"images":      imageURLs,
+		"videos":      videoURLs,
+		"video_items": videoItems,
+		"content":     content,
+		"tag_id":      tagID,
+		"created":     now,
 	})
 }
 

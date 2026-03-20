@@ -47,3 +47,18 @@ func buildUploadFilename(original string) string {
 	}
 	return fmt.Sprintf("%s_%s%s", time.Now().Format("20060102_150405"), generateSessionID()[:8], ext)
 }
+
+func buildDerivedUploadFilename(original, suffix, fallbackExt string) string {
+	base := strings.TrimSuffix(filepath.Base(original), filepath.Ext(original))
+	base = sanitizeFilename(base)
+	if base == "" {
+		base = "upload"
+	}
+
+	ext := strings.ToLower(strings.TrimSpace(fallbackExt))
+	if ext == "" || !strings.HasPrefix(ext, ".") {
+		ext = ".dat"
+	}
+
+	return fmt.Sprintf("%s_%s%s", base, sanitizeFilename(suffix), ext)
+}

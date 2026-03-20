@@ -108,5 +108,5 @@ HTTP 状态码 | 说明 | UI 处理
 - 图片上传需使用 `multipart/form-data`，字段名 `images`
 - 视频上传需使用 `multipart/form-data`，字段名 `videos`
 - 帖子详情建议缓存图片 URL
-- 帖子详情可按需预加载视频封面（`preload=metadata`）
+- 视频封面由服务端在上传后使用 `ffmpeg` 生成，并通过 `video_items[].poster_url` 返回
 - 点赞状态由 `liked_by_me` 驱动，避免本地猜测
