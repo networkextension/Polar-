@@ -40,6 +40,13 @@ jobs:
           npm run build
           cd ..
           echo "UI built successfully"
+          # Verify TypeScript build output
+          if [ ! -d "ui/dist" ]; then
+            echo "ERROR: UI dist directory not found"
+            exit 1
+          fi
+          echo "UI dist contents:"
+          ls -la ui/dist/
 
       - name: Debug info
         run: |
