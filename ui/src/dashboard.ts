@@ -66,6 +66,9 @@ const tagDesc = byId<HTMLTextAreaElement>("tagDesc");
 const tagOrder = byId<HTMLInputElement>("tagOrder");
 const tagFormStatus = byId<HTMLElement>("tagFormStatus");
 const tagSubmitBtn = byId<HTMLButtonElement>("tagSubmitBtn");
+const openSiteAdminBtn = byId<HTMLButtonElement>("openSiteAdminBtn");
+const siteAdminModal = byId<HTMLElement>("siteAdminModal");
+const siteAdminModalCloseBtn = byId<HTMLButtonElement>("siteAdminModalCloseBtn");
 const siteAdminPanel = byId<HTMLElement>("siteAdminPanel");
 const siteNameInput = byId<HTMLInputElement>("siteNameInput");
 const siteDescriptionInput = byId<HTMLTextAreaElement>("siteDescriptionInput");
@@ -92,6 +95,11 @@ let dragStartY = 0;
 let isAdmin = false;
 let editingTagId: number | null = null;
 let currentTags: Tag[] = [];
+
+function setModalOpen(modal: HTMLElement, open: boolean): void {
+  modal.classList.toggle("open", open);
+  modal.setAttribute("aria-hidden", open ? "false" : "true");
+}
 
 function isMobileLayout(): boolean {
   return window.innerWidth <= 860;
@@ -213,6 +221,7 @@ async function loadProfile(): Promise<void> {
   addTagBtn.disabled = !isAdmin;
   addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
   addTagBtn.hidden = !isAdmin;
+  openSiteAdminBtn.hidden = !isAdmin;
   siteAdminPanel.hidden = !isAdmin;
 
   if (data.icon_url) {
@@ -252,15 +261,25 @@ function openTagModal(tag?: Tag): void {
   tagFormStatus.textContent = "";
   tagModalTitle.textContent = editingTagId ? "编辑 Tag" : "添加 Tag";
   tagSubmitBtn.textContent = editingTagId ? "保存" : "创建";
-  tagModal.classList.add("open");
-  tagModal.setAttribute("aria-hidden", "false");
+  setModalOpen(tagModal, true);
   tagName.focus();
 }
 
 function closeTagModal(): void {
   editingTagId = null;
-  tagModal.classList.remove("open");
-  tagModal.setAttribute("aria-hidden", "true");
+  setModalOpen(tagModal, false);
+}
+
+function openSiteAdminModal(): void {
+  if (!isAdmin) {
+    return;
+  }
+  setModalOpen(siteAdminModal, true);
+  siteNameInput.focus();
+}
+
+function closeSiteAdminModal(): void {
+  setModalOpen(siteAdminModal, false);
 }
 
 async function loadEntries(reset = false): Promise<void> {
@@ -372,6 +391,10 @@ addTagBtn.addEventListener("click", () => {
   }
   openTagModal();
 });
+
+openSiteAdminBtn.addEventListener("click", openSiteAdminModal);
+siteAdminModalCloseBtn.addEventListener("click", closeSiteAdminModal);
+query<HTMLElement>(siteAdminModal, ".modal-backdrop").addEventListener("click", closeSiteAdminModal);
 
 siteAddTagBtnProxy.addEventListener("click", () => {
   if (!isAdmin) {
@@ -623,6 +646,18 @@ window.addEventListener("touchmove", (event) => {
 });
 
 window.addEventListener("touchend", stopDrag);
+
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") {
+    return;
+  }
+  if (tagModal.classList.contains("open")) {
+    closeTagModal();
+  }
+  if (siteAdminModal.classList.contains("open")) {
+    closeSiteAdminModal();
+  }
+});
 
 cancelIconBtn.addEventListener("click", () => {
   iconEditor.classList.remove("active");

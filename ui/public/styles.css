@@ -296,7 +296,6 @@ button:hover {
 .site-admin-panel {
   display: grid;
   gap: 18px;
-  margin-bottom: 18px;
 }
 
 .site-admin-grid {
@@ -600,6 +599,16 @@ button:hover {
   border-radius: 16px;
   padding: 18px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+.modal-card-wide {
+  width: min(92vw, 860px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.modal-title {
+  margin: 10px 0 0;
 }
 
 .modal-header {
@@ -1045,6 +1054,12 @@ textarea {
 
   .site-admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .modal-card-wide {
+    width: min(94vw, 860px);
+    max-height: calc(100vh - 28px);
+    padding: 16px;
   }
 
   .site-tags-header,

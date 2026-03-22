@@ -43,6 +43,9 @@ const tagDesc = byId("tagDesc");
 const tagOrder = byId("tagOrder");
 const tagFormStatus = byId("tagFormStatus");
 const tagSubmitBtn = byId("tagSubmitBtn");
+const openSiteAdminBtn = byId("openSiteAdminBtn");
+const siteAdminModal = byId("siteAdminModal");
+const siteAdminModalCloseBtn = byId("siteAdminModalCloseBtn");
 const siteAdminPanel = byId("siteAdminPanel");
 const siteNameInput = byId("siteNameInput");
 const siteDescriptionInput = byId("siteDescriptionInput");
@@ -67,6 +70,10 @@ let dragStartY = 0;
 let isAdmin = false;
 let editingTagId = null;
 let currentTags = [];
+function setModalOpen(modal, open) {
+    modal.classList.toggle("open", open);
+    modal.setAttribute("aria-hidden", open ? "false" : "true");
+}
 function isMobileLayout() {
     return window.innerWidth <= 860;
 }
@@ -171,6 +178,7 @@ async function loadProfile() {
     addTagBtn.disabled = !isAdmin;
     addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
     addTagBtn.hidden = !isAdmin;
+    openSiteAdminBtn.hidden = !isAdmin;
     siteAdminPanel.hidden = !isAdmin;
     if (data.icon_url) {
         userIcon.src = data.icon_url;
@@ -208,14 +216,22 @@ function openTagModal(tag) {
     tagFormStatus.textContent = "";
     tagModalTitle.textContent = editingTagId ? "编辑 Tag" : "添加 Tag";
     tagSubmitBtn.textContent = editingTagId ? "保存" : "创建";
-    tagModal.classList.add("open");
-    tagModal.setAttribute("aria-hidden", "false");
+    setModalOpen(tagModal, true);
     tagName.focus();
 }
 function closeTagModal() {
     editingTagId = null;
-    tagModal.classList.remove("open");
-    tagModal.setAttribute("aria-hidden", "true");
+    setModalOpen(tagModal, false);
+}
+function openSiteAdminModal() {
+    if (!isAdmin) {
+        return;
+    }
+    setModalOpen(siteAdminModal, true);
+    siteNameInput.focus();
+}
+function closeSiteAdminModal() {
+    setModalOpen(siteAdminModal, false);
 }
 async function loadEntries(reset = false) {
     if (reset) {
@@ -307,6 +323,9 @@ addTagBtn.addEventListener("click", () => {
     }
     openTagModal();
 });
+openSiteAdminBtn.addEventListener("click", openSiteAdminModal);
+siteAdminModalCloseBtn.addEventListener("click", closeSiteAdminModal);
+query(siteAdminModal, ".modal-backdrop").addEventListener("click", closeSiteAdminModal);
 siteAddTagBtnProxy.addEventListener("click", () => {
     if (!isAdmin) {
         return;
@@ -529,6 +548,17 @@ window.addEventListener("touchmove", (event) => {
     moveDrag(touch.clientX, touch.clientY);
 });
 window.addEventListener("touchend", stopDrag);
+window.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+        return;
+    }
+    if (tagModal.classList.contains("open")) {
+        closeTagModal();
+    }
+    if (siteAdminModal.classList.contains("open")) {
+        closeSiteAdminModal();
+    }
+});
 cancelIconBtn.addEventListener("click", () => {
     iconEditor.classList.remove("active");
     iconFile.value = "";
