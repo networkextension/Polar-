@@ -122,6 +122,17 @@ function createPostCard(post) {
         ? `<span class="post-author-name">${post.username}</span>`
         : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(post.user_id)}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
     const avatar = resolveAvatar(post.username, post.user_icon, 64);
+    const taskSummary = post.post_type === "task" && post.task
+        ? `
+        <div class="task-summary-strip">
+          <span class="badge">零工任务</span>
+          <span>时间：${formatTime(post.task.start_at)} - ${formatTime(post.task.end_at)}</span>
+          <span>Working hours：${post.task.working_hours}</span>
+          <span>申请截止：${formatTime(post.task.apply_deadline)}</span>
+          <span>申请数：${post.task.applicant_count || 0}</span>
+        </div>
+      `
+        : "";
     card.innerHTML = `
     <div class="post-header">
       <div class="post-author">
@@ -131,6 +142,7 @@ function createPostCard(post) {
       <div class="post-time">${formatTime(post.created_at)}</div>
     </div>
     <div class="post-content">${post.content}</div>
+    ${taskSummary}
     <div class="post-images">${images}</div>
     ${videoSection}
     <div class="post-actions">

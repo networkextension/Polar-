@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -16,6 +17,10 @@ import (
 var (
 	errEmailExists     = errors.New("email already exists")
 	errNotMessageOwner = errors.New("not message owner")
+	errTaskNotFound    = errors.New("task not found")
+	errTaskClosed      = errors.New("task application closed")
+	errTaskApplyEnded  = errors.New("task application deadline passed")
+	errTaskSelfApply   = errors.New("task owner cannot apply")
 )
 
 type User struct {
@@ -88,6 +93,7 @@ type Post struct {
 	Username   string      `json:"username"`
 	UserIcon   string      `json:"user_icon"`
 	TagID      *int64      `json:"tag_id,omitempty"`
+	PostType   string      `json:"post_type"`
 	Content    string      `json:"content"`
 	CreatedAt  time.Time   `json:"created_at"`
 	LikeCount  int         `json:"like_count"`
@@ -96,6 +102,7 @@ type Post struct {
 	Images     []string    `json:"images"`
 	Videos     []string    `json:"videos"`
 	VideoItems []PostVideo `json:"video_items,omitempty"`
+	Task       *TaskPost   `json:"task,omitempty"`
 }
 
 type PostVideo struct {
@@ -144,6 +151,34 @@ type ChatMessage struct {
 	DeletedAt      *time.Time `json:"deleted_at,omitempty"`
 	DeletedBy      string     `json:"deleted_by,omitempty"`
 	Deleted        bool       `json:"deleted"`
+}
+
+type TaskPost struct {
+	PostID                int64      `json:"post_id"`
+	Location              string     `json:"location,omitempty"`
+	StartAt               time.Time  `json:"start_at"`
+	EndAt                 time.Time  `json:"end_at"`
+	WorkingHours          string     `json:"working_hours"`
+	ApplyDeadline         time.Time  `json:"apply_deadline"`
+	ApplicationStatus     string     `json:"application_status"`
+	SelectedApplicantID   string     `json:"selected_applicant_id,omitempty"`
+	SelectedApplicantName string     `json:"selected_applicant_name,omitempty"`
+	SelectedAt            *time.Time `json:"selected_at,omitempty"`
+	InvitationTemplate    string     `json:"invitation_template,omitempty"`
+	InvitationSentAt      *time.Time `json:"invitation_sent_at,omitempty"`
+	ApplicantCount        int        `json:"applicant_count"`
+	AppliedByMe           bool       `json:"applied_by_me"`
+	CanApply              bool       `json:"can_apply"`
+	CanManage             bool       `json:"can_manage"`
+}
+
+type TaskApplication struct {
+	ID        int64     `json:"id"`
+	PostID    int64     `json:"post_id"`
+	UserID    string    `json:"user_id"`
+	Username  string    `json:"username"`
+	UserIcon  string    `json:"user_icon"`
+	AppliedAt time.Time `json:"applied_at"`
 }
 
 func openDB(dsn string) (*sql.DB, error) {
@@ -229,8 +264,34 @@ CREATE TABLE IF NOT EXISTS posts (
 	id BIGSERIAL PRIMARY KEY,
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	tag_id BIGINT REFERENCES tags(id) ON DELETE SET NULL,
+	post_type TEXT NOT NULL DEFAULT 'standard',
 	content TEXT NOT NULL,
 	created_at TIMESTAMPTZ NOT NULL
+);
+
+ALTER TABLE posts
+	ADD COLUMN IF NOT EXISTS post_type TEXT NOT NULL DEFAULT 'standard';
+
+CREATE TABLE IF NOT EXISTS task_posts (
+	post_id BIGINT PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
+	location TEXT NOT NULL DEFAULT '',
+	start_at TIMESTAMPTZ NOT NULL,
+	end_at TIMESTAMPTZ NOT NULL,
+	working_hours TEXT NOT NULL,
+	apply_deadline TIMESTAMPTZ NOT NULL,
+	application_status TEXT NOT NULL DEFAULT 'open',
+	selected_applicant_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+	selected_at TIMESTAMPTZ,
+	invitation_template TEXT NOT NULL DEFAULT '',
+	invitation_sent_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS task_applications (
+	id BIGSERIAL PRIMARY KEY,
+	post_id BIGINT NOT NULL REFERENCES task_posts(post_id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	applied_at TIMESTAMPTZ NOT NULL,
+	withdrawn_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS post_images (
@@ -305,6 +366,11 @@ CREATE INDEX IF NOT EXISTS idx_post_images_post_id ON post_images(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_videos_post_id ON post_videos(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);
 CREATE INDEX IF NOT EXISTS idx_post_replies_post_id ON post_replies(post_id);
+CREATE INDEX IF NOT EXISTS idx_task_posts_apply_deadline ON task_posts(apply_deadline DESC);
+CREATE INDEX IF NOT EXISTS idx_task_applications_post_id ON task_applications(post_id, applied_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_task_applications_active_pair
+	ON task_applications(post_id, user_id)
+	WHERE withdrawn_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_threads_pair ON chat_threads(user_low, user_high);
 CREATE INDEX IF NOT EXISTS idx_chat_threads_last_message_at ON chat_threads(last_message_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id_created_at ON chat_messages(thread_id, created_at DESC);
@@ -820,14 +886,18 @@ func (s *Server) deleteTag(id int64) error {
 	return err
 }
 
-func (s *Server) createPost(userID string, tagID *int64, content string, createdAt time.Time) (int64, error) {
+func (s *Server) createPost(userID string, tagID *int64, postType, content string, createdAt time.Time) (int64, error) {
+	if postType == "" {
+		postType = "standard"
+	}
 	var id int64
 	err := s.db.QueryRow(
-		`INSERT INTO posts (user_id, tag_id, content, created_at)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO posts (user_id, tag_id, post_type, content, created_at)
+		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING id`,
 		userID,
 		tagID,
+		postType,
 		content,
 		createdAt,
 	).Scan(&id)
@@ -880,7 +950,7 @@ func (s *Server) listPosts(userID string, limit, offset int) ([]Post, bool, erro
 		offset = 0
 	}
 	rows, err := s.db.Query(
-		`SELECT p.id, p.user_id, u.username, u.icon_url, p.tag_id, p.content, p.created_at,
+		`SELECT p.id, p.user_id, u.username, u.icon_url, p.tag_id, p.post_type, p.content, p.created_at,
 		        COALESCE(l.like_count, 0) AS like_count,
 		        COALESCE(r.reply_count, 0) AS reply_count,
 		        (pl.user_id IS NOT NULL) AS liked_by_me
@@ -918,6 +988,7 @@ func (s *Server) listPosts(userID string, limit, offset int) ([]Post, bool, erro
 			&post.Username,
 			&post.UserIcon,
 			&post.TagID,
+			&post.PostType,
 			&post.Content,
 			&post.CreatedAt,
 			&post.LikeCount,
@@ -1001,13 +1072,17 @@ func (s *Server) listPosts(userID string, limit, offset int) ([]Post, bool, erro
 		posts[i].VideoItems = videoItemMap[posts[i].ID]
 	}
 
+	if err := s.attachTaskData(posts, userID); err != nil {
+		return posts, hasMore, err
+	}
+
 	return posts, hasMore, nil
 }
 
 func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 	var post Post
 	err := s.db.QueryRow(
-		`SELECT p.id, p.user_id, u.username, u.icon_url, p.tag_id, p.content, p.created_at,
+		`SELECT p.id, p.user_id, u.username, u.icon_url, p.tag_id, p.post_type, p.content, p.created_at,
 		        COALESCE(l.like_count, 0) AS like_count,
 		        COALESCE(r.reply_count, 0) AS reply_count,
 		        (pl.user_id IS NOT NULL) AS liked_by_me
@@ -1033,6 +1108,7 @@ func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 		&post.Username,
 		&post.UserIcon,
 		&post.TagID,
+		&post.PostType,
 		&post.Content,
 		&post.CreatedAt,
 		&post.LikeCount,
@@ -1093,6 +1169,14 @@ func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 	}
 	post.Videos = videos
 	post.VideoItems = videoItems
+
+	if post.PostType == "task" {
+		task, _, err := s.getTaskPostByID(post.ID, userID)
+		if err != nil {
+			return nil, err
+		}
+		post.Task = task
+	}
 
 	return &post, nil
 }
@@ -1181,6 +1265,349 @@ func (s *Server) listReplies(postID int64, limit, offset int) ([]PostReply, bool
 	}
 
 	return replies, hasMore, nil
+}
+
+func (s *Server) createTaskPost(postID int64, location string, startAt, endAt time.Time, workingHours string, applyDeadline time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO task_posts (post_id, location, start_at, end_at, working_hours, apply_deadline, application_status)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'open')`,
+		postID,
+		location,
+		startAt,
+		endAt,
+		workingHours,
+		applyDeadline,
+	)
+	return err
+}
+
+func (s *Server) attachTaskData(posts []Post, currentUserID string) error {
+	postIDs := make([]int64, 0, len(posts))
+	taskIndex := make(map[int64]*Post)
+	for i := range posts {
+		if posts[i].PostType != "task" {
+			continue
+		}
+		postIDs = append(postIDs, posts[i].ID)
+		taskIndex[posts[i].ID] = &posts[i]
+	}
+	if len(postIDs) == 0 {
+		return nil
+	}
+
+	rows, err := s.db.Query(
+		`SELECT tp.post_id, tp.location, tp.start_at, tp.end_at, tp.working_hours, tp.apply_deadline,
+		        tp.application_status, tp.selected_applicant_id, sa.username, tp.selected_at,
+		        tp.invitation_template, tp.invitation_sent_at,
+		        COALESCE(ac.applicant_count, 0) AS applicant_count,
+		        EXISTS(
+		          SELECT 1 FROM task_applications ta
+		           WHERE ta.post_id = tp.post_id AND ta.user_id = $2 AND ta.withdrawn_at IS NULL
+		        ) AS applied_by_me
+		   FROM task_posts tp
+		   LEFT JOIN users sa ON sa.id = tp.selected_applicant_id
+		   LEFT JOIN (
+		     SELECT post_id, COUNT(*) AS applicant_count
+		       FROM task_applications
+		      WHERE withdrawn_at IS NULL
+		        AND post_id = ANY($1)
+		      GROUP BY post_id
+		   ) ac ON ac.post_id = tp.post_id
+		  WHERE tp.post_id = ANY($1)`,
+		pq.Array(postIDs),
+		currentUserID,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	now := time.Now()
+	for rows.Next() {
+		var (
+			postID                int64
+			task                  TaskPost
+			selectedApplicantID   sql.NullString
+			selectedApplicantName sql.NullString
+			selectedAt            sql.NullTime
+			invitationSentAt      sql.NullTime
+		)
+		if err := rows.Scan(
+			&postID,
+			&task.Location,
+			&task.StartAt,
+			&task.EndAt,
+			&task.WorkingHours,
+			&task.ApplyDeadline,
+			&task.ApplicationStatus,
+			&selectedApplicantID,
+			&selectedApplicantName,
+			&selectedAt,
+			&task.InvitationTemplate,
+			&invitationSentAt,
+			&task.ApplicantCount,
+			&task.AppliedByMe,
+		); err != nil {
+			return err
+		}
+		task.PostID = postID
+		if selectedApplicantID.Valid {
+			task.SelectedApplicantID = selectedApplicantID.String
+		}
+		if selectedApplicantName.Valid {
+			task.SelectedApplicantName = selectedApplicantName.String
+		}
+		if selectedAt.Valid {
+			task.SelectedAt = &selectedAt.Time
+		}
+		if invitationSentAt.Valid {
+			task.InvitationSentAt = &invitationSentAt.Time
+		}
+		if post := taskIndex[postID]; post != nil {
+			task.CanManage = post.UserID == currentUserID
+			task.CanApply = post.UserID != currentUserID &&
+				task.SelectedApplicantID == "" &&
+				(task.AppliedByMe || (task.ApplicationStatus == "open" && now.Before(task.ApplyDeadline)))
+			post.Task = &task
+		}
+	}
+	return rows.Err()
+}
+
+func (s *Server) getTaskPostByID(postID int64, currentUserID string) (*TaskPost, string, error) {
+	var (
+		postOwner             string
+		task                  TaskPost
+		selectedApplicantID   sql.NullString
+		selectedApplicantName sql.NullString
+		selectedAt            sql.NullTime
+		invitationSentAt      sql.NullTime
+	)
+	err := s.db.QueryRow(
+		`SELECT p.user_id, tp.post_id, tp.location, tp.start_at, tp.end_at, tp.working_hours, tp.apply_deadline,
+		        tp.application_status, tp.selected_applicant_id, sa.username, tp.selected_at,
+		        tp.invitation_template, tp.invitation_sent_at,
+		        COALESCE(ac.applicant_count, 0) AS applicant_count,
+		        EXISTS(
+		          SELECT 1 FROM task_applications ta
+		           WHERE ta.post_id = tp.post_id AND ta.user_id = $2 AND ta.withdrawn_at IS NULL
+		        ) AS applied_by_me
+		   FROM task_posts tp
+		   JOIN posts p ON p.id = tp.post_id
+		   LEFT JOIN users sa ON sa.id = tp.selected_applicant_id
+		   LEFT JOIN (
+		     SELECT post_id, COUNT(*) AS applicant_count
+		       FROM task_applications
+		      WHERE withdrawn_at IS NULL
+		      GROUP BY post_id
+		   ) ac ON ac.post_id = tp.post_id
+		  WHERE tp.post_id = $1`,
+		postID,
+		currentUserID,
+	).Scan(
+		&postOwner,
+		&task.PostID,
+		&task.Location,
+		&task.StartAt,
+		&task.EndAt,
+		&task.WorkingHours,
+		&task.ApplyDeadline,
+		&task.ApplicationStatus,
+		&selectedApplicantID,
+		&selectedApplicantName,
+		&selectedAt,
+		&task.InvitationTemplate,
+		&invitationSentAt,
+		&task.ApplicantCount,
+		&task.AppliedByMe,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	if selectedApplicantID.Valid {
+		task.SelectedApplicantID = selectedApplicantID.String
+	}
+	if selectedApplicantName.Valid {
+		task.SelectedApplicantName = selectedApplicantName.String
+	}
+	if selectedAt.Valid {
+		task.SelectedAt = &selectedAt.Time
+	}
+	if invitationSentAt.Valid {
+		task.InvitationSentAt = &invitationSentAt.Time
+	}
+	now := time.Now()
+	task.CanManage = postOwner == currentUserID
+	task.CanApply = postOwner != currentUserID &&
+		task.SelectedApplicantID == "" &&
+		(task.AppliedByMe || (task.ApplicationStatus == "open" && now.Before(task.ApplyDeadline)))
+	return &task, postOwner, nil
+}
+
+func (s *Server) applyTask(postID int64, applicantID string, appliedAt time.Time) error {
+	task, ownerID, err := s.getTaskPostByID(postID, applicantID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return errTaskNotFound
+	}
+	if ownerID == applicantID {
+		return errTaskSelfApply
+	}
+	if task.ApplicationStatus != "open" || task.SelectedApplicantID != "" {
+		return errTaskClosed
+	}
+	if !appliedAt.Before(task.ApplyDeadline) {
+		return errTaskApplyEnded
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO task_applications (post_id, user_id, applied_at, withdrawn_at)
+		 VALUES ($1, $2, $3, NULL)
+		 ON CONFLICT (post_id, user_id) WHERE withdrawn_at IS NULL DO NOTHING`,
+		postID,
+		applicantID,
+		appliedAt,
+	)
+	return err
+}
+
+func (s *Server) withdrawTaskApplication(postID int64, applicantID string, withdrawnAt time.Time) (bool, error) {
+	result, err := s.db.Exec(
+		`UPDATE task_applications
+		    SET withdrawn_at = $3
+		  WHERE post_id = $1 AND user_id = $2 AND withdrawn_at IS NULL`,
+		postID,
+		applicantID,
+		withdrawnAt,
+	)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}
+
+func (s *Server) listTaskApplications(postID int64) ([]TaskApplication, error) {
+	rows, err := s.db.Query(
+		`SELECT ta.id, ta.post_id, ta.user_id, u.username, u.icon_url, ta.applied_at
+		   FROM task_applications ta
+		   JOIN users u ON u.id = ta.user_id
+		  WHERE ta.post_id = $1 AND ta.withdrawn_at IS NULL
+		  ORDER BY ta.applied_at ASC`,
+		postID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	applications := make([]TaskApplication, 0)
+	for rows.Next() {
+		var item TaskApplication
+		if err := rows.Scan(&item.ID, &item.PostID, &item.UserID, &item.Username, &item.UserIcon, &item.AppliedAt); err != nil {
+			return nil, err
+		}
+		applications = append(applications, item)
+	}
+	return applications, rows.Err()
+}
+
+func (s *Server) closeTaskApplications(postID int64, ownerID string) (bool, error) {
+	result, err := s.db.Exec(
+		`UPDATE task_posts tp
+		    SET application_status = 'closed'
+		   FROM posts p
+		  WHERE tp.post_id = p.id AND tp.post_id = $1 AND p.user_id = $2`,
+		postID,
+		ownerID,
+	)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}
+
+func defaultTaskInvitation(postContent, workingHours string, startAt, endAt time.Time) string {
+	return "你好，你已被选为该零工任务的候选人。\n\n任务内容：" + postContent +
+		"\n时间范围：" + startAt.Format("2006-01-02 15:04") + " - " + endAt.Format("2006-01-02 15:04") +
+		"\nWorking hours：" + workingHours +
+		"\n如果你确认参与，请直接回复。"
+}
+
+func (s *Server) selectTaskApplicant(postID int64, ownerID, applicantID, invitationTemplate string, selectedAt time.Time) (int64, int64, string, error) {
+	var (
+		postContent   string
+		taskStartAt   time.Time
+		taskEndAt     time.Time
+		workingHours  string
+		ownerMatch    string
+		applicationOK bool
+	)
+	err := s.db.QueryRow(
+		`SELECT p.user_id, p.content, tp.start_at, tp.end_at, tp.working_hours,
+		        EXISTS(
+		          SELECT 1 FROM task_applications ta
+		           WHERE ta.post_id = tp.post_id AND ta.user_id = $2 AND ta.withdrawn_at IS NULL
+		        ) AS application_ok
+		   FROM posts p
+		   JOIN task_posts tp ON tp.post_id = p.id
+		  WHERE p.id = $1`,
+		postID,
+		applicantID,
+	).Scan(&ownerMatch, &postContent, &taskStartAt, &taskEndAt, &workingHours, &applicationOK)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, "", errTaskNotFound
+		}
+		return 0, 0, "", err
+	}
+	if ownerMatch != ownerID {
+		return 0, 0, "", errTaskNotFound
+	}
+	if !applicationOK {
+		return 0, 0, "", errTaskClosed
+	}
+	if strings.TrimSpace(invitationTemplate) == "" {
+		invitationTemplate = defaultTaskInvitation(postContent, workingHours, taskStartAt, taskEndAt)
+	}
+
+	thread, err := s.ensureChatThread(ownerID, applicantID, selectedAt)
+	if err != nil {
+		return 0, 0, "", err
+	}
+
+	messageID, err := s.createChatMessage(thread.ID, ownerID, invitationTemplate, selectedAt)
+	if err != nil {
+		return 0, 0, "", err
+	}
+
+	if _, err = s.db.Exec(
+		`UPDATE task_posts
+		    SET selected_applicant_id = $2,
+		        selected_at = $3,
+		        application_status = 'closed',
+		        invitation_template = $4,
+		        invitation_sent_at = $3
+		  WHERE post_id = $1`,
+		postID,
+		applicantID,
+		selectedAt,
+		invitationTemplate,
+	); err != nil {
+		return 0, 0, "", err
+	}
+	return thread.ID, messageID, invitationTemplate, nil
 }
 
 func normalizeChatPair(userA, userB string) (string, string) {

@@ -34,8 +34,36 @@
       <div class="panel post-form-panel">
         <div class="badge">发布新帖</div>
         <form id="postForm" class="post-form">
+          <label class="form-label" for="postType">类型</label>
+          <select id="postType" class="input">
+            <option value="standard">普通帖子</option>
+            <option value="task">零工任务</option>
+          </select>
+
           <label class="form-label" for="postContent">内容</label>
           <textarea id="postContent" class="input textarea" rows="4" placeholder="分享你的想法..." required></textarea>
+
+          <div id="taskFields" class="task-form-fields" hidden>
+            <label class="form-label" for="taskLocation">地理位置（可选）</label>
+            <input id="taskLocation" class="input" type="text" placeholder="如：上海徐汇 / 远程" />
+
+            <div class="task-form-grid">
+              <div>
+                <label class="form-label" for="taskStartAt">开始时间</label>
+                <input id="taskStartAt" class="input" type="datetime-local" />
+              </div>
+              <div>
+                <label class="form-label" for="taskEndAt">结束时间</label>
+                <input id="taskEndAt" class="input" type="datetime-local" />
+              </div>
+            </div>
+
+            <label class="form-label" for="workingHours">Working hours</label>
+            <input id="workingHours" class="input" type="text" placeholder="如：4h / 9:00-13:00 / 周末两天" />
+
+            <label class="form-label" for="applyDeadline">申请截止时间</label>
+            <input id="applyDeadline" class="input" type="datetime-local" />
+          </div>
 
           <label class="form-label" for="postImages">图片（可选，支持多选）</label>
           <input id="postImages" class="input" type="file" accept="image/*" multiple />

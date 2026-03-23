@@ -488,8 +488,10 @@ async function logout() {
     try {
         const res = await fetch('/api/logout', {method: 'POST'});
         if (res.ok) {
-            window.location.href = '/login';
+            window.location.replace('/login');
+            return;
         }
+        alert('退出失败，请重试');
     } catch (err) {
         alert('退出失败，请重试');
     }

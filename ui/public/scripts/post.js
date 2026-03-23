@@ -7,6 +7,13 @@ const postWelcome = byId("postWelcome");
 const postDetail = byId("postDetail");
 const postForm = byId("postForm");
 const postContent = byId("postContent");
+const postType = byId("postType");
+const taskFields = byId("taskFields");
+const taskLocation = byId("taskLocation");
+const taskStartAt = byId("taskStartAt");
+const taskEndAt = byId("taskEndAt");
+const workingHours = byId("workingHours");
+const applyDeadline = byId("applyDeadline");
 const postImages = byId("postImages");
 const postVideos = byId("postVideos");
 const postFormStatus = byId("postFormStatus");
@@ -22,6 +29,17 @@ function getPostId() {
 }
 function formatTime(value) {
     return new Date(value).toLocaleString();
+}
+function toISOStringFromLocal(value) {
+    return new Date(value).toISOString();
+}
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 }
 function ensureVideoModal() {
     if (videoModal) {
@@ -156,10 +174,43 @@ function renderPost(post) {
     const videoSection = videos ? `<div class="post-videos">${videos}</div>` : "";
     const isSelf = currentUserId && post.user_id === currentUserId;
     const canDelete = currentUserRole === "admin" || isSelf;
+    const isTask = post.post_type === "task" && post.task;
     const authorLabel = isSelf
         ? `<span class="post-author-name">${post.username}</span>`
         : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(post.user_id)}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
     const avatar = resolveAvatar(post.username, post.user_icon, 64);
+    const taskInfo = isTask
+        ? `
+      <div class="task-meta-card">
+        <div class="badge">零工任务</div>
+        <div class="task-meta-grid">
+          <div><strong>时间范围：</strong>${formatTime(post.task.start_at)} - ${formatTime(post.task.end_at)}</div>
+          <div><strong>Working hours：</strong>${escapeHtml(post.task.working_hours)}</div>
+          <div><strong>申请截止：</strong>${formatTime(post.task.apply_deadline)}</div>
+          <div><strong>地理位置：</strong>${escapeHtml(post.task.location || "未限制")}</div>
+          <div><strong>申请状态：</strong>${post.task.application_status === "open" ? "开放中" : "已关闭"}</div>
+          <div><strong>当前申请数：</strong>${post.task.applicant_count || 0}</div>
+          ${post.task.selected_applicant_name
+            ? `<div><strong>已选候选人：</strong>${escapeHtml(post.task.selected_applicant_name)}</div>`
+            : ""}
+        </div>
+      </div>
+    `
+        : "";
+    const taskActions = isTask
+        ? `
+      <div class="task-actions">
+        ${post.task.can_apply
+            ? `<button id="taskApplyBtn" class="btn-inline btn-secondary" type="button">${post.task.applied_by_me ? "撤销申请" : "申请任务"}</button>`
+            : ""}
+        ${post.task.can_manage && post.task.application_status === "open"
+            ? `<button id="taskCloseBtn" class="btn-inline btn-secondary" type="button">关闭申请</button>
+               <button id="taskLoadApplicantsBtn" class="btn-inline btn-secondary" type="button">查看申请者</button>`
+            : ""}
+      </div>
+      <div id="taskApplicantsPanel" class="task-applicants-panel"></div>
+    `
+        : "";
     postDetail.innerHTML = `
     <div class="post-header">
       <div class="post-author">
@@ -169,6 +220,7 @@ function renderPost(post) {
       <div class="post-time">${formatTime(post.created_at)}</div>
     </div>
     <div class="post-content">${post.content}</div>
+    ${taskInfo}
     <div class="post-images">${images}</div>
     ${videoSection}
     <div class="post-actions">
@@ -177,6 +229,7 @@ function renderPost(post) {
       </button>
       ${canDelete ? '<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">删除帖子</button>' : ""}
     </div>
+    ${taskActions}
     <div class="reply-box open">
       <div class="reply-list" id="replyList"></div>
       <form id="replyForm" class="reply-form">
@@ -218,6 +271,10 @@ function renderPost(post) {
     });
     const replyForm = byId("replyForm");
     const replyInput = byId("replyInput");
+    const taskApplyBtn = document.getElementById("taskApplyBtn");
+    const taskCloseBtn = document.getElementById("taskCloseBtn");
+    const taskLoadApplicantsBtn = document.getElementById("taskLoadApplicantsBtn");
+    const taskApplicantsPanel = document.getElementById("taskApplicantsPanel");
     replyForm.addEventListener("submit", async (event) => {
         event.preventDefault();
         const content = replyInput.value.trim();
@@ -235,6 +292,91 @@ function renderPost(post) {
         }
         replyInput.value = "";
         await loadReplies(post.id);
+    });
+    taskApplyBtn?.addEventListener("click", async () => {
+        const method = post.task?.applied_by_me ? "DELETE" : "POST";
+        const res = await fetch(`${API_BASE}/api/tasks/${post.id}/apply`, {
+            method,
+            credentials: "include",
+        });
+        if (!res.ok) {
+            return;
+        }
+        await loadPost();
+    });
+    taskCloseBtn?.addEventListener("click", async () => {
+        const res = await fetch(`${API_BASE}/api/tasks/${post.id}/close`, {
+            method: "POST",
+            credentials: "include",
+        });
+        if (!res.ok) {
+            return;
+        }
+        await loadPost();
+    });
+    taskLoadApplicantsBtn?.addEventListener("click", async () => {
+        if (!taskApplicantsPanel) {
+            return;
+        }
+        taskApplicantsPanel.innerHTML = "<div class='reply-empty'>加载申请者中...</div>";
+        const res = await fetch(`${API_BASE}/api/tasks/${post.id}/applications`, {
+            credentials: "include",
+        });
+        if (!res.ok) {
+            taskApplicantsPanel.innerHTML = "<div class='reply-empty'>无法加载申请者</div>";
+            return;
+        }
+        const data = await res.json();
+        const applications = data.applications || [];
+        if (!applications.length) {
+            taskApplicantsPanel.innerHTML = "<div class='reply-empty'>暂无申请者</div>";
+            return;
+        }
+        taskApplicantsPanel.innerHTML = applications
+            .map((item) => {
+            const avatarUrl = resolveAvatar(item.username, item.user_icon, 40);
+            const defaultTemplate = post.task?.invitation_template
+                || `你好，你已被选为该零工任务的候选人。\n\n任务内容：${post.content}\n如果你确认参与，请直接回复。`;
+            return `
+          <div class="task-applicant-item">
+            <div class="task-applicant-head">
+              <img class="avatar-xs" src="${avatarUrl}" alt="${item.username}" />
+              <div>
+                <div class="reply-meta">${item.username} · ${formatTime(item.applied_at)}</div>
+                <div class="task-applicant-id">${item.user_id}</div>
+              </div>
+            </div>
+            <textarea class="input textarea task-template-input" data-user-id="${item.user_id}" rows="4">${escapeHtml(defaultTemplate)}</textarea>
+            <button class="btn-inline btn-secondary task-select-btn" data-user-id="${item.user_id}" type="button">确认并发送私信</button>
+          </div>
+        `;
+        })
+            .join("");
+        taskApplicantsPanel.querySelectorAll(".task-select-btn").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const applicantUserId = button.dataset.userId;
+                if (!applicantUserId) {
+                    return;
+                }
+                const textarea = taskApplicantsPanel.querySelector(`.task-template-input[data-user-id="${applicantUserId}"]`);
+                const messageTemplate = textarea?.value.trim() || "";
+                button.disabled = true;
+                const selectRes = await fetch(`${API_BASE}/api/tasks/${post.id}/select-candidate`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        applicant_user_id: applicantUserId,
+                        message_template: messageTemplate,
+                    }),
+                });
+                if (!selectRes.ok) {
+                    button.disabled = false;
+                    return;
+                }
+                await loadPost();
+            });
+        });
     });
 }
 async function loadPost() {
@@ -259,6 +401,15 @@ async function loadPost() {
     renderPost(post);
     await loadReplies(post.id);
 }
+function syncTaskFields() {
+    const enabled = postType.value === "task";
+    taskFields.hidden = !enabled;
+    taskStartAt.required = enabled;
+    taskEndAt.required = enabled;
+    workingHours.required = enabled;
+    applyDeadline.required = enabled;
+}
+postType.addEventListener("change", syncTaskFields);
 postForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const content = postContent.value.trim();
@@ -266,10 +417,24 @@ postForm.addEventListener("submit", async (event) => {
         postFormStatus.textContent = "内容不能为空";
         return;
     }
+    if (postType.value === "task") {
+        if (!taskStartAt.value || !taskEndAt.value || !workingHours.value.trim() || !applyDeadline.value) {
+            postFormStatus.textContent = "请填写完整的任务信息";
+            return;
+        }
+    }
     postFormStatus.textContent = "正在发布...";
     postSubmitBtn.disabled = true;
     const formData = new FormData();
+    formData.append("post_type", postType.value);
     formData.append("content", content);
+    if (postType.value === "task") {
+        formData.append("task_location", taskLocation.value.trim());
+        formData.append("task_start_at", toISOStringFromLocal(taskStartAt.value));
+        formData.append("task_end_at", toISOStringFromLocal(taskEndAt.value));
+        formData.append("working_hours", workingHours.value.trim());
+        formData.append("apply_deadline", toISOStringFromLocal(applyDeadline.value));
+    }
     Array.from(postImages.files || []).forEach((file) => {
         formData.append("images", file);
     });
@@ -301,6 +466,7 @@ postForm.addEventListener("submit", async (event) => {
 async function init() {
     await hydrateSiteBrand();
     await loadProfile();
+    syncTaskFields();
     await loadPost();
 }
 void init();

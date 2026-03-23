@@ -449,8 +449,21 @@ siteIconFile.addEventListener("change", async () => {
     }
 });
 logoutBtn.addEventListener("click", async () => {
-    await logout();
-    window.location.href = "/login.html";
+    logoutBtn.disabled = true;
+    try {
+        const response = await logout();
+        if (!response.ok) {
+            welcomeText.textContent = "退出失败，请重试";
+            return;
+        }
+        window.location.replace("/login.html");
+    }
+    catch {
+        welcomeText.textContent = "退出失败，请检查网络后重试";
+    }
+    finally {
+        logoutBtn.disabled = false;
+    }
 });
 newEntryBtn.addEventListener("click", () => {
     window.location.href = "/editor.html";

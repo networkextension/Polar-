@@ -254,6 +254,167 @@
 }
 ```
 
+## 零工任务模块
+
+说明：
+
+- 零工任务复用帖子系统，任务帖通过 `post_type = "task"` 区分。
+- 更完整的设计说明见 `doc/tasks.md`。
+
+### 发布任务帖
+
+**POST** `/api/posts`
+
+权限要求：已登录用户
+
+请求类型：`multipart/form-data`
+
+字段：
+- `post_type`：固定传 `task`
+- `content`：任务描述，必填
+- `task_location`：地理位置，可选
+- `task_start_at`：任务开始时间，RFC3339，必填
+- `task_end_at`：任务结束时间，RFC3339，必填
+- `working_hours`：工作时长或班次说明，必填
+- `apply_deadline`：申请截止时间，RFC3339，必填
+- `images`：图片文件数组，可选
+- `videos`：视频文件数组，可选
+
+成功响应：
+```json
+{
+  "message": "发布成功",
+  "id": 101,
+  "post_type": "task",
+  "images": [],
+  "videos": [],
+  "video_items": [],
+  "content": "周末商场活动需要 2 名兼职",
+  "created": "2026-03-23T09:00:00+08:00"
+}
+```
+
+### 获取任务帖列表/详情
+
+任务帖仍然使用帖子接口：
+
+- **GET** `/api/posts?limit=10&offset=0`
+- **GET** `/api/posts/:id`
+
+当帖子为任务帖时，返回对象中会附带 `task` 字段，例如：
+
+```json
+{
+  "id": 101,
+  "post_type": "task",
+  "content": "周末商场活动需要 2 名兼职",
+  "task": {
+    "post_id": 101,
+    "location": "上海徐汇",
+    "start_at": "2026-03-28T09:00:00+08:00",
+    "end_at": "2026-03-28T18:00:00+08:00",
+    "working_hours": "9:00-18:00，共 8 小时",
+    "apply_deadline": "2026-03-27T20:00:00+08:00",
+    "application_status": "open",
+    "applicant_count": 3,
+    "applied_by_me": false,
+    "can_apply": true,
+    "can_manage": false
+  }
+}
+```
+
+### 申请任务
+
+**POST** `/api/tasks/:id/apply`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "申请成功"
+}
+```
+
+### 撤销申请
+
+**DELETE** `/api/tasks/:id/apply`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已撤销申请"
+}
+```
+
+### 查看申请者列表
+
+**GET** `/api/tasks/:id/applications`
+
+权限要求：任务发布者
+
+成功响应：
+```json
+{
+  "applications": [
+    {
+      "id": 9001,
+      "post_id": 101,
+      "user_id": "u_018",
+      "username": "Bob",
+      "user_icon": "/uploads/icon_xxx.png",
+      "applied_at": "2026-03-23T12:00:00+08:00"
+    }
+  ]
+}
+```
+
+### 关闭申请
+
+**POST** `/api/tasks/:id/close`
+
+权限要求：任务发布者
+
+成功响应：
+```json
+{
+  "message": "已关闭申请"
+}
+```
+
+### 选择候选人并发送私信
+
+**POST** `/api/tasks/:id/select-candidate`
+
+权限要求：任务发布者
+
+请求体：
+```json
+{
+  "applicant_user_id": "u_018",
+  "message_template": "你好，你已被选为该零工任务候选人。如果确认参与，请直接回复我。"
+}
+```
+
+说明：
+
+- `applicant_user_id` 必填，且必须是当前有效申请者。
+- `message_template` 可为空；为空时服务端会生成默认模板。
+- 成功后任务会自动关闭申请，并通过现有私聊系统发送消息。
+
+成功响应：
+```json
+{
+  "message": "候选人已确认，私信已发送",
+  "chat_id": 12,
+  "message_id": 88,
+  "message_template": "你好，你已被选为该零工任务候选人。如果确认参与，请直接回复我。"
+}
+```
+
 ### 更新标签（仅管理员）
 
 **PUT** `/api/tags/:id`

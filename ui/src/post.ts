@@ -8,6 +8,13 @@ const postWelcome = byId<HTMLElement>("postWelcome");
 const postDetail = byId<HTMLElement>("postDetail");
 const postForm = byId<HTMLFormElement>("postForm");
 const postContent = byId<HTMLTextAreaElement>("postContent");
+const postType = byId<HTMLSelectElement>("postType");
+const taskFields = byId<HTMLElement>("taskFields");
+const taskLocation = byId<HTMLInputElement>("taskLocation");
+const taskStartAt = byId<HTMLInputElement>("taskStartAt");
+const taskEndAt = byId<HTMLInputElement>("taskEndAt");
+const workingHours = byId<HTMLInputElement>("workingHours");
+const applyDeadline = byId<HTMLInputElement>("applyDeadline");
 const postImages = byId<HTMLInputElement>("postImages");
 const postVideos = byId<HTMLInputElement>("postVideos");
 const postFormStatus = byId<HTMLElement>("postFormStatus");
@@ -30,6 +37,7 @@ type Post = {
   user_id: string;
   username: string;
   user_icon?: string;
+  post_type?: string;
   created_at: string;
   content: string;
   images?: string[];
@@ -37,6 +45,30 @@ type Post = {
   video_items?: VideoItem[];
   liked_by_me: boolean;
   like_count: number;
+  task?: TaskMeta;
+};
+
+type TaskMeta = {
+  location?: string;
+  start_at: string;
+  end_at: string;
+  working_hours: string;
+  apply_deadline: string;
+  application_status: string;
+  selected_applicant_id?: string;
+  selected_applicant_name?: string;
+  invitation_template?: string;
+  applicant_count?: number;
+  applied_by_me?: boolean;
+  can_apply?: boolean;
+  can_manage?: boolean;
+};
+
+type TaskApplication = {
+  user_id: string;
+  username: string;
+  user_icon?: string;
+  applied_at: string;
 };
 
 let currentUserId = "";
@@ -53,6 +85,19 @@ function getPostId(): string | null {
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleString();
+}
+
+function toISOStringFromLocal(value: string): string {
+  return new Date(value).toISOString();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function ensureVideoModal(): void {
@@ -203,6 +248,7 @@ function renderPost(post: Post): void {
 
   const isSelf = currentUserId && post.user_id === currentUserId;
   const canDelete = currentUserRole === "admin" || isSelf;
+  const isTask = post.post_type === "task" && post.task;
   const authorLabel = isSelf
     ? `<span class="post-author-name">${post.username}</span>`
     : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
@@ -210,6 +256,44 @@ function renderPost(post: Post): void {
       )}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
 
   const avatar = resolveAvatar(post.username, post.user_icon, 64);
+  const taskInfo = isTask
+    ? `
+      <div class="task-meta-card">
+        <div class="badge">零工任务</div>
+        <div class="task-meta-grid">
+          <div><strong>时间范围：</strong>${formatTime(post.task!.start_at)} - ${formatTime(post.task!.end_at)}</div>
+          <div><strong>Working hours：</strong>${escapeHtml(post.task!.working_hours)}</div>
+          <div><strong>申请截止：</strong>${formatTime(post.task!.apply_deadline)}</div>
+          <div><strong>地理位置：</strong>${escapeHtml(post.task!.location || "未限制")}</div>
+          <div><strong>申请状态：</strong>${post.task!.application_status === "open" ? "开放中" : "已关闭"}</div>
+          <div><strong>当前申请数：</strong>${post.task!.applicant_count || 0}</div>
+          ${
+            post.task!.selected_applicant_name
+              ? `<div><strong>已选候选人：</strong>${escapeHtml(post.task!.selected_applicant_name)}</div>`
+              : ""
+          }
+        </div>
+      </div>
+    `
+    : "";
+  const taskActions = isTask
+    ? `
+      <div class="task-actions">
+        ${
+          post.task!.can_apply
+            ? `<button id="taskApplyBtn" class="btn-inline btn-secondary" type="button">${post.task!.applied_by_me ? "撤销申请" : "申请任务"}</button>`
+            : ""
+        }
+        ${
+          post.task!.can_manage && post.task!.application_status === "open"
+            ? `<button id="taskCloseBtn" class="btn-inline btn-secondary" type="button">关闭申请</button>
+               <button id="taskLoadApplicantsBtn" class="btn-inline btn-secondary" type="button">查看申请者</button>`
+            : ""
+        }
+      </div>
+      <div id="taskApplicantsPanel" class="task-applicants-panel"></div>
+    `
+    : "";
 
   postDetail.innerHTML = `
     <div class="post-header">
@@ -220,6 +304,7 @@ function renderPost(post: Post): void {
       <div class="post-time">${formatTime(post.created_at)}</div>
     </div>
     <div class="post-content">${post.content}</div>
+    ${taskInfo}
     <div class="post-images">${images}</div>
     ${videoSection}
     <div class="post-actions">
@@ -228,6 +313,7 @@ function renderPost(post: Post): void {
       </button>
       ${canDelete ? '<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">删除帖子</button>' : ""}
     </div>
+    ${taskActions}
     <div class="reply-box open">
       <div class="reply-list" id="replyList"></div>
       <form id="replyForm" class="reply-form">
@@ -273,6 +359,10 @@ function renderPost(post: Post): void {
 
   const replyForm = byId<HTMLFormElement>("replyForm");
   const replyInput = byId<HTMLInputElement>("replyInput");
+  const taskApplyBtn = document.getElementById("taskApplyBtn") as HTMLButtonElement | null;
+  const taskCloseBtn = document.getElementById("taskCloseBtn") as HTMLButtonElement | null;
+  const taskLoadApplicantsBtn = document.getElementById("taskLoadApplicantsBtn") as HTMLButtonElement | null;
+  const taskApplicantsPanel = document.getElementById("taskApplicantsPanel") as HTMLElement | null;
 
   replyForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -291,6 +381,97 @@ function renderPost(post: Post): void {
     }
     replyInput.value = "";
     await loadReplies(post.id);
+  });
+
+  taskApplyBtn?.addEventListener("click", async () => {
+    const method = post.task?.applied_by_me ? "DELETE" : "POST";
+    const res = await fetch(`${API_BASE}/api/tasks/${post.id}/apply`, {
+      method,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      return;
+    }
+    await loadPost();
+  });
+
+  taskCloseBtn?.addEventListener("click", async () => {
+    const res = await fetch(`${API_BASE}/api/tasks/${post.id}/close`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      return;
+    }
+    await loadPost();
+  });
+
+  taskLoadApplicantsBtn?.addEventListener("click", async () => {
+    if (!taskApplicantsPanel) {
+      return;
+    }
+    taskApplicantsPanel.innerHTML = "<div class='reply-empty'>加载申请者中...</div>";
+    const res = await fetch(`${API_BASE}/api/tasks/${post.id}/applications`, {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      taskApplicantsPanel.innerHTML = "<div class='reply-empty'>无法加载申请者</div>";
+      return;
+    }
+    const data = await res.json();
+    const applications: TaskApplication[] = data.applications || [];
+    if (!applications.length) {
+      taskApplicantsPanel.innerHTML = "<div class='reply-empty'>暂无申请者</div>";
+      return;
+    }
+    taskApplicantsPanel.innerHTML = applications
+      .map((item) => {
+        const avatarUrl = resolveAvatar(item.username, item.user_icon, 40);
+        const defaultTemplate = post.task?.invitation_template
+          || `你好，你已被选为该零工任务的候选人。\n\n任务内容：${post.content}\n如果你确认参与，请直接回复。`;
+        return `
+          <div class="task-applicant-item">
+            <div class="task-applicant-head">
+              <img class="avatar-xs" src="${avatarUrl}" alt="${item.username}" />
+              <div>
+                <div class="reply-meta">${item.username} · ${formatTime(item.applied_at)}</div>
+                <div class="task-applicant-id">${item.user_id}</div>
+              </div>
+            </div>
+            <textarea class="input textarea task-template-input" data-user-id="${item.user_id}" rows="4">${escapeHtml(defaultTemplate)}</textarea>
+            <button class="btn-inline btn-secondary task-select-btn" data-user-id="${item.user_id}" type="button">确认并发送私信</button>
+          </div>
+        `;
+      })
+      .join("");
+
+    taskApplicantsPanel.querySelectorAll<HTMLButtonElement>(".task-select-btn").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const applicantUserId = button.dataset.userId;
+        if (!applicantUserId) {
+          return;
+        }
+        const textarea = taskApplicantsPanel.querySelector<HTMLTextAreaElement>(
+          `.task-template-input[data-user-id="${applicantUserId}"]`
+        );
+        const messageTemplate = textarea?.value.trim() || "";
+        button.disabled = true;
+        const selectRes = await fetch(`${API_BASE}/api/tasks/${post.id}/select-candidate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            applicant_user_id: applicantUserId,
+            message_template: messageTemplate,
+          }),
+        });
+        if (!selectRes.ok) {
+          button.disabled = false;
+          return;
+        }
+        await loadPost();
+      });
+    });
   });
 }
 
@@ -320,6 +501,17 @@ async function loadPost(): Promise<void> {
   await loadReplies(post.id);
 }
 
+function syncTaskFields(): void {
+  const enabled = postType.value === "task";
+  taskFields.hidden = !enabled;
+  taskStartAt.required = enabled;
+  taskEndAt.required = enabled;
+  workingHours.required = enabled;
+  applyDeadline.required = enabled;
+}
+
+postType.addEventListener("change", syncTaskFields);
+
 postForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const content = postContent.value.trim();
@@ -327,12 +519,26 @@ postForm.addEventListener("submit", async (event) => {
     postFormStatus.textContent = "内容不能为空";
     return;
   }
+  if (postType.value === "task") {
+    if (!taskStartAt.value || !taskEndAt.value || !workingHours.value.trim() || !applyDeadline.value) {
+      postFormStatus.textContent = "请填写完整的任务信息";
+      return;
+    }
+  }
 
   postFormStatus.textContent = "正在发布...";
   postSubmitBtn.disabled = true;
 
   const formData = new FormData();
+  formData.append("post_type", postType.value);
   formData.append("content", content);
+  if (postType.value === "task") {
+    formData.append("task_location", taskLocation.value.trim());
+    formData.append("task_start_at", toISOStringFromLocal(taskStartAt.value));
+    formData.append("task_end_at", toISOStringFromLocal(taskEndAt.value));
+    formData.append("working_hours", workingHours.value.trim());
+    formData.append("apply_deadline", toISOStringFromLocal(applyDeadline.value));
+  }
   Array.from(postImages.files || []).forEach((file) => {
     formData.append("images", file);
   });
@@ -364,6 +570,7 @@ postForm.addEventListener("submit", async (event) => {
 async function init(): Promise<void> {
   await hydrateSiteBrand();
   await loadProfile();
+  syncTaskFields();
   await loadPost();
 }
 

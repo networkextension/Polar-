@@ -1,6 +1,7 @@
 package dock
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -106,10 +107,19 @@ func (s *Server) handleLogin(c *gin.Context) {
 func (s *Server) handleLogout(c *gin.Context) {
 	sessionID, err := c.Cookie(SessionCookieName)
 	if err == nil {
-		_ = s.deleteSession(sessionID)
+		if err := s.deleteSession(sessionID); err != nil {
+			log.Printf("logout delete session failed: %v", err)
+		}
 	}
 
-	c.SetCookie(SessionCookieName, "", -1, "/", "", false, true)
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Expires:  time.Unix(0, 0),
+	})
 	c.JSON(http.StatusOK, gin.H{"message": "已成功退出登录"})
 }
 

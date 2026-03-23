@@ -25,6 +25,7 @@ type Post = {
   user_id: string;
   username: string;
   user_icon?: string;
+  post_type?: string;
   created_at: string;
   content: string;
   images?: string[];
@@ -32,6 +33,15 @@ type Post = {
   video_items?: VideoItem[];
   liked_by_me: boolean;
   like_count: number;
+  task?: {
+    location?: string;
+    start_at: string;
+    end_at: string;
+    working_hours: string;
+    apply_deadline: string;
+    application_status: string;
+    applicant_count?: number;
+  };
 };
 
 let nextOffset = 0;
@@ -168,6 +178,18 @@ function createPostCard(post: Post): HTMLElement {
       )}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
 
   const avatar = resolveAvatar(post.username, post.user_icon, 64);
+  const taskSummary =
+    post.post_type === "task" && post.task
+      ? `
+        <div class="task-summary-strip">
+          <span class="badge">零工任务</span>
+          <span>时间：${formatTime(post.task.start_at)} - ${formatTime(post.task.end_at)}</span>
+          <span>Working hours：${post.task.working_hours}</span>
+          <span>申请截止：${formatTime(post.task.apply_deadline)}</span>
+          <span>申请数：${post.task.applicant_count || 0}</span>
+        </div>
+      `
+      : "";
 
   card.innerHTML = `
     <div class="post-header">
@@ -178,6 +200,7 @@ function createPostCard(post: Post): HTMLElement {
       <div class="post-time">${formatTime(post.created_at)}</div>
     </div>
     <div class="post-content">${post.content}</div>
+    ${taskSummary}
     <div class="post-images">${images}</div>
     ${videoSection}
     <div class="post-actions">

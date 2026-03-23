@@ -28,6 +28,15 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 		return
 	}
 
+	postType := strings.TrimSpace(c.PostForm("post_type"))
+	if postType == "" {
+		postType = "standard"
+	}
+	if postType != "standard" && postType != "task" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的帖子类型"})
+		return
+	}
+
 	var tagID *int64
 	if tagIDStr := strings.TrimSpace(c.PostForm("tag_id")); tagIDStr != "" {
 		parsed, err := strconv.ParseInt(tagIDStr, 10, 64)
@@ -75,11 +84,66 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 		return
 	}
 
+	var (
+		taskLocation      string
+		taskStartAt       time.Time
+		taskEndAt         time.Time
+		taskApplyDeadline time.Time
+		taskWorkingHours  string
+	)
+	if postType == "task" {
+		taskLocation = strings.TrimSpace(c.PostForm("task_location"))
+		taskWorkingHours = strings.TrimSpace(c.PostForm("working_hours"))
+		if taskWorkingHours == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "任务帖必须填写 working hours"})
+			return
+		}
+		startAtStr := strings.TrimSpace(c.PostForm("task_start_at"))
+		endAtStr := strings.TrimSpace(c.PostForm("task_end_at"))
+		deadlineStr := strings.TrimSpace(c.PostForm("apply_deadline"))
+		if startAtStr == "" || endAtStr == "" || deadlineStr == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "任务帖必须填写时间范围和申请截止时间"})
+			return
+		}
+		var err error
+		taskStartAt, err = time.Parse(time.RFC3339, startAtStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "任务开始时间格式错误"})
+			return
+		}
+		taskEndAt, err = time.Parse(time.RFC3339, endAtStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "任务结束时间格式错误"})
+			return
+		}
+		taskApplyDeadline, err = time.Parse(time.RFC3339, deadlineStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "申请截止时间格式错误"})
+			return
+		}
+		if !taskStartAt.Before(taskEndAt) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "任务开始时间必须早于结束时间"})
+			return
+		}
+		if !taskApplyDeadline.Before(taskStartAt) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "申请截止时间必须早于任务开始时间"})
+			return
+		}
+	}
+
 	now := time.Now()
-	postID, err := s.createPost(userIDStr, tagID, content, now)
+	postID, err := s.createPost(userIDStr, tagID, postType, content, now)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
+	}
+
+	if postType == "task" {
+		if err := s.createTaskPost(postID, taskLocation, taskStartAt, taskEndAt, taskWorkingHours, taskApplyDeadline); err != nil {
+			_, _ = s.deletePost(postID)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "任务创建失败"})
+			return
+		}
 	}
 
 	savedFiles := make([]string, 0, len(files)+len(videoFiles))
@@ -149,6 +213,7 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"message":     "发布成功",
 		"id":          postID,
+		"post_type":   postType,
 		"images":      imageURLs,
 		"videos":      videoURLs,
 		"video_items": videoItems,

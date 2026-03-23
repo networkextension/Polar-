@@ -653,6 +653,21 @@ button:hover {
   margin-top: 12px;
 }
 
+.task-form-fields {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+
+.task-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
 .post-form-actions {
   display: flex;
   justify-content: flex-end;
@@ -795,6 +810,55 @@ button:hover {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.task-summary-strip,
+.task-meta-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.task-summary-strip {
+  grid-template-columns: repeat(auto-fit, minmax(200px, max-content));
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.task-meta-card,
+.task-applicants-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+}
+
+.task-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.task-applicant-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.task-applicant-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.task-applicant-id {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .reply-box {
