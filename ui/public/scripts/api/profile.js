@@ -1,0 +1,16 @@
+import { requestJson } from "./http.js";
+export async function fetchUserProfile(userId) {
+    return requestJson(`/api/users/${encodeURIComponent(userId)}/profile`);
+}
+export async function updateMyProfile(bio) {
+    return requestJson("/api/users/me/profile", {
+        method: "PUT",
+        body: { bio },
+    });
+}
+export async function upsertRecommendation(userId, content) {
+    return requestJson(`/api/users/${encodeURIComponent(userId)}/recommendations`, {
+        method: "POST",
+        body: { content },
+    });
+}

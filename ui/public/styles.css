@@ -878,6 +878,61 @@ button:hover {
   border: 1px solid var(--border);
 }
 
+.profile-page {
+  display: grid;
+  gap: 18px;
+}
+
+.profile-detail-card,
+.profile-section {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-hero {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.profile-hero-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 24px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+}
+
+.profile-hero-body {
+  display: grid;
+  gap: 8px;
+}
+
+.profile-hero-body h2 {
+  margin: 0;
+}
+
+.profile-meta-line {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.profile-bio-copy {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.profile-recommendation-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+}
+
 .task-applicant-head {
   display: flex;
   gap: 10px;

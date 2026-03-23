@@ -58,6 +58,10 @@ function formatTime(value: string): string {
   return new Date(value).toLocaleString();
 }
 
+function profileUrl(userId: string): string {
+  return `/profile.html?user_id=${encodeURIComponent(userId)}`;
+}
+
 function ensureVideoModal(): void {
   if (videoModal) {
     return;
@@ -171,11 +175,7 @@ function createPostCard(post: Post): HTMLElement {
 
   const isSelf = currentUserId && post.user_id === currentUserId;
   const canDelete = currentUserRole === "admin" || isSelf;
-  const authorLabel = isSelf
-    ? `<span class="post-author-name">${post.username}</span>`
-    : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
-        post.user_id
-      )}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
+  const authorLabel = `<a class="post-author-name" href="${profileUrl(post.user_id)}">${post.username}</a>`;
 
   const avatar = resolveAvatar(post.username, post.user_icon, 64);
   const taskSummary =
@@ -194,7 +194,7 @@ function createPostCard(post: Post): HTMLElement {
   card.innerHTML = `
     <div class="post-header">
       <div class="post-author">
-        <img class="avatar-sm" src="${avatar}" alt="${post.username}" />
+        <a href="${profileUrl(post.user_id)}"><img class="avatar-sm" src="${avatar}" alt="${post.username}" /></a>
         ${authorLabel}
       </div>
       <div class="post-time">${formatTime(post.created_at)}</div>

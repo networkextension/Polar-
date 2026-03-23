@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>用户 Profile</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="site-shell">
+    <div class="page-shell-wide">
+      <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
+        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <div class="site-brand-copy">
+          <div class="site-brand-name" data-site-name>Polar-</div>
+          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+        </div>
+      </a>
+
+      <div class="posts-page profile-page">
+        <div class="dashboard-header">
+          <div>
+            <h1>用户 Profile</h1>
+            <p id="profileWelcome">正在加载用户资料...</p>
+          </div>
+          <div class="header-actions">
+            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html">帖子</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/chat.html">私聊</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/dashboard.html">控制台</a>
+          </div>
+        </div>
+
+        <div id="profileCard" class="panel profile-detail-card"></div>
+        <div id="profileBioPanel" class="panel profile-section"></div>
+        <div id="profileRecommendationPanel" class="panel profile-section"></div>
+      </div>
+    </div>
+
+    <script type="module" src="/scripts/profile.js"></script>
+  </body>
+</html>

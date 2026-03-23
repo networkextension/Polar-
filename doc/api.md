@@ -121,6 +121,130 @@
 }
 ```
 
+## 用户 Profile 与 Recommendation
+
+说明：
+
+- 更完整的 Profile 设计说明见 `doc/profile.md`
+- Profile 页面地址：
+  - `/profile.html`
+  - `/profile.html?user_id=<targetUserId>`
+
+### 获取用户 Profile
+
+**GET** `/api/users/:id/profile`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "profile": {
+    "user_id": "u_018",
+    "username": "Bob",
+    "icon_url": "/uploads/icon_u_018.png",
+    "bio": "做过活动执行、打扫卫生、搬运协助类零工，周末时间比较灵活。",
+    "created_at": "2026-03-21T09:00:00+08:00",
+    "is_me": false,
+    "can_recommend": true,
+    "recommendations": [
+      {
+        "id": 1,
+        "target_user_id": "u_018",
+        "author_user_id": "u_001",
+        "author_username": "Alice",
+        "author_user_icon": "/uploads/icon_u_001.png",
+        "content": "做事很靠谱，现场响应很快，沟通也顺畅。",
+        "created_at": "2026-03-23T10:00:00+08:00",
+        "updated_at": "2026-03-23T10:00:00+08:00"
+      }
+    ]
+  }
+}
+```
+
+### 更新自己的 Profile
+
+**PUT** `/api/users/me/profile`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "bio": "我擅长活动执行、临时搬运和打扫整理，周末全天可接单。"
+}
+```
+
+说明：
+
+- 当前接口仅更新 `bio`
+- 头像继续通过 **POST** `/api/user/icon` 上传
+
+成功响应：
+```json
+{
+  "message": "保存成功",
+  "profile": {
+    "user_id": "u_018",
+    "username": "Bob",
+    "icon_url": "/uploads/icon_u_018.png",
+    "bio": "我擅长活动执行、临时搬运和打扫整理，周末全天可接单。",
+    "created_at": "2026-03-21T09:00:00+08:00",
+    "is_me": true,
+    "can_recommend": false,
+    "recommendations": []
+  }
+}
+```
+
+### 写入或更新 Recommendation
+
+**POST** `/api/users/:id/recommendations`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "content": "做事很认真，沟通及时，现场执行力不错。"
+}
+```
+
+说明：
+
+- `:id` 为被推荐用户 ID
+- 不允许给自己写 Recommendation
+- 同一作者再次提交时会覆盖之前的 Recommendation 内容
+
+成功响应：
+```json
+{
+  "message": "Recommendation 已保存",
+  "profile": {
+    "user_id": "u_018",
+    "username": "Bob",
+    "icon_url": "/uploads/icon_u_018.png",
+    "bio": "做过活动执行、打扫卫生、搬运协助类零工，周末时间比较灵活。",
+    "created_at": "2026-03-21T09:00:00+08:00",
+    "is_me": false,
+    "can_recommend": true,
+    "recommendations": [
+      {
+        "id": 1,
+        "target_user_id": "u_018",
+        "author_user_id": "u_001",
+        "author_username": "Alice",
+        "author_user_icon": "/uploads/icon_u_001.png",
+        "content": "做事很认真，沟通及时，现场执行力不错。",
+        "created_at": "2026-03-23T10:00:00+08:00",
+        "updated_at": "2026-03-23T12:00:00+08:00"
+      }
+    ]
+  }
+}
+```
+
 ## 站点设置
 
 ### 获取站点设置

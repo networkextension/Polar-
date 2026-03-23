@@ -30,6 +30,7 @@ type User struct {
 	Email     string    `json:"email"`
 	Password  string    `json:"-"` // password_hash
 	Role      string    `json:"role"`
+	Bio       string    `json:"bio"`
 	IconURL   string    `json:"icon_url"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -198,6 +199,28 @@ type TaskResult struct {
 	VideoItems []PostVideo `json:"video_items,omitempty"`
 }
 
+type ProfileRecommendation struct {
+	ID             int64     `json:"id"`
+	TargetUserID   string    `json:"target_user_id"`
+	AuthorUserID   string    `json:"author_user_id"`
+	AuthorUsername string    `json:"author_username"`
+	AuthorUserIcon string    `json:"author_user_icon"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type UserProfileDetail struct {
+	UserID          string                  `json:"user_id"`
+	Username        string                  `json:"username"`
+	IconURL         string                  `json:"icon_url"`
+	Bio             string                  `json:"bio"`
+	CreatedAt       time.Time               `json:"created_at"`
+	IsMe            bool                    `json:"is_me"`
+	CanRecommend    bool                    `json:"can_recommend"`
+	Recommendations []ProfileRecommendation `json:"recommendations"`
+}
+
 func openDB(dsn string) (*sql.DB, error) {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
@@ -215,6 +238,7 @@ CREATE TABLE IF NOT EXISTS users (
 	email TEXT NOT NULL UNIQUE,
 	password_hash TEXT NOT NULL,
 	role TEXT NOT NULL DEFAULT 'user',
+	bio TEXT NOT NULL DEFAULT '',
 	icon_url TEXT NOT NULL DEFAULT '',
 	created_at TIMESTAMPTZ NOT NULL
 );
@@ -222,7 +246,18 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users
 	ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '';
+ALTER TABLE users
 	ADD COLUMN IF NOT EXISTS icon_url TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS profile_recommendations (
+	id BIGSERIAL PRIMARY KEY,
+	target_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	author_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	content TEXT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS markdown_entries (
 	id BIGSERIAL PRIMARY KEY,
@@ -400,6 +435,8 @@ CREATE TABLE IF NOT EXISTS chat_reads (
 CREATE INDEX IF NOT EXISTS idx_markdown_entries_user_id ON markdown_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_records_user_id_logged_in_at ON login_records(user_id, logged_in_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_recommendations_target_author ON profile_recommendations(target_user_id, author_user_id);
+CREATE INDEX IF NOT EXISTS idx_profile_recommendations_target_updated_at ON profile_recommendations(target_user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_sort_order_created_at ON tags(sort_order DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_images_post_id ON post_images(post_id);
@@ -506,9 +543,9 @@ func checkPassword(password, hash string) bool {
 func (s *Server) getUserByEmail(email string) (*User, error) {
 	var user User
 	err := s.db.QueryRow(
-		`SELECT id, username, email, password_hash, role, icon_url, created_at FROM users WHERE email = $1`,
+		`SELECT id, username, email, password_hash, role, bio, icon_url, created_at FROM users WHERE email = $1`,
 		email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.IconURL, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -521,9 +558,9 @@ func (s *Server) getUserByEmail(email string) (*User, error) {
 func (s *Server) getUserByID(userID string) (*User, error) {
 	var user User
 	err := s.db.QueryRow(
-		`SELECT id, username, email, password_hash, role, icon_url, created_at FROM users WHERE id = $1`,
+		`SELECT id, username, email, password_hash, role, bio, icon_url, created_at FROM users WHERE id = $1`,
 		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.IconURL, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -541,12 +578,13 @@ func (s *Server) createUser(user *User) error {
 		user.IconURL = ""
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO users (id, username, email, password_hash, role, icon_url, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO users (id, username, email, password_hash, role, bio, icon_url, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		user.ID,
 		user.Username,
 		user.Email,
 		user.Password,
 		user.Role,
+		user.Bio,
 		user.IconURL,
 		user.CreatedAt,
 	)
@@ -643,6 +681,87 @@ func (s *Server) updateUserIcon(userID, iconURL string) error {
 		userID,
 	)
 	return err
+}
+
+func (s *Server) updateUserBio(userID, bio string) error {
+	_, err := s.db.Exec(
+		`UPDATE users SET bio = $1 WHERE id = $2`,
+		bio,
+		userID,
+	)
+	return err
+}
+
+func (s *Server) upsertProfileRecommendation(targetUserID, authorUserID, content string, now time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO profile_recommendations (target_user_id, author_user_id, content, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $4)
+		 ON CONFLICT (target_user_id, author_user_id)
+		 DO UPDATE SET content = EXCLUDED.content, updated_at = EXCLUDED.updated_at`,
+		targetUserID,
+		authorUserID,
+		content,
+		now,
+	)
+	return err
+}
+
+func (s *Server) listProfileRecommendations(targetUserID string) ([]ProfileRecommendation, error) {
+	rows, err := s.db.Query(
+		`SELECT pr.id, pr.target_user_id, pr.author_user_id, u.username, u.icon_url, pr.content, pr.created_at, pr.updated_at
+		   FROM profile_recommendations pr
+		   JOIN users u ON u.id = pr.author_user_id
+		  WHERE pr.target_user_id = $1
+		  ORDER BY pr.updated_at DESC, pr.id DESC`,
+		targetUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]ProfileRecommendation, 0)
+	for rows.Next() {
+		var item ProfileRecommendation
+		if err := rows.Scan(
+			&item.ID,
+			&item.TargetUserID,
+			&item.AuthorUserID,
+			&item.AuthorUsername,
+			&item.AuthorUserIcon,
+			&item.Content,
+			&item.CreatedAt,
+			&item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Server) getUserProfileDetail(targetUserID, viewerUserID string) (*UserProfileDetail, error) {
+	user, err := s.getUserByID(targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, nil
+	}
+	recommendations, err := s.listProfileRecommendations(targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	return &UserProfileDetail{
+		UserID:          user.ID,
+		Username:        user.Username,
+		IconURL:         user.IconURL,
+		Bio:             user.Bio,
+		CreatedAt:       user.CreatedAt,
+		IsMe:            targetUserID == viewerUserID,
+		CanRecommend:    targetUserID != viewerUserID,
+		Recommendations: recommendations,
+	}, nil
 }
 
 func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]MarkdownEntry, bool, error) {

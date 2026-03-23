@@ -115,6 +115,10 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+function profileUrl(userId: string): string {
+  return `/profile.html?user_id=${encodeURIComponent(userId)}`;
+}
+
 function ensureVideoModal(): void {
   if (videoModal) {
     return;
@@ -264,11 +268,7 @@ function renderPost(post: Post): void {
   const isSelf = currentUserId && post.user_id === currentUserId;
   const canDelete = currentUserRole === "admin" || isSelf;
   const isTask = post.post_type === "task" && post.task;
-  const authorLabel = isSelf
-    ? `<span class="post-author-name">${post.username}</span>`
-    : `<a class="post-author-name chat-link" href="/chat.html?user_id=${encodeURIComponent(
-        post.user_id
-      )}&username=${encodeURIComponent(post.username)}">${post.username}</a>`;
+  const authorLabel = `<a class="post-author-name" href="${profileUrl(post.user_id)}">${post.username}</a>`;
 
   const avatar = resolveAvatar(post.username, post.user_icon, 64);
   const taskInfo = isTask
@@ -339,7 +339,7 @@ function renderPost(post: Post): void {
   postDetail.innerHTML = `
     <div class="post-header">
       <div class="post-author">
-        <img class="avatar-sm" src="${avatar}" alt="${post.username}" />
+        <a href="${profileUrl(post.user_id)}"><img class="avatar-sm" src="${avatar}" alt="${post.username}" /></a>
         ${authorLabel}
       </div>
       <div class="post-time">${formatTime(post.created_at)}</div>
@@ -480,9 +480,9 @@ function renderPost(post: Post): void {
         return `
           <div class="task-applicant-item">
             <div class="task-applicant-head">
-              <img class="avatar-xs" src="${avatarUrl}" alt="${item.username}" />
+              <a href="${profileUrl(item.user_id)}"><img class="avatar-xs" src="${avatarUrl}" alt="${item.username}" /></a>
               <div>
-                <div class="reply-meta">${item.username} · ${formatTime(item.applied_at)}</div>
+                <div class="reply-meta"><a class="post-author-name" href="${profileUrl(item.user_id)}">${item.username}</a> · ${formatTime(item.applied_at)}</div>
                 <div class="task-applicant-id">${item.user_id}</div>
               </div>
             </div>
@@ -598,8 +598,8 @@ async function loadTaskResults(postId: number): Promise<void> {
       return `
         <div class="task-result-item">
           <div class="task-applicant-head">
-            <img class="avatar-xs" src="${avatar}" alt="${result.username}" />
-            <div class="reply-meta">${result.username} · ${formatTime(result.created_at)}</div>
+            <a href="${profileUrl(result.user_id)}"><img class="avatar-xs" src="${avatar}" alt="${result.username}" /></a>
+            <div class="reply-meta"><a class="post-author-name" href="${profileUrl(result.user_id)}">${result.username}</a> · ${formatTime(result.created_at)}</div>
           </div>
           ${result.note ? `<div class="post-content">${escapeHtml(result.note)}</div>` : ""}
           ${images ? `<div class="post-images">${images}</div>` : ""}

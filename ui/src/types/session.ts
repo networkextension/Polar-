@@ -3,4 +3,5 @@ export type UserProfile = {
   username: string;
   role?: string;
   icon_url?: string;
+  bio?: string;
 };

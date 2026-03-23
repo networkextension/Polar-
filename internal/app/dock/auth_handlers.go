@@ -140,6 +140,12 @@ func (s *Server) handleMe(c *gin.Context) {
 		"username": username,
 		"role":     role,
 		"icon_url": iconURL,
+		"bio": func() string {
+			if user, err := s.getUserByID(userIDStr); err == nil && user != nil {
+				return user.Bio
+			}
+			return ""
+		}(),
 	})
 }
 
