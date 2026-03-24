@@ -10,13 +10,16 @@ import (
 )
 
 type chatEvent struct {
-	Type      string       `json:"type"`
-	ChatID    int64        `json:"chat_id"`
-	Message   *ChatMessage `json:"message,omitempty"`
-	MessageID int64        `json:"message_id,omitempty"`
-	UserID    string       `json:"user_id,omitempty"`
-	ReadAt    *time.Time   `json:"read_at,omitempty"`
-	DeletedAt *time.Time   `json:"deleted_at,omitempty"`
+	Type       string       `json:"type"`
+	ChatID     int64        `json:"chat_id,omitempty"`
+	Message    *ChatMessage `json:"message,omitempty"`
+	MessageID  int64        `json:"message_id,omitempty"`
+	UserID     string       `json:"user_id,omitempty"`
+	ReadAt     *time.Time   `json:"read_at,omitempty"`
+	DeletedAt  *time.Time   `json:"deleted_at,omitempty"`
+	Online     bool         `json:"online,omitempty"`
+	DeviceType string       `json:"device_type,omitempty"`
+	LastSeenAt *time.Time   `json:"last_seen_at,omitempty"`
 }
 
 var wsUpgrader = websocket.Upgrader{
@@ -45,10 +48,11 @@ func (s *Server) handleChatWS(c *gin.Context) {
 	}
 
 	client := &wsClient{
-		hub:    s.wsHub,
-		conn:   conn,
-		send:   make(chan []byte, 32),
-		userID: session.UserID,
+		hub:        s.wsHub,
+		conn:       conn,
+		send:       make(chan []byte, 32),
+		userID:     session.UserID,
+		deviceType: normalizeDeviceType(session.DeviceType),
 	}
 
 	s.wsHub.register <- client

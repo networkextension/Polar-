@@ -14,10 +14,11 @@ const (
 )
 
 type wsHub struct {
-	clients    map[string]map[*wsClient]bool
-	register   chan *wsClient
-	unregister chan *wsClient
-	broadcast  chan wsBroadcast
+	clients           map[string]map[*wsClient]bool
+	register          chan *wsClient
+	unregister        chan *wsClient
+	broadcast         chan wsBroadcast
+	onPresenceChanged func(userID, deviceType string, online bool, deviceOnline bool)
 }
 
 type wsBroadcast struct {
@@ -26,10 +27,11 @@ type wsBroadcast struct {
 }
 
 type wsClient struct {
-	hub    *wsHub
-	conn   *websocket.Conn
-	send   chan []byte
-	userID string
+	hub        *wsHub
+	conn       *websocket.Conn
+	send       chan []byte
+	userID     string
+	deviceType string
 }
 
 func newWSHub() *wsHub {
@@ -51,6 +53,9 @@ func (h *wsHub) run() {
 				h.clients[client.userID] = group
 			}
 			group[client] = true
+			if h.onPresenceChanged != nil {
+				go h.onPresenceChanged(client.userID, client.deviceType, true, true)
+			}
 		case client := <-h.unregister:
 			group := h.clients[client.userID]
 			if group != nil {
@@ -58,8 +63,19 @@ func (h *wsHub) run() {
 					delete(group, client)
 					close(client.send)
 				}
+				deviceStillOnline := false
+				for activeClient := range group {
+					if activeClient.deviceType == client.deviceType {
+						deviceStillOnline = true
+						break
+					}
+				}
+				userStillOnline := len(group) > 0
 				if len(group) == 0 {
 					delete(h.clients, client.userID)
+				}
+				if h.onPresenceChanged != nil {
+					go h.onPresenceChanged(client.userID, client.deviceType, userStillOnline, deviceStillOnline)
 				}
 			}
 		case msg := <-h.broadcast:

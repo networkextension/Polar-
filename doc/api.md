@@ -3,6 +3,17 @@
 基础路径：`/api`  
 认证方式：基于 Cookie 的 Session，登录成功后服务端会下发 `session_id`。
 
+## 通用请求头
+
+以下请求头当前主要用于登录态建立、设备登记与后续 Push 能力预埋：
+
+- `X-Device-Type`：可选，登录/注册/Passkey 登录时上报设备类型。
+  - 允许值：`browser`、`ios`、`android`
+  - 未传时默认按 `browser` 处理
+- `X-Push-Token`：可选，登录/注册/Passkey 登录时上报当前设备的 Push Token
+  - 服务端会按 `user_id + device_type` 维度保存最近一次 token
+  - 当前版本仅保存，不会直接触发推送
+
 ## 通用返回
 
 - 成功：HTTP 2xx + JSON
@@ -11,6 +22,11 @@
 ## 注册
 
 **POST** `/api/register`
+
+可选请求头：
+
+- `X-Device-Type`
+- `X-Push-Token`
 
 请求体：
 ```json
@@ -34,6 +50,11 @@
 
 **POST** `/api/login`
 
+可选请求头：
+
+- `X-Device-Type`
+- `X-Push-Token`
+
 请求体：
 ```json
 {
@@ -55,6 +76,12 @@
 
 **POST** `/api/logout`
 
+说明：
+
+- 当前接口仅清理 Session Cookie
+- 不会主动清空 `user_devices.push_token`
+- 在线状态主要由 websocket 连接生命周期驱动
+
 成功响应：
 ```json
 {
@@ -72,9 +99,19 @@
   "user_id": "xxxx",
   "username": "johndoe",
   "role": "admin",
-  "icon_url": "/uploads/icon_user_xxx.png"
+  "icon_url": "/uploads/icon_user_xxx.png",
+  "bio": "我擅长活动执行、临时搬运和打扫整理，周末全天可接单。",
+  "is_online": true,
+  "device_type": "browser",
+  "last_seen_at": "2026-03-24T10:20:30+08:00"
 }
 ```
+
+字段说明：
+
+- `is_online`：当前用户聚合在线状态
+- `device_type`：当前用户最近活跃设备类型
+- `last_seen_at`：最近一次活跃时间，可能为空
 
 ## 登录记录
 
@@ -94,9 +131,74 @@
       "region": "Shanghai",
       "city": "Shanghai",
       "login_method": "password",
+      "device_type": "browser",
       "logged_in_at": "2026-03-22T08:00:00Z"
     }
   ]
+}
+```
+
+`login_method` 当前可能值：
+
+- `register`
+- `password`
+- `passkey`
+
+`device_type` 当前可能值：
+
+- `browser`
+- `ios`
+- `android`
+
+## Passkey 登录
+
+说明：
+
+- Passkey 登录完成接口与普通登录一样，也支持通过请求头登记设备类型与 `push token`
+
+### 发起 Passkey 登录
+
+**POST** `/api/passkey/login/begin`
+
+请求体：
+```json
+{
+  "email": "john@example.com"
+}
+```
+
+成功响应：
+```json
+{
+  "session_id": "passkey_login_xxx",
+  "publicKey": {
+    "challenge": "xxx",
+    "rpId": "localhost",
+    "allowCredentials": []
+  }
+}
+```
+
+### 完成 Passkey 登录
+
+**POST** `/api/passkey/login/finish`
+
+请求头：
+
+- `X-Passkey-Session`：必填，来自 begin 接口返回的 `session_id`
+- `X-Device-Type`：可选
+- `X-Push-Token`：可选
+
+请求体：
+
+- WebAuthn / Passkey 标准登录响应对象，字段较长，此处省略
+
+成功响应：
+```json
+{
+  "message": "登录成功",
+  "user_id": "xxxx",
+  "username": "johndoe"
 }
 ```
 
@@ -129,6 +231,11 @@
 - Profile 页面地址：
   - `/profile.html`
   - `/profile.html?user_id=<targetUserId>`
+- 当前前端入口包括：
+  - dashboard 顶部的“我的 Profile”
+  - 帖子作者头像/用户名
+  - 任务申请者头像/用户名
+  - 任务成果提交者头像/用户名
 
 ### 获取用户 Profile
 
@@ -216,6 +323,7 @@
 - `:id` 为被推荐用户 ID
 - 不允许给自己写 Recommendation
 - 同一作者再次提交时会覆盖之前的 Recommendation 内容
+- 前端当前使用“覆盖式提交”，不是多条追加评论
 
 成功响应：
 ```json
@@ -676,12 +784,26 @@ curl -X POST http://localhost:3000/api/posts \
 - `videos`（可选，可多条）：视频文件（字段名固定 `videos`）
 - `tag_id`（可选）：标签 ID
 
+说明：
+- 帖子图片上传后，服务端会保留原图并生成两个衍生尺寸：
+  - `small_url`：适合列表/缩略图
+  - `medium_url`：适合详情页正文展示
+  - `original_url`：原始图片
+- `images` 字段继续保留，兼容旧客户端；其值会优先返回 `medium_url`
+
 成功响应：
 ```json
 {
   "message": "发布成功",
   "id": 12,
-  "images": ["/uploads/20260319_120000_abcd1234.png"],
+  "images": ["/uploads/20260319_120000_abcd1234_md.jpg"],
+  "image_items": [
+    {
+      "small_url": "/uploads/20260319_120000_abcd1234_sm.jpg",
+      "medium_url": "/uploads/20260319_120000_abcd1234_md.jpg",
+      "original_url": "/uploads/20260319_120000_abcd1234.png"
+    }
+  ],
   "videos": ["/uploads/20260319_120001_efgh5678.mp4"],
   "video_items": [
     {
@@ -716,7 +838,14 @@ curl -X POST http://localhost:3000/api/posts \
       "like_count": 3,
       "reply_count": 2,
       "liked_by_me": true,
-      "images": ["/uploads/20260319_120000_abcd1234.png"],
+      "images": ["/uploads/20260319_120000_abcd1234_md.jpg"],
+      "image_items": [
+        {
+          "small_url": "/uploads/20260319_120000_abcd1234_sm.jpg",
+          "medium_url": "/uploads/20260319_120000_abcd1234_md.jpg",
+          "original_url": "/uploads/20260319_120000_abcd1234.png"
+        }
+      ],
       "videos": ["/uploads/20260319_120001_efgh5678.mp4"],
       "video_items": [
         {
@@ -751,7 +880,14 @@ curl -X POST http://localhost:3000/api/posts \
     "like_count": 3,
     "reply_count": 2,
     "liked_by_me": true,
-    "images": ["/uploads/20260319_120000_abcd1234.png"],
+    "images": ["/uploads/20260319_120000_abcd1234_md.jpg"],
+    "image_items": [
+      {
+        "small_url": "/uploads/20260319_120000_abcd1234_sm.jpg",
+        "medium_url": "/uploads/20260319_120000_abcd1234_md.jpg",
+        "original_url": "/uploads/20260319_120000_abcd1234.png"
+      }
+    ],
     "videos": ["/uploads/20260319_120001_efgh5678.mp4"],
     "video_items": [
       {
@@ -853,9 +989,219 @@ curl -X POST http://localhost:3000/api/posts \
 - 发帖请使用 `multipart/form-data`，媒体字段名固定为 `images` 和 `videos`。
 - `images`、`videos` 都允许为空数组或不传；仅 `content` 必填。
 - 帖子列表/详情中的媒体 URL 为相对路径（如 `/uploads/xxx.mp4`），iOS 侧请拼接服务端域名后再加载。
+- 图片建议优先使用 `image_items`：
+  - 列表卡片使用 `small_url`
+  - 详情页使用 `medium_url`
+  - 原图预览或下载使用 `original_url`
+- `images` 字段保留为兼容字段，值优先为中图地址，缺失时回退到原图地址。
 - `videos` 字段保留为纯地址数组以兼容旧客户端；新客户端应优先使用 `video_items[].poster_url` 展示统一封面。
 - 删帖权限规则：管理员可删除任意帖子；普通用户只能删除自己发布的帖子。
 - 帖子删除后，列表接口不会再返回该帖子；详情接口访问该帖子会返回 `404`。
+
+## 私聊与在线状态
+
+说明：
+
+- 当前私聊 websocket 地址为 `/ws/chat`
+- websocket 连接成功后，服务端会把对应用户设备标记为在线
+- websocket 断开后，服务端会更新该设备离线状态，并重新聚合用户在线状态
+- 这些在线状态是为了下一步“离线用户 Push 通知”做准备
+
+### 创建或获取私聊会话
+
+**POST** `/api/chats/start`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "user_id": "u_018"
+}
+```
+
+成功响应：
+```json
+{
+  "chat": {
+    "id": 12,
+    "other_user_id": "u_018",
+    "other_username": "Bob",
+    "other_user_icon": "/uploads/icon_u_018.png",
+    "other_user_online": true,
+    "other_user_device_type": "ios",
+    "other_user_last_seen_at": "2026-03-24T10:20:30+08:00",
+    "last_message": "你好",
+    "last_message_at": "2026-03-24T10:20:30+08:00",
+    "created_at": "2026-03-24T09:00:00+08:00",
+    "unread_count": 0
+  }
+}
+```
+
+### 获取会话列表
+
+**GET** `/api/chats?limit=20&offset=0`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "chats": [
+    {
+      "id": 12,
+      "other_user_id": "u_018",
+      "other_username": "Bob",
+      "other_user_icon": "/uploads/icon_u_018.png",
+      "other_user_online": false,
+      "other_user_device_type": "android",
+      "other_user_last_seen_at": "2026-03-24T09:55:00+08:00",
+      "last_message": "好的，收到",
+      "last_message_at": "2026-03-24T09:50:00+08:00",
+      "created_at": "2026-03-24T09:00:00+08:00",
+      "unread_count": 2
+    }
+  ],
+  "has_more": false,
+  "next_offset": 1
+}
+```
+
+字段说明：
+
+- `other_user_online`：对方当前是否在线
+- `other_user_device_type`：对方最近活跃设备类型
+- `other_user_last_seen_at`：对方最近在线时间，可能为空
+
+### 获取会话消息
+
+**GET** `/api/chats/:id/messages?limit=200&offset=0`
+
+权限要求：会话参与者
+
+成功响应：
+```json
+{
+  "messages": [
+    {
+      "id": 88,
+      "thread_id": 12,
+      "sender_id": "u_001",
+      "sender_username": "Alice",
+      "sender_icon": "/uploads/icon_u_001.png",
+      "content": "你好",
+      "created_at": "2026-03-24T10:20:30+08:00",
+      "deleted": false
+    }
+  ],
+  "has_more": false,
+  "next_offset": 1
+}
+```
+
+### 发送消息
+
+**POST** `/api/chats/:id/messages`
+
+权限要求：会话参与者
+
+请求体：
+```json
+{
+  "content": "你好"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "发送成功",
+  "id": 88
+}
+```
+
+### 撤回消息
+
+**DELETE** `/api/chats/:id/messages/:messageId`
+
+权限要求：消息发送者本人
+
+成功响应：
+```json
+{
+  "message": "撤回成功"
+}
+```
+
+### WebSocket
+
+**GET** `/ws/chat`
+
+认证方式：
+
+- 依赖登录后下发的 Cookie Session
+- 当前连接建立时会读取会话中的设备类型信息
+
+客户端收到的事件类型如下。
+
+#### 新消息事件 `message`
+
+```json
+{
+  "type": "message",
+  "chat_id": 12,
+  "message": {
+    "id": 88,
+    "thread_id": 12,
+    "sender_id": "u_001",
+    "sender_username": "Alice",
+    "content": "你好",
+    "created_at": "2026-03-24T10:20:30+08:00"
+  }
+}
+```
+
+#### 已读事件 `read`
+
+```json
+{
+  "type": "read",
+  "chat_id": 12,
+  "user_id": "u_018",
+  "read_at": "2026-03-24T10:21:00+08:00"
+}
+```
+
+#### 撤回事件 `revoke`
+
+```json
+{
+  "type": "revoke",
+  "chat_id": 12,
+  "message_id": 88,
+  "deleted_at": "2026-03-24T10:22:00+08:00"
+}
+```
+
+#### 在线状态事件 `presence`
+
+```json
+{
+  "type": "presence",
+  "user_id": "u_018",
+  "online": true,
+  "device_type": "ios",
+  "last_seen_at": "2026-03-24T10:23:00+08:00"
+}
+```
+
+字段说明：
+
+- `user_id`：发生在线状态变化的用户
+- `online`：聚合后的用户在线状态
+- `device_type`：最近活跃设备类型
+- `last_seen_at`：最近活跃时间
 
 ## 新建 Markdown 记录
 

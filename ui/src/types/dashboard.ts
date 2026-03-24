@@ -4,6 +4,7 @@ export type LoginRecord = {
   country?: string;
   ip_address?: string;
   login_method?: string;
+  device_type?: string;
   logged_in_at: string;
 };
 

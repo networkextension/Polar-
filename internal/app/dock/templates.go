@@ -238,6 +238,15 @@ const loginTemplate = `{{define "content"}}
 </div>
 
 <script>
+function buildClientHeaders(extra = {}) {
+    const pushToken = window.localStorage.getItem('push_token') || '';
+    return {
+        'X-Device-Type': 'browser',
+        ...(pushToken ? {'X-Push-Token': pushToken} : {}),
+        ...extra
+    };
+}
+
 const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
@@ -248,7 +257,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     try {
         const res = await fetch('/api/login', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: buildClientHeaders({'Content-Type': 'application/json'}),
             body: JSON.stringify(data)
         });
         const result = await res.json();
@@ -303,7 +312,7 @@ passkeyLoginBtn.addEventListener('click', async () => {
         const finishRes = await fetch('/api/passkey/login/finish', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                ...buildClientHeaders({'Content-Type': 'application/json'}),
                 'X-Passkey-Session': beginResult.session_id
             },
             body: JSON.stringify(payload)
@@ -405,6 +414,15 @@ const registerTemplate = `{{define "content"}}
 </div>
 
 <script>
+function buildClientHeaders(extra = {}) {
+    const pushToken = window.localStorage.getItem('push_token') || '';
+    return {
+        'X-Device-Type': 'browser',
+        ...(pushToken ? {'X-Push-Token': pushToken} : {}),
+        ...extra
+    };
+}
+
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -413,7 +431,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     try {
         const res = await fetch('/api/register', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: buildClientHeaders({'Content-Type': 'application/json'}),
             body: JSON.stringify(data)
         });
         const result = await res.json();

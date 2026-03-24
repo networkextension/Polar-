@@ -1,6 +1,7 @@
 import { fetchChats, fetchMessages, revokeMessage as revokeChatMessage, sendMessage, startChat } from "./api/chat.js";
 import { fetchCurrentUser } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
+import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
@@ -29,6 +30,28 @@ function formatTime(value?: string): string {
     return "";
   }
   return new Date(value).toLocaleString();
+}
+
+function formatPresence(chat: ChatSummary): string {
+  if (chat.other_user_online) {
+    return `在线 · ${formatDeviceType(chat.other_user_device_type)}`;
+  }
+  if (chat.other_user_last_seen_at) {
+    return `离线 · 上次在线 ${formatTime(chat.other_user_last_seen_at)}`;
+  }
+  return `离线 · 最近设备 ${formatDeviceType(chat.other_user_device_type)}`;
+}
+
+function updateActiveChatHeader(): void {
+  if (!activeThreadId) {
+    return;
+  }
+  const chat = chatCache.find((item) => item.id === activeThreadId);
+  if (!chat) {
+    return;
+  }
+  chatTitle.textContent = chat.other_username;
+  chatSubtitle.textContent = formatPresence(chat);
 }
 
 function getTargetFromQuery(): { userId: string | null; username: string | null } {
@@ -76,6 +99,9 @@ function renderChatList(chats: ChatSummary[]): void {
             <span>${chat.last_message || "暂无消息"}</span>
             <span>${chat.last_message_at ? formatTime(chat.last_message_at) : ""}</span>
           </div>
+          <div class="chat-item-meta">
+            <span>${formatPresence(chat)}</span>
+          </div>
         </div>
       </div>
     `;
@@ -101,6 +127,7 @@ async function loadChats(focusThreadId: string | null = null): Promise<void> {
     }
   }
   renderChatList(chatCache);
+  updateActiveChatHeader();
 }
 
 async function startChatWithUser(userId: string): Promise<ChatSummary | null> {
@@ -167,8 +194,7 @@ async function loadMessages(threadId: string): Promise<void> {
 
 async function openChat(chat: ChatSummary): Promise<void> {
   activeThreadId = chat.id;
-  chatTitle.textContent = chat.other_username;
-  chatSubtitle.textContent = `正在与 ${chat.other_username} 私聊`;
+  updateActiveChatHeader();
   messageInput.disabled = false;
   renderChatList(chatCache);
   await loadMessages(chat.id);
@@ -259,6 +285,11 @@ function connectWebSocket(): void {
     }
 
     if (payload.type === "read") {
+      await loadChats(activeThreadId);
+      return;
+    }
+
+    if (payload.type === "presence") {
       await loadChats(activeThreadId);
       return;
     }

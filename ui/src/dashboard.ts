@@ -15,6 +15,7 @@ import {
   uploadUserIcon,
 } from "./api/dashboard.js";
 import { fetchCurrentUser, logout } from "./api/session.js";
+import { formatDeviceType } from "./lib/client.js";
 import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
@@ -198,7 +199,7 @@ async function loadLoginHistory(): Promise<void> {
       const time = new Date(record.logged_in_at).toLocaleString();
       return `
         <li>
-          <div class="meta-title">${record.ip_address || "未知 IP"} · ${formatLoginMethod(record.login_method)}</div>
+          <div class="meta-title">${record.ip_address || "未知 IP"} · ${formatLoginMethod(record.login_method)} · ${formatDeviceType(record.device_type)}</div>
           <div class="meta-subtitle">${formatLocation(record)}</div>
           <div class="meta-time">${time}</div>
         </li>

@@ -1,5 +1,6 @@
 import { byId } from "./lib/dom.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
+import { buildClientHeaders } from "./lib/client.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 
 const API_BASE = "";
@@ -27,7 +28,7 @@ form.addEventListener("submit", async (event) => {
   try {
     const res = await fetch(`${API_BASE}/api/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: buildClientHeaders({ "Content-Type": "application/json" }),
       credentials: "include",
       body: JSON.stringify(payload),
     });
@@ -97,7 +98,7 @@ passkeyLoginBtn.addEventListener("click", async () => {
     const finishRes = await fetch(`${API_BASE}/api/passkey/login/finish`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        ...Object.fromEntries(buildClientHeaders({ "Content-Type": "application/json" })),
         "X-Passkey-Session": beginResult.session_id,
       },
       credentials: "include",

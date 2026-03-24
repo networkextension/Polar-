@@ -1,7 +1,11 @@
 export type ChatSummary = {
   id: string;
+  other_user_id: string;
   other_username: string;
   other_user_icon?: string;
+  other_user_online?: boolean;
+  other_user_device_type?: string;
+  other_user_last_seen_at?: string;
   unread_count?: number;
   last_message?: string;
   last_message_at?: string;
@@ -33,4 +37,8 @@ export type ChatMessagesResponse = {
 export type ChatEventPayload = {
   type?: string;
   chat_id?: string;
+  user_id?: string;
+  online?: boolean;
+  device_type?: string;
+  last_seen_at?: string;
 };

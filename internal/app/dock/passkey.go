@@ -279,13 +279,24 @@ func (s *Server) handlePasskeyLoginFinish(c *gin.Context) {
 		return
 	}
 
-	sessionIDValue, err := s.createSession(user)
+	deviceType, pushToken := s.parseLoginClientInfo(c.GetHeader("X-Device-Type"), c.GetHeader("X-Push-Token"))
+	now := time.Now()
+	if err := s.upsertUserDevice(user.ID, deviceType, pushToken, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if err := s.syncUserPresence(user.ID, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	sessionIDValue, err := s.createSession(user, deviceType, pushToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
 	c.SetCookie(SessionCookieName, sessionIDValue, int(SessionDuration.Seconds()), "/", "", false, true)
-	s.recordLoginEvent(c, user.ID, "passkey")
+	s.recordLoginEvent(c, user.ID, "passkey", deviceType)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "登录成功",

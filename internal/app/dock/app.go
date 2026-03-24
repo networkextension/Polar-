@@ -105,6 +105,7 @@ func NewServer(cfg Config) (*Server, error) {
 	server.webAuthn = webAuthn
 	server.passkeySessions = make(map[string]passkeySession)
 	server.wsHub = newWSHub()
+	server.wsHub.onPresenceChanged = server.handlePresenceChange
 	go server.wsHub.run()
 
 	server.router = gin.Default()

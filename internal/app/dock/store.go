@@ -25,22 +25,27 @@ var (
 )
 
 type User struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	Email     string    `json:"email"`
-	Password  string    `json:"-"` // password_hash
-	Role      string    `json:"role"`
-	Bio       string    `json:"bio"`
-	IconURL   string    `json:"icon_url"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         string     `json:"id"`
+	Username   string     `json:"username"`
+	Email      string     `json:"email"`
+	Password   string     `json:"-"` // password_hash
+	Role       string     `json:"role"`
+	Bio        string     `json:"bio"`
+	IconURL    string     `json:"icon_url"`
+	IsOnline   bool       `json:"is_online"`
+	DeviceType string     `json:"device_type"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 type Session struct {
-	ID        string
-	UserID    string
-	Username  string
-	Role      string
-	ExpiresAt time.Time
+	ID         string
+	UserID     string
+	Username   string
+	Role       string
+	DeviceType string
+	PushToken  string
+	ExpiresAt  time.Time
 }
 
 type MarkdownEntry struct {
@@ -69,6 +74,7 @@ type LoginRecord struct {
 	Region      string    `json:"region"`
 	City        string    `json:"city"`
 	LoginMethod string    `json:"login_method"`
+	DeviceType  string    `json:"device_type"`
 	LoggedInAt  time.Time `json:"logged_in_at"`
 }
 
@@ -139,14 +145,17 @@ type ChatThread struct {
 }
 
 type ChatSummary struct {
-	ID            int64      `json:"id"`
-	OtherUserID   string     `json:"other_user_id"`
-	OtherUsername string     `json:"other_username"`
-	OtherUserIcon string     `json:"other_user_icon"`
-	LastMessage   string     `json:"last_message"`
-	LastMessageAt *time.Time `json:"last_message_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UnreadCount   int        `json:"unread_count"`
+	ID                  int64      `json:"id"`
+	OtherUserID         string     `json:"other_user_id"`
+	OtherUsername       string     `json:"other_username"`
+	OtherUserIcon       string     `json:"other_user_icon"`
+	OtherUserOnline     bool       `json:"other_user_online"`
+	OtherUserDeviceType string     `json:"other_user_device_type"`
+	OtherUserLastSeenAt *time.Time `json:"other_user_last_seen_at,omitempty"`
+	LastMessage         string     `json:"last_message"`
+	LastMessageAt       *time.Time `json:"last_message_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UnreadCount         int        `json:"unread_count"`
 }
 
 type ChatMessage struct {
@@ -247,6 +256,9 @@ CREATE TABLE IF NOT EXISTS users (
 	role TEXT NOT NULL DEFAULT 'user',
 	bio TEXT NOT NULL DEFAULT '',
 	icon_url TEXT NOT NULL DEFAULT '',
+	is_online BOOLEAN NOT NULL DEFAULT FALSE,
+	last_active_device_type TEXT NOT NULL DEFAULT 'browser',
+	last_seen_at TIMESTAMPTZ,
 	created_at TIMESTAMPTZ NOT NULL
 );
 
@@ -256,6 +268,12 @@ ALTER TABLE users
 	ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '';
 ALTER TABLE users
 	ADD COLUMN IF NOT EXISTS icon_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS last_active_device_type TEXT NOT NULL DEFAULT 'browser';
+ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS profile_recommendations (
 	id BIGSERIAL PRIMARY KEY,
@@ -294,7 +312,24 @@ CREATE TABLE IF NOT EXISTS login_records (
 	region TEXT NOT NULL DEFAULT '',
 	city TEXT NOT NULL DEFAULT '',
 	login_method TEXT NOT NULL DEFAULT 'password',
+	device_type TEXT NOT NULL DEFAULT 'browser',
 	logged_in_at TIMESTAMPTZ NOT NULL
+);
+
+ALTER TABLE login_records
+	ADD COLUMN IF NOT EXISTS device_type TEXT NOT NULL DEFAULT 'browser';
+
+CREATE TABLE IF NOT EXISTS user_devices (
+	id BIGSERIAL PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	device_type TEXT NOT NULL DEFAULT 'browser',
+	push_token TEXT NOT NULL DEFAULT '',
+	is_online BOOLEAN NOT NULL DEFAULT FALSE,
+	last_login_at TIMESTAMPTZ NOT NULL,
+	last_seen_at TIMESTAMPTZ,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL,
+	UNIQUE (user_id, device_type)
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -450,6 +485,8 @@ CREATE TABLE IF NOT EXISTS chat_reads (
 CREATE INDEX IF NOT EXISTS idx_markdown_entries_user_id ON markdown_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id);
 CREATE INDEX IF NOT EXISTS idx_login_records_user_id_logged_in_at ON login_records(user_id, logged_in_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_devices_user_id ON user_devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_devices_push_token ON user_devices(push_token);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_recommendations_target_author ON profile_recommendations(target_user_id, author_user_id);
 CREATE INDEX IF NOT EXISTS idx_profile_recommendations_target_updated_at ON profile_recommendations(target_user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_sort_order_created_at ON tags(sort_order DESC, created_at DESC);
@@ -491,14 +528,15 @@ func (s *Server) createLoginRecord(record *LoginRecord) error {
 		return errors.New("login record is nil")
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO login_records (user_id, ip_address, country, region, city, login_method, logged_in_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO login_records (user_id, ip_address, country, region, city, login_method, device_type, logged_in_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		record.UserID,
 		record.IPAddress,
 		record.Country,
 		record.Region,
 		record.City,
 		record.LoginMethod,
+		record.DeviceType,
 		record.LoggedInAt,
 	)
 	return err
@@ -509,7 +547,7 @@ func (s *Server) listLoginRecords(userID string, limit int) ([]LoginRecord, erro
 		limit = 10
 	}
 	rows, err := s.db.Query(
-		`SELECT id, user_id, ip_address, country, region, city, login_method, logged_in_at
+		`SELECT id, user_id, ip_address, country, region, city, login_method, device_type, logged_in_at
 		 FROM login_records
 		 WHERE user_id = $1
 		 ORDER BY logged_in_at DESC
@@ -533,6 +571,7 @@ func (s *Server) listLoginRecords(userID string, limit int) ([]LoginRecord, erro
 			&record.Region,
 			&record.City,
 			&record.LoginMethod,
+			&record.DeviceType,
 			&record.LoggedInAt,
 		); err != nil {
 			return nil, err
@@ -557,30 +596,38 @@ func checkPassword(password, hash string) bool {
 
 func (s *Server) getUserByEmail(email string) (*User, error) {
 	var user User
+	var lastSeenAt sql.NullTime
 	err := s.db.QueryRow(
-		`SELECT id, username, email, password_hash, role, bio, icon_url, created_at FROM users WHERE email = $1`,
+		`SELECT id, username, email, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at FROM users WHERE email = $1`,
 		email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.IsOnline, &user.DeviceType, &lastSeenAt, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	if lastSeenAt.Valid {
+		user.LastSeenAt = &lastSeenAt.Time
+	}
 	return &user, nil
 }
 
 func (s *Server) getUserByID(userID string) (*User, error) {
 	var user User
+	var lastSeenAt sql.NullTime
 	err := s.db.QueryRow(
-		`SELECT id, username, email, password_hash, role, bio, icon_url, created_at FROM users WHERE id = $1`,
+		`SELECT id, username, email, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at FROM users WHERE id = $1`,
 		userID,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.CreatedAt)
+	).Scan(&user.ID, &user.Username, &user.Email, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.IsOnline, &user.DeviceType, &lastSeenAt, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
+	}
+	if lastSeenAt.Valid {
+		user.LastSeenAt = &lastSeenAt.Time
 	}
 	return &user, nil
 }
@@ -593,7 +640,8 @@ func (s *Server) createUser(user *User) error {
 		user.IconURL = ""
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO users (id, username, email, password_hash, role, bio, icon_url, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO users (id, username, email, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		user.ID,
 		user.Username,
 		user.Email,
@@ -601,6 +649,9 @@ func (s *Server) createUser(user *User) error {
 		user.Role,
 		user.Bio,
 		user.IconURL,
+		user.IsOnline,
+		normalizeDeviceType(user.DeviceType),
+		user.LastSeenAt,
 		user.CreatedAt,
 	)
 	if err != nil {
@@ -610,6 +661,42 @@ func (s *Server) createUser(user *User) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Server) upsertUserDevice(userID, deviceType, pushToken string, loginAt time.Time) error {
+	deviceType = normalizeDeviceType(deviceType)
+	pushToken = sanitizePushToken(pushToken)
+	_, err := s.db.Exec(
+		`INSERT INTO user_devices (user_id, device_type, push_token, is_online, last_login_at, last_seen_at, created_at, updated_at)
+		 VALUES ($1, $2, $3, FALSE, $4, $4, $4, $4)
+		 ON CONFLICT (user_id, device_type)
+		 DO UPDATE SET push_token = EXCLUDED.push_token,
+		               last_login_at = EXCLUDED.last_login_at,
+		               last_seen_at = EXCLUDED.last_seen_at,
+		               updated_at = EXCLUDED.updated_at`,
+		userID,
+		deviceType,
+		pushToken,
+		loginAt,
+	)
+	return err
+}
+
+func (s *Server) updateUserDevicePresence(userID, deviceType string, isOnline bool, seenAt time.Time) error {
+	deviceType = normalizeDeviceType(deviceType)
+	_, err := s.db.Exec(
+		`INSERT INTO user_devices (user_id, device_type, push_token, is_online, last_login_at, last_seen_at, created_at, updated_at)
+		 VALUES ($1, $2, '', $3, $4, $4, $4, $4)
+		 ON CONFLICT (user_id, device_type)
+		 DO UPDATE SET is_online = EXCLUDED.is_online,
+		               last_seen_at = EXCLUDED.last_seen_at,
+		               updated_at = EXCLUDED.updated_at`,
+		userID,
+		deviceType,
+		isOnline,
+		seenAt,
+	)
+	return err
 }
 
 func (s *Server) createMarkdownEntry(userID, title, filePath string, isPublic bool, uploadedAt time.Time) error {
@@ -2065,6 +2152,9 @@ func (s *Server) listChatThreads(userID string, limit, offset int) ([]ChatSummar
 		        CASE WHEN t.user_low = $1 THEN t.user_high ELSE t.user_low END AS other_id,
 		        u.username,
 		        u.icon_url,
+		        u.is_online,
+		        u.last_active_device_type,
+		        u.last_seen_at,
 		        t.last_message,
 		        t.last_message_at,
 		        t.created_at,
@@ -2095,12 +2185,16 @@ func (s *Server) listChatThreads(userID string, limit, offset int) ([]ChatSummar
 	threads := make([]ChatSummary, 0, limit+1)
 	for rows.Next() {
 		var summary ChatSummary
+		var otherUserLastSeenAt sql.NullTime
 		var lastMessageAt sql.NullTime
 		if err := rows.Scan(
 			&summary.ID,
 			&summary.OtherUserID,
 			&summary.OtherUsername,
 			&summary.OtherUserIcon,
+			&summary.OtherUserOnline,
+			&summary.OtherUserDeviceType,
+			&otherUserLastSeenAt,
 			&summary.LastMessage,
 			&lastMessageAt,
 			&summary.CreatedAt,
@@ -2110,6 +2204,9 @@ func (s *Server) listChatThreads(userID string, limit, offset int) ([]ChatSummar
 		}
 		if lastMessageAt.Valid {
 			summary.LastMessageAt = &lastMessageAt.Time
+		}
+		if otherUserLastSeenAt.Valid {
+			summary.OtherUserLastSeenAt = &otherUserLastSeenAt.Time
 		}
 		threads = append(threads, summary)
 	}
@@ -2128,11 +2225,15 @@ func (s *Server) listChatThreads(userID string, limit, offset int) ([]ChatSummar
 func (s *Server) getChatSummary(userID string, threadID int64) (*ChatSummary, error) {
 	var summary ChatSummary
 	var lastMessageAt sql.NullTime
+	var otherUserLastSeenAt sql.NullTime
 	err := s.db.QueryRow(
 		`SELECT t.id,
 		        CASE WHEN t.user_low = $1 THEN t.user_high ELSE t.user_low END AS other_id,
 		        u.username,
 		        u.icon_url,
+		        u.is_online,
+		        u.last_active_device_type,
+		        u.last_seen_at,
 		        t.last_message,
 		        t.last_message_at,
 		        t.created_at,
@@ -2156,6 +2257,9 @@ func (s *Server) getChatSummary(userID string, threadID int64) (*ChatSummary, er
 		&summary.OtherUserID,
 		&summary.OtherUsername,
 		&summary.OtherUserIcon,
+		&summary.OtherUserOnline,
+		&summary.OtherUserDeviceType,
+		&otherUserLastSeenAt,
 		&summary.LastMessage,
 		&lastMessageAt,
 		&summary.CreatedAt,
@@ -2169,6 +2273,9 @@ func (s *Server) getChatSummary(userID string, threadID int64) (*ChatSummary, er
 	}
 	if lastMessageAt.Valid {
 		summary.LastMessageAt = &lastMessageAt.Time
+	}
+	if otherUserLastSeenAt.Valid {
+		summary.OtherUserLastSeenAt = &otherUserLastSeenAt.Time
 	}
 	return &summary, nil
 }

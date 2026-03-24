@@ -37,12 +37,16 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
+	deviceType, pushToken := s.parseLoginClientInfo(c.GetHeader("X-Device-Type"), c.GetHeader("X-Push-Token"))
+	now := time.Now()
+
 	user := &User{
-		ID:        generateSessionID()[:16],
-		Username:  req.Username,
-		Email:     req.Email,
-		Password:  hashedPassword,
-		CreatedAt: time.Now(),
+		ID:         generateSessionID()[:16],
+		Username:   req.Username,
+		Email:      req.Email,
+		Password:   hashedPassword,
+		DeviceType: deviceType,
+		CreatedAt:  now,
 	}
 	if err := s.createUser(user); err != nil {
 		if err == errEmailExists {
@@ -53,13 +57,22 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	sessionID, err := s.createSession(user)
+	if err := s.upsertUserDevice(user.ID, deviceType, pushToken, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if err := s.syncUserPresence(user.ID, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	sessionID, err := s.createSession(user, deviceType, pushToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
 	c.SetCookie(SessionCookieName, sessionID, int(SessionDuration.Seconds()), "/", "", false, true)
-	s.recordLoginEvent(c, user.ID, "register")
+	s.recordLoginEvent(c, user.ID, "register", deviceType)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message":  "注册成功",
@@ -89,13 +102,24 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 
-	sessionID, err := s.createSession(user)
+	deviceType, pushToken := s.parseLoginClientInfo(c.GetHeader("X-Device-Type"), c.GetHeader("X-Push-Token"))
+	now := time.Now()
+	if err := s.upsertUserDevice(user.ID, deviceType, pushToken, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if err := s.syncUserPresence(user.ID, now); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	sessionID, err := s.createSession(user, deviceType, pushToken)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
 	c.SetCookie(SessionCookieName, sessionID, int(SessionDuration.Seconds()), "/", "", false, true)
-	s.recordLoginEvent(c, user.ID, "password")
+	s.recordLoginEvent(c, user.ID, "password", deviceType)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "登录成功",
@@ -128,20 +152,38 @@ func (s *Server) handleMe(c *gin.Context) {
 	username, _ := c.Get("username")
 	role, _ := c.Get("role")
 	userIDStr, _ := userID.(string)
-	iconURL := ""
+	var user *User
 	if userIDStr != "" {
-		if user, err := s.getUserByID(userIDStr); err == nil && user != nil {
-			iconURL = user.IconURL
-		}
+		user, _ = s.getUserByID(userIDStr)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"user_id":  userID,
 		"username": username,
 		"role":     role,
-		"icon_url": iconURL,
+		"icon_url": func() string {
+			if user != nil {
+				return user.IconURL
+			}
+			return ""
+		}(),
+		"is_online": func() bool {
+			return user != nil && user.IsOnline
+		}(),
+		"device_type": func() string {
+			if user != nil && user.DeviceType != "" {
+				return user.DeviceType
+			}
+			return deviceTypeBrowser
+		}(),
+		"last_seen_at": func() *time.Time {
+			if user != nil {
+				return user.LastSeenAt
+			}
+			return nil
+		}(),
 		"bio": func() string {
-			if user, err := s.getUserByID(userIDStr); err == nil && user != nil {
+			if user != nil {
 				return user.Bio
 			}
 			return ""

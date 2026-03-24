@@ -69,7 +69,7 @@ func preferredGeoName(names geoip2.Names) string {
 	}
 }
 
-func (s *Server) recordLoginEvent(c *gin.Context, userID, method string) {
+func (s *Server) recordLoginEvent(c *gin.Context, userID, method, deviceType string) {
 	if userID == "" {
 		return
 	}
@@ -83,6 +83,7 @@ func (s *Server) recordLoginEvent(c *gin.Context, userID, method string) {
 		Region:      location.Region,
 		City:        location.City,
 		LoginMethod: method,
+		DeviceType:  normalizeDeviceType(deviceType),
 		LoggedInAt:  time.Now(),
 	}); err != nil {
 		log.Printf("create login record failed: %v", err)
