@@ -3,6 +3,7 @@ import { fetchCurrentUser } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
+import { renderMarkdown } from "./lib/marked.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import type { ChatEventPayload, ChatMessage, ChatSummary } from "./types/chat.js";
@@ -22,6 +23,15 @@ let pollTimer: number | null = null;
 let ws: WebSocket | null = null;
 let wsConnected = false;
 
+function escapeHtml(input: string): string {
+  return input
+    .split("&").join("&amp;")
+    .split("<").join("&lt;")
+    .split(">").join("&gt;")
+    .split('"').join("&quot;")
+    .split("'").join("&#39;");
+}
+
 initStoredTheme();
 bindThemeSync();
 
@@ -40,6 +50,14 @@ function formatPresence(chat: ChatSummary): string {
     return `离线 · 上次在线 ${formatTime(chat.other_user_last_seen_at)}`;
   }
   return `离线 · 最近设备 ${formatDeviceType(chat.other_user_device_type)}`;
+}
+
+function truncatePreview(input?: string, maxLength = 20): string {
+  const text = (input || "").trim();
+  if (!text) {
+    return "暂无消息";
+  }
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
 function updateActiveChatHeader(): void {
@@ -96,7 +114,7 @@ function renderChatList(chats: ChatSummary[]): void {
         <div class="chat-item-body">
           <div class="chat-item-title">${chat.other_username}${unreadBadge}</div>
           <div class="chat-item-meta">
-            <span>${chat.last_message || "暂无消息"}</span>
+            <span>${truncatePreview(chat.last_message, 20)}</span>
             <span>${chat.last_message_at ? formatTime(chat.last_message_at) : ""}</span>
           </div>
           <div class="chat-item-meta">
@@ -148,8 +166,14 @@ function renderMessages(messages: ChatMessage[]): void {
   messageList.innerHTML = messages
     .map((msg) => {
       const isMine = msg.sender_id === currentUserId;
-      const content = msg.deleted ? "消息已撤回" : msg.content;
+      const isSystem = msg.sender_id === "system";
+      const content = msg.deleted
+        ? "消息已撤回"
+        : isSystem
+          ? renderMarkdown(msg.content || "")
+          : escapeHtml(msg.content || "");
       const bubbleClass = msg.deleted ? "message-bubble deleted" : "message-bubble";
+      const contentClass = isSystem && !msg.deleted ? "message-bubble-content markdown-body" : "message-bubble-content";
       const revokeButton =
         isMine && !msg.deleted
           ? `<button class="message-revoke" data-id="${msg.id}" type="button">撤回</button>`
@@ -162,7 +186,7 @@ function renderMessages(messages: ChatMessage[]): void {
             <div class="message-meta">${msg.sender_username} · ${formatTime(msg.created_at)}</div>
           </div>
           <div class="message-row">
-            <div class="${bubbleClass}">${content}</div>
+            <div class="${bubbleClass}"><div class="${contentClass}">${content}</div></div>
             ${revokeButton}
           </div>
         </div>
