@@ -35,9 +35,18 @@ type aiAgent struct {
 }
 
 type aiAgentTask struct {
-	ThreadID int64
-	UserID   string
-	Content  string
+	ThreadID        int64
+	UserID          string
+	ResponderUserID string
+	ResponderName   string
+	Content         string
+}
+
+type aiRuntimeConfig struct {
+	APIKey       string
+	BaseURL      string
+	Model        string
+	SystemPrompt string
 }
 
 type aiChatCompletionRequest struct {
@@ -85,7 +94,7 @@ func (a *aiAgent) stop() {
 }
 
 func (a *aiAgent) enqueue(task aiAgentTask) {
-	if a == nil || task.ThreadID <= 0 || task.UserID == "" || strings.TrimSpace(task.Content) == "" {
+	if a == nil || task.ThreadID <= 0 || task.UserID == "" || task.ResponderUserID == "" || strings.TrimSpace(task.Content) == "" {
 		return
 	}
 	select {
@@ -121,22 +130,29 @@ func (a *aiAgent) handleTask(task aiAgentTask) {
 	}
 	now := time.Now()
 	title := buildSystemMarkdownTitle(reply, now)
-	entry, _, err := a.server.saveMarkdownDocument(systemUserID, title, reply, false, now)
+	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, reply, false, now)
 	if err != nil {
 		log.Printf("save ai markdown failed: %v", err)
-		if _, sendErr := a.server.sendChatMessage(task.ThreadID, systemUserID, systemUsername, reply, now); sendErr != nil {
+		if _, sendErr := a.server.sendChatMessage(task.ThreadID, task.ResponderUserID, task.ResponderName, reply, now); sendErr != nil {
 			log.Printf("send fallback ai agent chat message failed: %v", sendErr)
 		}
 		return
 	}
-	if _, err := a.server.sendSharedMarkdownMessage(task.ThreadID, systemUserID, systemUsername, entry.ID, entry.Title, buildMarkdownPreview(reply, 120), now); err != nil {
+	if _, err := a.server.sendSharedMarkdownMessage(task.ThreadID, task.ResponderUserID, task.ResponderName, entry.ID, entry.Title, buildMarkdownPreview(reply, 120), now); err != nil {
 		log.Printf("send ai shared markdown message failed: %v", err)
 	}
 }
 
 func (a *aiAgent) generateReply(task aiAgentTask) (string, error) {
-	if strings.TrimSpace(a.apiKey) == "" || strings.TrimSpace(a.baseURL) == "" || strings.TrimSpace(a.model) == "" {
-		return "AI 助理尚未配置完成，请联系管理员设置 `AI_AGENT_API_KEY`、`AI_AGENT_BASE_URL` 和 `AI_AGENT_MODEL`。", nil
+	runtimeConfig, err := a.runtimeConfig(task.ResponderUserID)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(runtimeConfig.APIKey) == "" || strings.TrimSpace(runtimeConfig.BaseURL) == "" || strings.TrimSpace(runtimeConfig.Model) == "" {
+		if task.ResponderUserID == systemUserID {
+			return "AI 助理尚未配置完成，请联系管理员设置 `AI_AGENT_API_KEY`、`AI_AGENT_BASE_URL` 和 `AI_AGENT_MODEL`。", nil
+		}
+		return "这个 Bot 的模型配置还没准备好，请先补全 API Key、Base URL 和 Model。", nil
 	}
 
 	contextText, err := a.buildContext(task.ThreadID)
@@ -145,11 +161,11 @@ func (a *aiAgent) generateReply(task aiAgentTask) (string, error) {
 	}
 
 	payload := aiChatCompletionRequest{
-		Model: a.model,
+		Model: runtimeConfig.Model,
 		Messages: []aiChatCompletionMessage{
 			{
 				Role:    "system",
-				Content: a.systemPrompt,
+				Content: runtimeConfig.SystemPrompt,
 			},
 			{
 				Role:    "system",
@@ -162,45 +178,107 @@ func (a *aiAgent) generateReply(task aiAgentTask) (string, error) {
 		},
 	}
 
-	body, err := json.Marshal(payload)
+	result, err := a.requestChatCompletion(runtimeConfig, payload)
 	if err != nil {
 		return "", err
-	}
-	log.Printf("ai agent request: url=%s model=%s payload=%s", a.baseURL, a.model, compactLogJSON(body))
-
-	req, err := http.NewRequest(http.MethodPost, a.baseURL, bytes.NewReader(body))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+a.apiKey)
-
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	log.Printf("ai agent response: status=%d body=%s", resp.StatusCode, compactLogJSON(responseBody))
-
-	var result aiChatCompletionResponse
-	if err := json.Unmarshal(responseBody, &result); err != nil {
-		return "", err
-	}
-	if resp.StatusCode >= 400 {
-		if message := parseAIErrorMessage(result.Error); message != "" {
-			return "", errors.New(message)
-		}
-		return "", fmt.Errorf("ai api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
 	}
 	if len(result.Choices) == 0 {
 		return "", errors.New("empty ai response")
 	}
 	return strings.TrimSpace(result.Choices[0].Message.Content), nil
+}
+
+func (a *aiAgent) testRuntimeConfig(runtimeConfig aiRuntimeConfig) error {
+	if strings.TrimSpace(runtimeConfig.APIKey) == "" || strings.TrimSpace(runtimeConfig.BaseURL) == "" || strings.TrimSpace(runtimeConfig.Model) == "" {
+		return errors.New("API Key、Base URL 和 Model 不能为空")
+	}
+	if strings.TrimSpace(runtimeConfig.SystemPrompt) == "" {
+		runtimeConfig.SystemPrompt = "你是一个用于连通性验证的 AI 助手，请简短回复 ok。"
+	}
+
+	payload := aiChatCompletionRequest{
+		Model: runtimeConfig.Model,
+		Messages: []aiChatCompletionMessage{
+			{Role: "system", Content: runtimeConfig.SystemPrompt},
+			{Role: "user", Content: "请回复 ok"},
+		},
+	}
+	result, err := a.requestChatCompletion(runtimeConfig, payload)
+	if err != nil {
+		return err
+	}
+	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
+		return errors.New("模型已连通，但返回为空")
+	}
+	return nil
+}
+
+func (a *aiAgent) requestChatCompletion(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent request: url=%s model=%s payload=%s", runtimeConfig.BaseURL, runtimeConfig.Model, compactLogJSON(body))
+
+	req, err := http.NewRequest(http.MethodPost, runtimeConfig.BaseURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+runtimeConfig.APIKey)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent response: status=%d body=%s", resp.StatusCode, compactLogJSON(responseBody))
+
+	var result aiChatCompletionResponse
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		if message := parseAIErrorMessage(result.Error); message != "" {
+			return nil, errors.New(message)
+		}
+		return nil, fmt.Errorf("ai api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+	return &result, nil
+}
+
+func (a *aiAgent) runtimeConfig(responderUserID string) (aiRuntimeConfig, error) {
+	if responderUserID == systemUserID {
+		return aiRuntimeConfig{
+			APIKey:       strings.TrimSpace(a.apiKey),
+			BaseURL:      strings.TrimSpace(a.baseURL),
+			Model:        strings.TrimSpace(a.model),
+			SystemPrompt: strings.TrimSpace(a.systemPrompt),
+		}, nil
+	}
+
+	item, apiKey, err := a.server.getLLMConfigForBot(responderUserID)
+	if err != nil {
+		return aiRuntimeConfig{}, err
+	}
+	if item == nil {
+		return aiRuntimeConfig{}, fmt.Errorf("bot llm config not found for %s", responderUserID)
+	}
+	systemPrompt := strings.TrimSpace(item.SystemPrompt)
+	if systemPrompt == "" {
+		systemPrompt = "你是站内的 AI 助手，请基于上下文和当前问题，用清晰、可靠、结构化的中文回复。"
+	}
+	return aiRuntimeConfig{
+		APIKey:       strings.TrimSpace(apiKey),
+		BaseURL:      strings.TrimSpace(item.BaseURL),
+		Model:        strings.TrimSpace(item.Model),
+		SystemPrompt: systemPrompt,
+	}, nil
 }
 
 func compactLogJSON(body []byte) string {

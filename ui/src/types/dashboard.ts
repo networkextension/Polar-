@@ -71,6 +71,7 @@ export type SiteSettingsResponse = ErrorResponse & {
 
 export type ErrorResponse = {
   error?: string;
+  message?: string;
 };
 
 export type IconUploadResponse = ErrorResponse & {
@@ -90,4 +91,52 @@ export type PasskeyBeginResponse = ErrorResponse & {
       type: string;
     }>;
   };
+};
+
+export type LLMConfigPayload = {
+  name: string;
+  base_url: string;
+  model: string;
+  api_key?: string;
+  system_prompt: string;
+};
+
+export type LLMConfig = {
+  id: number;
+  owner_user_id: string;
+  name: string;
+  base_url: string;
+  model: string;
+  system_prompt: string;
+  has_api_key: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LLMConfigListResponse = ErrorResponse & {
+  configs?: LLMConfig[];
+  config?: LLMConfig;
+};
+
+export type BotPayload = {
+  name: string;
+  description: string;
+  llm_config_id: number;
+};
+
+export type BotUser = {
+  id: number;
+  owner_user_id: string;
+  bot_user_id: string;
+  name: string;
+  description: string;
+  llm_config_id: number;
+  config_name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BotListResponse = ErrorResponse & {
+  bots?: BotUser[];
+  bot?: BotUser;
 };

@@ -234,12 +234,30 @@ func (s *Server) handleChatSend(c *gin.Context) {
 	otherUserID, err := s.getChatCounterparty(threadID, userIDStr)
 	if err != nil {
 		log.Printf("load chat counterparty failed: %v", err)
-	} else if otherUserID == systemUserID && userIDStr != systemUserID && s.aiAgent != nil {
-		s.aiAgent.enqueue(aiAgentTask{
-			ThreadID: threadID,
-			UserID:   userIDStr,
-			Content:  content,
-		})
+	} else if userIDStr != otherUserID && s.aiAgent != nil {
+		responderName := ""
+		switch {
+		case otherUserID == systemUserID:
+			responderName = systemUsername
+		default:
+			botUser, botErr := s.getBotUserByUserID(otherUserID)
+			if botErr != nil {
+				log.Printf("load bot user failed: %v", botErr)
+				break
+			}
+			if botUser != nil {
+				responderName = botUser.Name
+			}
+		}
+		if responderName != "" {
+			s.aiAgent.enqueue(aiAgentTask{
+				ThreadID:        threadID,
+				UserID:          userIDStr,
+				ResponderUserID: otherUserID,
+				ResponderName:   responderName,
+				Content:         content,
+			})
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

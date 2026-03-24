@@ -1,9 +1,13 @@
 import { request, requestJson } from "./http.js";
 import type {
+  BotListResponse,
+  BotPayload,
   EntryDetailResponse,
   EntryListResponse,
   ErrorResponse,
   IconUploadResponse,
+  LLMConfigListResponse,
+  LLMConfigPayload,
   LoginHistoryResponse,
   PasskeyBeginResponse,
   SiteSettings,
@@ -50,6 +54,66 @@ export async function removeTag(id: number) {
 
 export async function fetchSiteSettings() {
   return requestJson<SiteSettingsResponse>("/api/site-settings");
+}
+
+export async function fetchLLMConfigs() {
+  return requestJson<LLMConfigListResponse>("/api/llm-configs");
+}
+
+export async function createLLMConfig(payload: LLMConfigPayload) {
+  return requestJson<LLMConfigListResponse>("/api/llm-configs", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function testLLMConfig(payload: LLMConfigPayload) {
+  return requestJson<ErrorResponse>("/api/llm-configs/test", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateLLMConfig(
+  id: number,
+  payload: LLMConfigPayload & {
+    update_api_key?: boolean;
+  }
+) {
+  return requestJson<LLMConfigListResponse>(`/api/llm-configs/${id}`, {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function removeLLMConfig(id: number) {
+  return requestJson<ErrorResponse>(`/api/llm-configs/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchBotUsers() {
+  return requestJson<BotListResponse>("/api/bots");
+}
+
+export async function createBotUser(payload: BotPayload) {
+  return requestJson<BotListResponse>("/api/bots", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateBotUser(id: number, payload: BotPayload) {
+  return requestJson<BotListResponse>(`/api/bots/${id}`, {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function removeBotUser(id: number) {
+  return requestJson<ErrorResponse>(`/api/bots/${id}`, {
+    method: "DELETE",
+  });
 }
 
 export async function updateSiteSettings(payload: SiteSettings) {

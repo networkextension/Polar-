@@ -317,6 +317,10 @@ button:hover {
   align-items: start;
 }
 
+.site-admin-grid-wide {
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+}
+
 .site-identity-card,
 .site-tags-section {
   border: 1px solid var(--border);
@@ -347,6 +351,19 @@ button:hover {
   display: flex;
   justify-content: flex-end;
   margin-top: 4px;
+}
+
+.site-settings-actions-split {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .site-tags-header {

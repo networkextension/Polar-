@@ -1,4 +1,4 @@
-import { beginPasskeyRegistration, createTag, deleteApplePushCertificate, deleteEntry, fetchEntries, fetchEntry, fetchLoginHistory, fetchSiteSettings, fetchTags, finishPasskeyRegistration, removeTag, updateSiteSettings, updateTag, uploadApplePushCertificate, uploadSiteIcon, uploadUserIcon, } from "./api/dashboard.js";
+import { createBotUser, createLLMConfig, beginPasskeyRegistration, createTag, deleteApplePushCertificate, deleteEntry, fetchBotUsers, fetchEntries, fetchEntry, fetchLLMConfigs, fetchLoginHistory, fetchSiteSettings, fetchTags, finishPasskeyRegistration, removeBotUser, removeLLMConfig, removeTag, testLLMConfig, updateBotUser, updateLLMConfig, updateSiteSettings, updateTag, uploadApplePushCertificate, uploadSiteIcon, uploadUserIcon, } from "./api/dashboard.js";
 import { fetchCurrentUser, logout } from "./api/session.js";
 import { formatDeviceType } from "./lib/client.js";
 import { makeDefaultAvatar } from "./lib/avatar.js";
@@ -48,6 +48,25 @@ const openSiteAdminBtn = byId("openSiteAdminBtn");
 const siteAdminModal = byId("siteAdminModal");
 const siteAdminModalCloseBtn = byId("siteAdminModalCloseBtn");
 const siteAdminPanel = byId("siteAdminPanel");
+const llmConfigForm = byId("llmConfigForm");
+const llmConfigNameInput = byId("llmConfigNameInput");
+const llmConfigBaseUrlInput = byId("llmConfigBaseUrlInput");
+const llmConfigModelInput = byId("llmConfigModelInput");
+const llmConfigApiKeyInput = byId("llmConfigApiKeyInput");
+const llmConfigSystemPromptInput = byId("llmConfigSystemPromptInput");
+const llmConfigResetBtn = byId("llmConfigResetBtn");
+const llmConfigTestBtn = byId("llmConfigTestBtn");
+const llmConfigSubmitBtn = byId("llmConfigSubmitBtn");
+const llmConfigStatus = byId("llmConfigStatus");
+const llmConfigList = byId("llmConfigList");
+const botUserForm = byId("botUserForm");
+const botUserNameInput = byId("botUserNameInput");
+const botUserConfigSelect = byId("botUserConfigSelect");
+const botUserDescriptionInput = byId("botUserDescriptionInput");
+const botUserResetBtn = byId("botUserResetBtn");
+const botUserSubmitBtn = byId("botUserSubmitBtn");
+const botUserStatus = byId("botUserStatus");
+const botUserList = byId("botUserList");
 const siteNameInput = byId("siteNameInput");
 const siteDescriptionInput = byId("siteDescriptionInput");
 const saveSiteBtn = byId("saveSiteBtn");
@@ -77,6 +96,10 @@ let dragStartY = 0;
 let isAdmin = false;
 let editingTagId = null;
 let currentTags = [];
+let editingLLMConfigId = null;
+let editingBotUserId = null;
+let currentLLMConfigs = [];
+let currentBotUsers = [];
 function setModalOpen(modal, open) {
     modal.classList.toggle("open", open);
     modal.setAttribute("aria-hidden", open ? "false" : "true");
@@ -159,6 +182,86 @@ function renderTagList(tags) {
       `)
         .join("");
 }
+function resetLLMConfigForm() {
+    editingLLMConfigId = null;
+    llmConfigForm.reset();
+    llmConfigApiKeyInput.value = "";
+    llmConfigStatus.textContent = "";
+    llmConfigSubmitBtn.textContent = "保存配置";
+}
+function resetBotUserForm() {
+    editingBotUserId = null;
+    botUserForm.reset();
+    botUserStatus.textContent = "";
+    botUserSubmitBtn.textContent = "保存 Bot";
+}
+function renderLLMConfigList(configs) {
+    if (!configs.length) {
+        llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">还没有 LLM Config，先创建一个吧。</li>`;
+        return;
+    }
+    llmConfigList.innerHTML = configs
+        .map((config) => `
+        <li class="tag-item" data-llm-config-id="${config.id}">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${config.name}</strong>
+              <span class="tag-chip">${config.model}</span>
+              ${config.has_api_key ? `<span class="tag-chip">Key 已保存</span>` : `<span class="tag-chip">无 Key</span>`}
+            </div>
+            <div class="tag-item-meta">${config.base_url}</div>
+            <div class="tag-item-desc">${config.system_prompt || "未设置 System Prompt"}</div>
+          </div>
+          <div class="tag-item-actions">
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
+            <button class="btn-inline" type="button" data-action="delete">删除</button>
+          </div>
+        </li>
+      `)
+        .join("");
+}
+function syncBotConfigOptions(configs) {
+    if (!configs.length) {
+        botUserConfigSelect.innerHTML = `<option value="">请先创建 LLM Config</option>`;
+        botUserConfigSelect.disabled = true;
+        botUserSubmitBtn.disabled = true;
+        return;
+    }
+    const currentValue = editingBotUserId ? botUserConfigSelect.value : "";
+    botUserConfigSelect.innerHTML = configs
+        .map((config) => `<option value="${config.id}">${config.name} · ${config.model}</option>`)
+        .join("");
+    if (currentValue && configs.some((config) => String(config.id) === currentValue)) {
+        botUserConfigSelect.value = currentValue;
+    }
+    botUserConfigSelect.disabled = false;
+    botUserSubmitBtn.disabled = false;
+}
+function renderBotUserList(bots) {
+    if (!bots.length) {
+        botUserList.innerHTML = `<li class="tag-item tag-item-empty">还没有 Bot，创建后就能直接私聊使用。</li>`;
+        return;
+    }
+    botUserList.innerHTML = bots
+        .map((bot) => `
+        <li class="tag-item" data-bot-user-id="${bot.id}">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${bot.name}</strong>
+              <span class="tag-chip">${bot.config_name}</span>
+            </div>
+            <div class="tag-item-meta">用户 ID：${bot.bot_user_id}</div>
+            <div class="tag-item-desc">${bot.description || "暂无简介"}</div>
+          </div>
+          <div class="tag-item-actions">
+            <button class="btn-inline btn-secondary" type="button" data-action="chat">对话</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
+            <button class="btn-inline" type="button" data-action="delete">删除</button>
+          </div>
+        </li>
+      `)
+        .join("");
+}
 async function loadLoginHistory() {
     const { response, data } = await fetchLoginHistory();
     if (!response.ok) {
@@ -196,7 +299,6 @@ async function loadProfile() {
     addTagBtn.disabled = !isAdmin;
     addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
     addTagBtn.hidden = !isAdmin;
-    openSiteAdminBtn.hidden = !isAdmin;
     siteAdminPanel.hidden = !isAdmin;
     if (data.icon_url) {
         userIcon.src = data.icon_url;
@@ -206,23 +308,50 @@ async function loadProfile() {
     }
 }
 async function loadSiteAdminData() {
-    if (!isAdmin) {
-        return;
+    const tasks = [
+        (async () => {
+            const { response, data } = await fetchLLMConfigs();
+            if (response.ok) {
+                currentLLMConfigs = data.configs || [];
+                renderLLMConfigList(currentLLMConfigs);
+                syncBotConfigOptions(currentLLMConfigs);
+            }
+            else {
+                llmConfigStatus.textContent = data.error || "无法加载 LLM Config";
+                llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 LLM Config</li>`;
+            }
+        })(),
+        (async () => {
+            const { response, data } = await fetchBotUsers();
+            if (response.ok) {
+                currentBotUsers = data.bots || [];
+                renderBotUserList(currentBotUsers);
+            }
+            else {
+                botUserStatus.textContent = data.error || "无法加载 Bot 列表";
+                botUserList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 Bot 列表</li>`;
+            }
+        })(),
+    ];
+    if (isAdmin) {
+        tasks.push((async () => {
+            const [siteResult, tagResult] = await Promise.all([fetchSiteSettings(), fetchTags()]);
+            if (siteResult.response.ok) {
+                renderSiteSettings(siteResult.data.site);
+            }
+            else {
+                siteStatus.textContent = siteResult.data.error || "无法加载站点信息";
+            }
+            if (tagResult.response.ok) {
+                currentTags = tagResult.data.tags || [];
+                renderTagList(currentTags);
+            }
+            else {
+                tagList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 Tag 列表</li>`;
+            }
+        })());
     }
-    const [siteResult, tagResult] = await Promise.all([fetchSiteSettings(), fetchTags()]);
-    if (siteResult.response.ok) {
-        renderSiteSettings(siteResult.data.site);
-    }
-    else {
-        siteStatus.textContent = siteResult.data.error || "无法加载站点信息";
-    }
-    if (tagResult.response.ok) {
-        currentTags = tagResult.data.tags || [];
-        renderTagList(currentTags);
-    }
-    else {
-        tagList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 Tag 列表</li>`;
-    }
+    await Promise.all(tasks);
 }
 function openTagModal(tag) {
     editingTagId = tag?.id || null;
@@ -242,11 +371,8 @@ function closeTagModal() {
     setModalOpen(tagModal, false);
 }
 function openSiteAdminModal() {
-    if (!isAdmin) {
-        return;
-    }
     setModalOpen(siteAdminModal, true);
-    siteNameInput.focus();
+    llmConfigNameInput.focus();
 }
 function closeSiteAdminModal() {
     setModalOpen(siteAdminModal, false);
@@ -410,6 +536,188 @@ tagList.addEventListener("click", async (event) => {
             return;
         }
         siteStatus.textContent = `已删除 Tag：${tag.name}`;
+        await loadSiteAdminData();
+    }
+});
+llmConfigResetBtn.addEventListener("click", () => {
+    resetLLMConfigForm();
+});
+llmConfigTestBtn.addEventListener("click", async () => {
+    const payload = {
+        name: llmConfigNameInput.value.trim(),
+        base_url: llmConfigBaseUrlInput.value.trim(),
+        model: llmConfigModelInput.value.trim(),
+        api_key: llmConfigApiKeyInput.value.trim(),
+        system_prompt: llmConfigSystemPromptInput.value.trim(),
+    };
+    if (!payload.base_url || !payload.model || !payload.api_key) {
+        llmConfigStatus.textContent = "测试前请先填写 Base URL、Model 和 API Key";
+        return;
+    }
+    llmConfigTestBtn.disabled = true;
+    llmConfigSubmitBtn.disabled = true;
+    llmConfigStatus.textContent = "正在测试模型配置...";
+    try {
+        const { response, data } = await testLLMConfig(payload);
+        llmConfigStatus.textContent = response.ok ? data.message || "连接成功，模型配置可用" : data.error || "测试失败";
+    }
+    catch {
+        llmConfigStatus.textContent = "网络错误，请重试";
+    }
+    finally {
+        llmConfigTestBtn.disabled = false;
+        llmConfigSubmitBtn.disabled = false;
+    }
+});
+botUserResetBtn.addEventListener("click", () => {
+    resetBotUserForm();
+});
+llmConfigForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+        name: llmConfigNameInput.value.trim(),
+        base_url: llmConfigBaseUrlInput.value.trim(),
+        model: llmConfigModelInput.value.trim(),
+        api_key: llmConfigApiKeyInput.value.trim(),
+        system_prompt: llmConfigSystemPromptInput.value.trim(),
+    };
+    if (!payload.name || !payload.base_url || !payload.model) {
+        llmConfigStatus.textContent = "请先填写名称、Base URL 和 Model";
+        return;
+    }
+    llmConfigSubmitBtn.disabled = true;
+    llmConfigStatus.textContent = editingLLMConfigId ? "正在保存配置..." : "正在创建配置...";
+    try {
+        const { response, data } = editingLLMConfigId
+            ? await updateLLMConfig(editingLLMConfigId, {
+                ...payload,
+                update_api_key: payload.api_key !== "",
+            })
+            : await createLLMConfig(payload);
+        if (!response.ok) {
+            llmConfigStatus.textContent = data.error || "保存失败";
+            return;
+        }
+        llmConfigStatus.textContent = editingLLMConfigId ? "配置已更新" : "配置已创建";
+        resetLLMConfigForm();
+        await loadSiteAdminData();
+    }
+    catch {
+        llmConfigStatus.textContent = "网络错误，请重试";
+    }
+    finally {
+        llmConfigSubmitBtn.disabled = false;
+    }
+});
+llmConfigList.addEventListener("click", async (event) => {
+    const target = event.target;
+    const button = target.closest("button[data-action]");
+    if (!button) {
+        return;
+    }
+    const item = button.closest("[data-llm-config-id]");
+    const configID = Number(item?.dataset.llmConfigId || 0);
+    const config = currentLLMConfigs.find((entry) => entry.id === configID);
+    if (!config) {
+        return;
+    }
+    const action = button.dataset.action;
+    if (action === "edit") {
+        editingLLMConfigId = config.id;
+        llmConfigNameInput.value = config.name;
+        llmConfigBaseUrlInput.value = config.base_url;
+        llmConfigModelInput.value = config.model;
+        llmConfigApiKeyInput.value = "";
+        llmConfigSystemPromptInput.value = config.system_prompt || "";
+        llmConfigSubmitBtn.textContent = "更新配置";
+        llmConfigStatus.textContent = config.has_api_key ? "已保存 API Key，留空表示保持原值" : "";
+        llmConfigNameInput.focus();
+        return;
+    }
+    if (action === "delete") {
+        if (!window.confirm(`确定删除配置“${config.name}”吗？已绑定的 Bot 需要先改绑或删除。`)) {
+            return;
+        }
+        const { response, data } = await removeLLMConfig(config.id);
+        if (!response.ok) {
+            llmConfigStatus.textContent = data.error || "删除失败";
+            return;
+        }
+        llmConfigStatus.textContent = `已删除配置：${config.name}`;
+        resetLLMConfigForm();
+        await loadSiteAdminData();
+    }
+});
+botUserForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {
+        name: botUserNameInput.value.trim(),
+        description: botUserDescriptionInput.value.trim(),
+        llm_config_id: Number(botUserConfigSelect.value || 0),
+    };
+    if (!payload.name || payload.llm_config_id <= 0) {
+        botUserStatus.textContent = "请先填写 Bot 名称并选择一个配置";
+        return;
+    }
+    botUserSubmitBtn.disabled = true;
+    botUserStatus.textContent = editingBotUserId ? "正在保存 Bot..." : "正在创建 Bot...";
+    try {
+        const { response, data } = editingBotUserId
+            ? await updateBotUser(editingBotUserId, payload)
+            : await createBotUser(payload);
+        if (!response.ok) {
+            botUserStatus.textContent = data.error || "保存失败";
+            return;
+        }
+        botUserStatus.textContent = editingBotUserId ? "Bot 已更新" : "Bot 已创建";
+        resetBotUserForm();
+        await loadSiteAdminData();
+    }
+    catch {
+        botUserStatus.textContent = "网络错误，请重试";
+    }
+    finally {
+        botUserSubmitBtn.disabled = false;
+    }
+});
+botUserList.addEventListener("click", async (event) => {
+    const target = event.target;
+    const button = target.closest("button[data-action]");
+    if (!button) {
+        return;
+    }
+    const item = button.closest("[data-bot-user-id]");
+    const botID = Number(item?.dataset.botUserId || 0);
+    const bot = currentBotUsers.find((entry) => entry.id === botID);
+    if (!bot) {
+        return;
+    }
+    const action = button.dataset.action;
+    if (action === "chat") {
+        window.location.href = `/chat.html?user_id=${encodeURIComponent(bot.bot_user_id)}&username=${encodeURIComponent(bot.name)}`;
+        return;
+    }
+    if (action === "edit") {
+        editingBotUserId = bot.id;
+        botUserNameInput.value = bot.name;
+        botUserDescriptionInput.value = bot.description || "";
+        botUserConfigSelect.value = String(bot.llm_config_id);
+        botUserSubmitBtn.textContent = "更新 Bot";
+        botUserStatus.textContent = "";
+        botUserNameInput.focus();
+        return;
+    }
+    if (action === "delete") {
+        if (!window.confirm(`确定删除 Bot “${bot.name}”吗？这会同时移除这个 Bot 用户。`)) {
+            return;
+        }
+        const { response, data } = await removeBotUser(bot.id);
+        if (!response.ok) {
+            botUserStatus.textContent = data.error || "删除失败";
+            return;
+        }
+        botUserStatus.textContent = `已删除 Bot：${bot.name}`;
+        resetBotUserForm();
         await loadSiteAdminData();
     }
 });

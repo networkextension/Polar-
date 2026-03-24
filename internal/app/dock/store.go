@@ -97,6 +97,30 @@ type SiteSettings struct {
 	UpdatedAt         time.Time             `json:"updated_at"`
 }
 
+type LLMConfig struct {
+	ID           int64     `json:"id"`
+	OwnerUserID  string    `json:"owner_user_id"`
+	Name         string    `json:"name"`
+	BaseURL      string    `json:"base_url"`
+	Model        string    `json:"model"`
+	SystemPrompt string    `json:"system_prompt"`
+	HasAPIKey    bool      `json:"has_api_key"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type BotUser struct {
+	ID          int64     `json:"id"`
+	OwnerUserID string    `json:"owner_user_id"`
+	BotUserID   string    `json:"bot_user_id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	LLMConfigID int64     `json:"llm_config_id"`
+	ConfigName  string    `json:"config_name"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type ApplePushCertificate struct {
 	Environment string     `json:"environment"`
 	FileName    string     `json:"file_name"`
@@ -390,6 +414,29 @@ INSERT INTO site_settings (
 VALUES (1, 'Polar-', '', '', '', '', NULL, '', '', NULL, NOW())
 ON CONFLICT (id) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS llm_configs (
+	id BIGSERIAL PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	base_url TEXT NOT NULL,
+	model TEXT NOT NULL,
+	api_key TEXT NOT NULL DEFAULT '',
+	system_prompt TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bot_users (
+	id BIGSERIAL PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	bot_user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	llm_config_id BIGINT NOT NULL REFERENCES llm_configs(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS posts (
 	id BIGSERIAL PRIMARY KEY,
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -535,6 +582,8 @@ CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credenti
 CREATE INDEX IF NOT EXISTS idx_login_records_user_id_logged_in_at ON login_records(user_id, logged_in_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_devices_user_id ON user_devices(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_devices_push_token ON user_devices(push_token);
+CREATE INDEX IF NOT EXISTS idx_llm_configs_owner_user_id ON llm_configs(owner_user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bot_users_owner_user_id ON bot_users(owner_user_id, updated_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_recommendations_target_author ON profile_recommendations(target_user_id, author_user_id);
 CREATE INDEX IF NOT EXISTS idx_profile_recommendations_target_updated_at ON profile_recommendations(target_user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_sort_order_created_at ON tags(sort_order DESC, created_at DESC);
@@ -697,6 +746,311 @@ func (s *Server) getUserByUsername(username string) (*User, error) {
 		user.LastSeenAt = &lastSeenAt.Time
 	}
 	return &user, nil
+}
+
+func (s *Server) listLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
+	rows, err := s.db.Query(
+		`SELECT id, owner_user_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		   FROM llm_configs
+		  WHERE owner_user_id = $1
+		  ORDER BY updated_at DESC, id DESC`,
+		ownerUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]LLMConfig, 0)
+	for rows.Next() {
+		var item LLMConfig
+		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Server) getLLMConfigForOwner(ownerUserID string, id int64) (*LLMConfig, string, error) {
+	var item LLMConfig
+	var apiKey string
+	err := s.db.QueryRow(
+		`SELECT id, owner_user_id, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		   FROM llm_configs
+		  WHERE id = $1 AND owner_user_id = $2`,
+		id,
+		ownerUserID,
+	).Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	return &item, apiKey, nil
+}
+
+func (s *Server) getLLMConfigForBot(botUserID string) (*LLMConfig, string, error) {
+	var item LLMConfig
+	var apiKey string
+	err := s.db.QueryRow(
+		`SELECT c.id, c.owner_user_id, c.name, c.base_url, c.model, c.api_key, c.system_prompt, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
+		   FROM bot_users b
+		   JOIN llm_configs c ON c.id = b.llm_config_id
+		  WHERE b.bot_user_id = $1`,
+		botUserID,
+	).Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	return &item, apiKey, nil
+}
+
+func (s *Server) createLLMConfig(ownerUserID, name, baseURL, model, apiKey, systemPrompt string, now time.Time) (*LLMConfig, error) {
+	var item LLMConfig
+	err := s.db.QueryRow(
+		`INSERT INTO llm_configs (owner_user_id, name, base_url, model, api_key, system_prompt, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+		 RETURNING id, owner_user_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`,
+		ownerUserID, name, baseURL, model, apiKey, systemPrompt, now,
+	).Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Server) updateLLMConfig(ownerUserID string, id int64, name, baseURL, model, apiKey, systemPrompt string, replaceAPIKey bool, now time.Time) (*LLMConfig, error) {
+	query := `UPDATE llm_configs
+	             SET name = $3,
+	                 base_url = $4,
+	                 model = $5,
+	                 system_prompt = $6,
+	                 updated_at = $7`
+	args := []any{id, ownerUserID, name, baseURL, model, systemPrompt, now}
+	if replaceAPIKey {
+		query += `, api_key = $8`
+		args = append(args, apiKey)
+	}
+	query += ` WHERE id = $1 AND owner_user_id = $2
+	           RETURNING id, owner_user_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`
+	var item LLMConfig
+	err := s.db.QueryRow(query, args...).Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Server) deleteLLMConfig(ownerUserID string, id int64) (bool, error) {
+	result, err := s.db.Exec(`DELETE FROM llm_configs WHERE id = $1 AND owner_user_id = $2`, id, ownerUserID)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func (s *Server) listBotUsers(ownerUserID string) ([]BotUser, error) {
+	rows, err := s.db.Query(
+		`SELECT b.id, b.owner_user_id, b.bot_user_id, b.name, b.description, b.llm_config_id, c.name, b.created_at, b.updated_at
+		   FROM bot_users b
+		   JOIN llm_configs c ON c.id = b.llm_config_id
+		  WHERE b.owner_user_id = $1
+		  ORDER BY b.updated_at DESC, b.id DESC`,
+		ownerUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]BotUser, 0)
+	for rows.Next() {
+		var item BotUser
+		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.BotUserID, &item.Name, &item.Description, &item.LLMConfigID, &item.ConfigName, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Server) getBotUserForOwner(ownerUserID string, id int64) (*BotUser, error) {
+	var item BotUser
+	err := s.db.QueryRow(
+		`SELECT b.id, b.owner_user_id, b.bot_user_id, b.name, b.description, b.llm_config_id, c.name, b.created_at, b.updated_at
+		   FROM bot_users b
+		   JOIN llm_configs c ON c.id = b.llm_config_id
+		  WHERE b.id = $1 AND b.owner_user_id = $2`,
+		id, ownerUserID,
+	).Scan(&item.ID, &item.OwnerUserID, &item.BotUserID, &item.Name, &item.Description, &item.LLMConfigID, &item.ConfigName, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Server) createBotUser(ownerUserID, name, description string, llmConfigID int64, now time.Time) (*BotUser, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var configName string
+	err = tx.QueryRow(`SELECT name FROM llm_configs WHERE id = $1 AND owner_user_id = $2`, llmConfigID, ownerUserID).Scan(&configName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	botUserID := "bot_" + generateSessionID()[:16]
+	botEmail := botUserID + "@local.polar"
+	password, err := hashPassword(generateSessionID())
+	if err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(
+		`INSERT INTO users (id, username, email, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at)
+		 VALUES ($1, $2, $3, $4, 'bot', $5, '', FALSE, 'browser', NULL, $6)`,
+		botUserID, name, botEmail, password, description, now,
+	); err != nil {
+		return nil, err
+	}
+
+	var item BotUser
+	err = tx.QueryRow(
+		`INSERT INTO bot_users (owner_user_id, bot_user_id, name, description, llm_config_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $6)
+		 RETURNING id, owner_user_id, bot_user_id, name, description, llm_config_id, created_at, updated_at`,
+		ownerUserID, botUserID, name, description, llmConfigID, now,
+	).Scan(&item.ID, &item.OwnerUserID, &item.BotUserID, &item.Name, &item.Description, &item.LLMConfigID, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	item.ConfigName = configName
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Server) updateBotUser(ownerUserID string, id int64, name, description string, llmConfigID int64, now time.Time) (*BotUser, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var botUserID string
+	err = tx.QueryRow(`SELECT bot_user_id FROM bot_users WHERE id = $1 AND owner_user_id = $2`, id, ownerUserID).Scan(&botUserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var configName string
+	err = tx.QueryRow(`SELECT name FROM llm_configs WHERE id = $1 AND owner_user_id = $2`, llmConfigID, ownerUserID).Scan(&configName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if _, err = tx.Exec(`UPDATE users SET username = $1, bio = $2 WHERE id = $3`, name, description, botUserID); err != nil {
+		return nil, err
+	}
+	var item BotUser
+	err = tx.QueryRow(
+		`UPDATE bot_users
+		    SET name = $3, description = $4, llm_config_id = $5, updated_at = $6
+		  WHERE id = $1 AND owner_user_id = $2
+		  RETURNING id, owner_user_id, bot_user_id, name, description, llm_config_id, created_at, updated_at`,
+		id, ownerUserID, name, description, llmConfigID, now,
+	).Scan(&item.ID, &item.OwnerUserID, &item.BotUserID, &item.Name, &item.Description, &item.LLMConfigID, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	item.ConfigName = configName
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Server) deleteBotUser(ownerUserID string, id int64) (bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	var botUserID string
+	err = tx.QueryRow(`SELECT bot_user_id FROM bot_users WHERE id = $1 AND owner_user_id = $2`, id, ownerUserID).Scan(&botUserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	if _, err = tx.Exec(`DELETE FROM bot_users WHERE id = $1 AND owner_user_id = $2`, id, ownerUserID); err != nil {
+		return false, err
+	}
+	if _, err = tx.Exec(`DELETE FROM users WHERE id = $1`, botUserID); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Server) getBotUserByUserID(botUserID string) (*BotUser, error) {
+	var item BotUser
+	err := s.db.QueryRow(
+		`SELECT b.id, b.owner_user_id, b.bot_user_id, b.name, b.description, b.llm_config_id, c.name, b.created_at, b.updated_at
+		   FROM bot_users b
+		   JOIN llm_configs c ON c.id = b.llm_config_id
+		  WHERE b.bot_user_id = $1`,
+		botUserID,
+	).Scan(&item.ID, &item.OwnerUserID, &item.BotUserID, &item.Name, &item.Description, &item.LLMConfigID, &item.ConfigName, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &item, nil
 }
 
 func (s *Server) createUser(user *User) error {

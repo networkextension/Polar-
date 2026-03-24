@@ -31,6 +31,52 @@ export async function removeTag(id) {
 export async function fetchSiteSettings() {
     return requestJson("/api/site-settings");
 }
+export async function fetchLLMConfigs() {
+    return requestJson("/api/llm-configs");
+}
+export async function createLLMConfig(payload) {
+    return requestJson("/api/llm-configs", {
+        method: "POST",
+        body: payload,
+    });
+}
+export async function testLLMConfig(payload) {
+    return requestJson("/api/llm-configs/test", {
+        method: "POST",
+        body: payload,
+    });
+}
+export async function updateLLMConfig(id, payload) {
+    return requestJson(`/api/llm-configs/${id}`, {
+        method: "PUT",
+        body: payload,
+    });
+}
+export async function removeLLMConfig(id) {
+    return requestJson(`/api/llm-configs/${id}`, {
+        method: "DELETE",
+    });
+}
+export async function fetchBotUsers() {
+    return requestJson("/api/bots");
+}
+export async function createBotUser(payload) {
+    return requestJson("/api/bots", {
+        method: "POST",
+        body: payload,
+    });
+}
+export async function updateBotUser(id, payload) {
+    return requestJson(`/api/bots/${id}`, {
+        method: "PUT",
+        body: payload,
+    });
+}
+export async function removeBotUser(id) {
+    return requestJson(`/api/bots/${id}`, {
+        method: "DELETE",
+    });
+}
 export async function updateSiteSettings(payload) {
     return requestJson("/api/site-settings", {
         method: "PUT",

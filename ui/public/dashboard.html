@@ -55,8 +55,8 @@
             </div>
             <div class="drawer-section">
               <div class="badge">站点管理</div>
-              <p class="drawer-help">集中维护站点名称、图标与内容 Tag。</p>
-              <button id="openSiteAdminBtn" class="btn-secondary drawer-action-btn" type="button" hidden>站点信息管理</button>
+              <p class="drawer-help">集中维护 AI Bot、模型配置，以及管理员可见的站点设置。</p>
+              <button id="openSiteAdminBtn" class="btn-secondary drawer-action-btn" type="button">站点信息 / AI Bot</button>
             </div>
           </div>
           <div class="drawer-footer">
@@ -147,11 +147,77 @@
         <div class="modal-header">
           <div>
             <div class="badge">站点管理</div>
-            <h3 id="siteAdminModalTitle" class="modal-title">站点信息管理</h3>
+            <h3 id="siteAdminModalTitle" class="modal-title">站点信息 / AI Bot</h3>
           </div>
           <button id="siteAdminModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
         </div>
-        <div id="siteAdminPanel" class="site-admin-panel">
+        <div class="site-admin-panel">
+          <div class="site-tags-section">
+            <div class="site-tags-header">
+              <div>
+                <div class="badge">LLM Config</div>
+                <p class="drawer-help">配置你自己的模型地址、API Key、Model 和系统提示词。</p>
+              </div>
+            </div>
+            <div class="site-admin-grid site-admin-grid-wide">
+              <form id="llmConfigForm" class="site-settings-form">
+                <label class="form-label" for="llmConfigNameInput">配置名称</label>
+                <input id="llmConfigNameInput" class="input" type="text" maxlength="60" placeholder="例如：OpenAI 生产配置" />
+
+                <label class="form-label" for="llmConfigBaseUrlInput">Base URL</label>
+                <input id="llmConfigBaseUrlInput" class="input" type="url" maxlength="300" placeholder="https://api.openai.com/v1/chat/completions" />
+
+                <label class="form-label" for="llmConfigModelInput">Model</label>
+                <input id="llmConfigModelInput" class="input" type="text" maxlength="120" placeholder="gpt-4.1-mini" />
+
+                <label class="form-label" for="llmConfigApiKeyInput">API Key</label>
+                <input id="llmConfigApiKeyInput" class="input" type="password" maxlength="300" placeholder="新增时建议填写，编辑时留空表示保持原值" />
+
+                <label class="form-label" for="llmConfigSystemPromptInput">System Prompt</label>
+                <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" placeholder="告诉这个 Bot 应该如何回答"></textarea>
+
+                <div class="site-settings-actions site-settings-actions-split">
+                  <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                  <div class="inline-actions">
+                    <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
+                    <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
+                  </div>
+                </div>
+                <div id="llmConfigStatus" class="status-text"></div>
+              </form>
+              <ul id="llmConfigList" class="tag-list"></ul>
+            </div>
+          </div>
+
+          <div class="site-tags-section">
+            <div class="site-tags-header">
+              <div>
+                <div class="badge">Bot User</div>
+                <p class="drawer-help">每个 Bot 都是一个可私聊的用户，绑定配置后就能直接在消息里使用。</p>
+              </div>
+            </div>
+            <div class="site-admin-grid site-admin-grid-wide">
+              <form id="botUserForm" class="site-settings-form">
+                <label class="form-label" for="botUserNameInput">Bot 名称</label>
+                <input id="botUserNameInput" class="input" type="text" maxlength="60" placeholder="例如：翻译助手" />
+
+                <label class="form-label" for="botUserConfigSelect">绑定配置</label>
+                <select id="botUserConfigSelect" class="input"></select>
+
+                <label class="form-label" for="botUserDescriptionInput">Bot 简介</label>
+                <textarea id="botUserDescriptionInput" class="input textarea" rows="4" maxlength="500" placeholder="告诉用户这个 Bot 擅长做什么"></textarea>
+
+                <div class="site-settings-actions site-settings-actions-split">
+                  <button id="botUserResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                  <button id="botUserSubmitBtn" class="btn-secondary" type="submit">保存 Bot</button>
+                </div>
+                <div id="botUserStatus" class="status-text"></div>
+              </form>
+              <ul id="botUserList" class="tag-list"></ul>
+            </div>
+          </div>
+
+        <div id="siteAdminPanel" class="site-admin-panel" hidden>
           <div class="site-admin-grid">
             <div class="site-identity-card">
               <img id="siteIconPreview" class="site-icon" alt="站点图标" />
@@ -212,6 +278,7 @@
             </div>
             <ul id="tagList" class="tag-list"></ul>
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -425,6 +425,249 @@
 }
 ```
 
+## 用户自定义 LLM 与 Bot
+
+说明：
+
+- 以下接口对普通已登录用户开放，每个用户只可管理自己的配置和 Bot
+- `api_key` 当前由服务端保存，但接口不会回传明文
+- 建议先调用“测试配置”确认连通，再保存配置
+- 每个 Bot 都会对应一个可私聊的 `user_id`
+
+### 获取 LLM Config 列表
+
+**GET** `/api/llm-configs`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "configs": [
+    {
+      "id": 3,
+      "owner_user_id": "u_018",
+      "name": "OpenAI 生产配置",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4.1-mini",
+      "system_prompt": "你是一个活动策划助手。",
+      "has_api_key": true,
+      "created_at": "2026-03-24T12:00:00+08:00",
+      "updated_at": "2026-03-24T12:00:00+08:00"
+    }
+  ]
+}
+```
+
+### 测试 LLM Config
+
+**POST** `/api/llm-configs/test`
+
+权限要求：已登录用户
+
+说明：
+
+- 直接使用本次请求体进行模型连通性测试
+- 不会写入数据库
+- 适合在前端“保存配置”前先检测 `Base URL / Model / API Key` 是否可用
+
+请求体：
+```json
+{
+  "base_url": "https://api.openai.com/v1/chat/completions",
+  "model": "gpt-4.1-mini",
+  "api_key": "sk-xxx",
+  "system_prompt": "你是一个活动策划助手。"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "连接成功，模型配置可用"
+}
+```
+
+失败响应示例：
+```json
+{
+  "error": "Not found the model gpt-4.1-mini or Permission denied"
+}
+```
+
+### 创建 LLM Config
+
+**POST** `/api/llm-configs`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "name": "OpenAI 生产配置",
+  "base_url": "https://api.openai.com/v1/chat/completions",
+  "model": "gpt-4.1-mini",
+  "api_key": "sk-xxx",
+  "system_prompt": "你是一个活动策划助手。"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "配置已创建",
+  "config": {
+    "id": 3,
+    "owner_user_id": "u_018",
+    "name": "OpenAI 生产配置",
+    "base_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4.1-mini",
+    "system_prompt": "你是一个活动策划助手。",
+    "has_api_key": true,
+    "created_at": "2026-03-24T12:00:00+08:00",
+    "updated_at": "2026-03-24T12:00:00+08:00"
+  }
+}
+```
+
+### 更新 LLM Config
+
+**PUT** `/api/llm-configs/:id`
+
+权限要求：已登录用户且为配置拥有者
+
+请求体：
+```json
+{
+  "name": "OpenAI 生产配置",
+  "base_url": "https://api.openai.com/v1/chat/completions",
+  "model": "gpt-4.1-mini",
+  "api_key": "sk-new",
+  "update_api_key": true,
+  "system_prompt": "你是一个活动策划助手。"
+}
+```
+
+说明：
+
+- `update_api_key = false` 或不传时，服务端保持原有 key 不变
+- 编辑已有配置时可只改 `name/base_url/model/system_prompt`
+
+### 删除 LLM Config
+
+**DELETE** `/api/llm-configs/:id`
+
+权限要求：已登录用户且为配置拥有者
+
+成功响应：
+```json
+{
+  "message": "配置已删除"
+}
+```
+
+注意：
+
+- 若该配置仍被 Bot 引用，删除会失败，应先改绑或删除对应 Bot
+
+### 获取 Bot 列表
+
+**GET** `/api/bots`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "bots": [
+    {
+      "id": 5,
+      "owner_user_id": "u_018",
+      "bot_user_id": "bot_abcd1234efgh5678",
+      "name": "翻译助手",
+      "description": "负责中英文翻译和润色",
+      "llm_config_id": 3,
+      "config_name": "OpenAI 生产配置",
+      "created_at": "2026-03-24T12:10:00+08:00",
+      "updated_at": "2026-03-24T12:10:00+08:00"
+    }
+  ]
+}
+```
+
+### 创建 Bot
+
+**POST** `/api/bots`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "name": "翻译助手",
+  "description": "负责中英文翻译和润色",
+  "llm_config_id": 3
+}
+```
+
+成功响应：
+```json
+{
+  "message": "Bot 已创建",
+  "bot": {
+    "id": 5,
+    "owner_user_id": "u_018",
+    "bot_user_id": "bot_abcd1234efgh5678",
+    "name": "翻译助手",
+    "description": "负责中英文翻译和润色",
+    "llm_config_id": 3,
+    "config_name": "OpenAI 生产配置",
+    "created_at": "2026-03-24T12:10:00+08:00",
+    "updated_at": "2026-03-24T12:10:00+08:00"
+  }
+}
+```
+
+### 更新 Bot
+
+**PUT** `/api/bots/:id`
+
+权限要求：已登录用户且为 Bot 拥有者
+
+请求体：
+```json
+{
+  "name": "翻译助手",
+  "description": "负责中英文翻译和润色",
+  "llm_config_id": 3
+}
+```
+
+成功响应：
+```json
+{
+  "message": "Bot 已更新"
+}
+```
+
+### 删除 Bot
+
+**DELETE** `/api/bots/:id`
+
+权限要求：已登录用户且为 Bot 拥有者
+
+成功响应：
+```json
+{
+  "message": "Bot 已删除"
+}
+```
+
+说明：
+
+- 删除 Bot 时，会同时删除该 Bot 对应的 bot user
+- 之后不能再通过原来的 `bot_user_id` 发起私聊
+
 ## 用户组说明
 
 用户组通过 `role` 字段表示：
@@ -1008,6 +1251,7 @@ curl -X POST http://localhost:3000/api/posts \
 - 这些在线状态是为了下一步“离线用户 Push 通知”做准备
 - 系统内置了一个 `system` 用户作为 AI 助理
 - 发给 `system` 的私信会转给后台 AI agent
+- 用户也可以创建自己的 `bot user`，发给这些 Bot 的私信会按其绑定的 LLM Config 转给后台 AI agent
 - AI agent 的长回复会先写入 `markdown_entries`，再作为 `shared_markdown` 消息返回聊天线程
 
 ### AI 助理状态
