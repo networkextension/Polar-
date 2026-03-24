@@ -102,9 +102,16 @@ type Post struct {
 	ReplyCount int         `json:"reply_count"`
 	LikedByMe  bool        `json:"liked_by_me"`
 	Images     []string    `json:"images"`
+	ImageItems []PostImage `json:"image_items,omitempty"`
 	Videos     []string    `json:"videos"`
 	VideoItems []PostVideo `json:"video_items,omitempty"`
 	Task       *TaskPost   `json:"task,omitempty"`
+}
+
+type PostImage struct {
+	OriginalURL string `json:"original_url"`
+	MediumURL   string `json:"medium_url,omitempty"`
+	SmallURL    string `json:"small_url,omitempty"`
 }
 
 type PostVideo struct {
@@ -373,8 +380,16 @@ CREATE TABLE IF NOT EXISTS post_images (
 	id BIGSERIAL PRIMARY KEY,
 	post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
 	file_url TEXT NOT NULL,
+	small_url TEXT NOT NULL DEFAULT '',
+	medium_url TEXT NOT NULL DEFAULT '',
 	created_at TIMESTAMPTZ NOT NULL
 );
+
+ALTER TABLE post_images
+	ADD COLUMN IF NOT EXISTS small_url TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE post_images
+	ADD COLUMN IF NOT EXISTS medium_url TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS post_videos (
 	id BIGSERIAL PRIMARY KEY,
@@ -1081,12 +1096,14 @@ func (s *Server) deletePost(postID int64) (bool, error) {
 	return rowsAffected > 0, nil
 }
 
-func (s *Server) addPostImage(postID int64, fileURL string, createdAt time.Time) error {
+func (s *Server) addPostImage(postID int64, imageItem PostImage, createdAt time.Time) error {
 	_, err := s.db.Exec(
-		`INSERT INTO post_images (post_id, file_url, created_at)
-		 VALUES ($1, $2, $3)`,
+		`INSERT INTO post_images (post_id, file_url, small_url, medium_url, created_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
 		postID,
-		fileURL,
+		imageItem.OriginalURL,
+		imageItem.SmallURL,
+		imageItem.MediumURL,
 		createdAt,
 	)
 	return err
@@ -1102,6 +1119,38 @@ func (s *Server) addPostVideo(postID int64, fileURL, posterURL string, createdAt
 		createdAt,
 	)
 	return err
+}
+
+func normalizePostImageItem(originalURL, smallURL, mediumURL string) PostImage {
+	item := PostImage{
+		OriginalURL: originalURL,
+		SmallURL:    smallURL,
+		MediumURL:   mediumURL,
+	}
+	if item.OriginalURL == "" {
+		if item.MediumURL != "" {
+			item.OriginalURL = item.MediumURL
+		} else {
+			item.OriginalURL = item.SmallURL
+		}
+	}
+	if item.MediumURL == "" {
+		item.MediumURL = item.OriginalURL
+	}
+	if item.SmallURL == "" {
+		item.SmallURL = item.MediumURL
+	}
+	return item
+}
+
+func legacyPostImageURL(item PostImage) string {
+	if item.MediumURL != "" {
+		return item.MediumURL
+	}
+	if item.OriginalURL != "" {
+		return item.OriginalURL
+	}
+	return item.SmallURL
 }
 
 func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64, filterPostType string) ([]Post, bool, error) {
@@ -1185,7 +1234,7 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 	}
 
 	imageRows, err := s.db.Query(
-		`SELECT post_id, file_url FROM post_images
+		`SELECT post_id, file_url, small_url, medium_url FROM post_images
 		  WHERE post_id = ANY($1)
 		  ORDER BY id ASC`,
 		pq.Array(postIDs),
@@ -1196,13 +1245,18 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 	defer imageRows.Close()
 
 	imageMap := make(map[int64][]string, len(postIDs))
+	imageItemMap := make(map[int64][]PostImage, len(postIDs))
 	for imageRows.Next() {
 		var postID int64
 		var fileURL string
-		if err := imageRows.Scan(&postID, &fileURL); err != nil {
+		var smallURL string
+		var mediumURL string
+		if err := imageRows.Scan(&postID, &fileURL, &smallURL, &mediumURL); err != nil {
 			return posts, hasMore, err
 		}
-		imageMap[postID] = append(imageMap[postID], fileURL)
+		imageItem := normalizePostImageItem(fileURL, smallURL, mediumURL)
+		imageMap[postID] = append(imageMap[postID], legacyPostImageURL(imageItem))
+		imageItemMap[postID] = append(imageItemMap[postID], imageItem)
 	}
 	if err := imageRows.Err(); err != nil {
 		return posts, hasMore, err
@@ -1237,6 +1291,7 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 
 	for i := range posts {
 		posts[i].Images = imageMap[posts[i].ID]
+		posts[i].ImageItems = imageItemMap[posts[i].ID]
 		posts[i].Videos = videoMap[posts[i].ID]
 		posts[i].VideoItems = videoItemMap[posts[i].ID]
 	}
@@ -1292,7 +1347,7 @@ func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 	}
 
 	rows, err := s.db.Query(
-		`SELECT file_url FROM post_images WHERE post_id = $1 ORDER BY id ASC`,
+		`SELECT file_url, small_url, medium_url FROM post_images WHERE post_id = $1 ORDER BY id ASC`,
 		postID,
 	)
 	if err != nil {
@@ -1301,17 +1356,23 @@ func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
 	defer rows.Close()
 
 	var images []string
+	var imageItems []PostImage
 	for rows.Next() {
 		var url string
-		if err := rows.Scan(&url); err != nil {
+		var smallURL string
+		var mediumURL string
+		if err := rows.Scan(&url, &smallURL, &mediumURL); err != nil {
 			return nil, err
 		}
-		images = append(images, url)
+		imageItem := normalizePostImageItem(url, smallURL, mediumURL)
+		images = append(images, legacyPostImageURL(imageItem))
+		imageItems = append(imageItems, imageItem)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	post.Images = images
+	post.ImageItems = imageItems
 
 	videoRows, err := s.db.Query(
 		`SELECT file_url, poster_url FROM post_videos WHERE post_id = $1 ORDER BY id ASC`,

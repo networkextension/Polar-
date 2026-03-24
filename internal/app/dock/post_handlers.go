@@ -148,6 +148,7 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 
 	savedFiles := make([]string, 0, len(files)+len(videoFiles))
 	imageURLs := make([]string, 0, len(files))
+	imageItems := make([]PostImage, 0, len(files))
 	for _, file := range files {
 		if file == nil {
 			continue
@@ -161,13 +162,22 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 		}
 
 		publicURL := "/uploads/" + filename
-		if err := s.addPostImage(postID, publicURL, now); err != nil {
+		imageItem, derivedPaths, err := processUploadedPostImage(s.uploadDir, dstPath, publicURL, filename)
+		if err != nil {
+			log.Printf("process post image failed for %s: %v", dstPath, err)
+		}
+		if imageItem.OriginalURL == "" {
+			imageItem = normalizePostImageItem(publicURL, "", "")
+		}
+		if err := s.addPostImage(postID, imageItem, now); err != nil {
 			s.cleanupPostUpload(postID, append(savedFiles, dstPath))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 			return
 		}
 		savedFiles = append(savedFiles, dstPath)
-		imageURLs = append(imageURLs, publicURL)
+		savedFiles = append(savedFiles, derivedPaths...)
+		imageItems = append(imageItems, imageItem)
+		imageURLs = append(imageURLs, legacyPostImageURL(imageItem))
 	}
 
 	videoURLs := make([]string, 0, len(videoFiles))
@@ -215,6 +225,7 @@ func (s *Server) handlePostCreate(c *gin.Context) {
 		"id":          postID,
 		"post_type":   postType,
 		"images":      imageURLs,
+		"image_items": imageItems,
 		"videos":      videoURLs,
 		"video_items": videoItems,
 		"content":     content,

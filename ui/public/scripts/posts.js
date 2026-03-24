@@ -149,6 +149,22 @@ function normalizeVideoItems(post) {
         posterUrl: "",
     }));
 }
+function normalizePostImages(post, variant) {
+    if (Array.isArray(post.image_items) && post.image_items.length > 0) {
+        return post.image_items
+            .filter((item) => item && (item.original_url || item.medium_url || item.small_url))
+            .map((item) => {
+            if (variant === "small") {
+                return buildAssetUrl(item.small_url || item.medium_url || item.original_url);
+            }
+            if (variant === "medium") {
+                return buildAssetUrl(item.medium_url || item.original_url || item.small_url);
+            }
+            return buildAssetUrl(item.original_url || item.medium_url || item.small_url);
+        });
+    }
+    return (post.images || []).map((url) => buildAssetUrl(url));
+}
 function enhancePostVideos(container) {
     container.querySelectorAll(".post-videos video").forEach((videoEl) => {
         videoEl.addEventListener("click", (event) => {
@@ -175,8 +191,8 @@ async function loadProfile() {
 function createPostCard(post) {
     const card = document.createElement("div");
     card.className = "post-card panel";
-    const images = (post.images || [])
-        .map((url) => `<img src="${buildAssetUrl(url)}" alt="post image" />`)
+    const images = normalizePostImages(post, "small")
+        .map((url) => `<img src="${url}" alt="post image" loading="lazy" />`)
         .join("");
     const videos = normalizeVideoItems(post)
         .map((item) => `

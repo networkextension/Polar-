@@ -27,6 +27,12 @@ type VideoItem = {
   poster_url?: string;
 };
 
+type ImageItem = {
+  original_url: string;
+  medium_url?: string;
+  small_url?: string;
+};
+
 type Reply = {
   username: string;
   user_icon?: string;
@@ -44,6 +50,7 @@ type Post = {
   created_at: string;
   content: string;
   images?: string[];
+  image_items?: ImageItem[];
   videos?: string[];
   video_items?: VideoItem[];
   liked_by_me: boolean;
@@ -98,6 +105,13 @@ let currentUserId = "";
 let currentUserRole = "user";
 let videoModal: HTMLDivElement | null = null;
 let videoModalPlayer: HTMLVideoElement | null = null;
+let imageModal: HTMLDivElement | null = null;
+let imageModalViewer: HTMLImageElement | null = null;
+let imageModalCounter: HTMLDivElement | null = null;
+let imageModalPrevBtn: HTMLButtonElement | null = null;
+let imageModalNextBtn: HTMLButtonElement | null = null;
+let currentImageGallery: string[] = [];
+let currentImageIndex = 0;
 let currentTags: Tag[] = [];
 
 initStoredTheme();
@@ -199,6 +213,110 @@ function openVideoModal(url: string): void {
   void videoModalPlayer.play().catch(() => {});
 }
 
+function ensureImageModal(): void {
+  if (imageModal) {
+    return;
+  }
+
+  const modal = document.createElement("div");
+  modal.className = "image-modal";
+  modal.innerHTML = `
+    <div class="image-modal-backdrop"></div>
+    <div class="image-modal-content">
+      <div class="image-modal-toolbar">
+        <div class="image-modal-counter">1 / 1</div>
+        <button class="image-modal-close btn-inline btn-secondary" type="button">关闭</button>
+      </div>
+      <div class="image-modal-stage">
+        <button class="image-modal-nav image-modal-prev btn-inline btn-secondary" type="button" aria-label="上一张">上一张</button>
+        <img class="image-modal-viewer" alt="post image preview" />
+        <button class="image-modal-nav image-modal-next btn-inline btn-secondary" type="button" aria-label="下一张">下一张</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  imageModal = modal;
+  imageModalViewer = query<HTMLImageElement>(modal, ".image-modal-viewer");
+  imageModalCounter = query<HTMLDivElement>(modal, ".image-modal-counter");
+  imageModalPrevBtn = query<HTMLButtonElement>(modal, ".image-modal-prev");
+  imageModalNextBtn = query<HTMLButtonElement>(modal, ".image-modal-next");
+
+  const close = (): void => {
+    if (!imageModal || !imageModalViewer) {
+      return;
+    }
+    imageModal.classList.remove("open");
+    imageModalViewer.removeAttribute("src");
+    currentImageGallery = [];
+    currentImageIndex = 0;
+  };
+
+  query<HTMLElement>(modal, ".image-modal-backdrop").addEventListener("click", close);
+  query<HTMLButtonElement>(modal, ".image-modal-close").addEventListener("click", close);
+  imageModalPrevBtn.addEventListener("click", () => stepImageModal(-1));
+  imageModalNextBtn.addEventListener("click", () => stepImageModal(1));
+
+  document.addEventListener("keydown", (event) => {
+    if (!imageModal?.classList.contains("open")) {
+      return;
+    }
+    if (event.key === "Escape") {
+      close();
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      stepImageModal(-1);
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      stepImageModal(1);
+    }
+  });
+}
+
+function renderImageModal(): void {
+  if (!imageModal || !imageModalViewer || !imageModalCounter || !imageModalPrevBtn || !imageModalNextBtn) {
+    return;
+  }
+  if (!currentImageGallery.length) {
+    imageModal.classList.remove("open");
+    return;
+  }
+
+  currentImageIndex = (currentImageIndex + currentImageGallery.length) % currentImageGallery.length;
+  imageModalViewer.src = currentImageGallery[currentImageIndex];
+  imageModalCounter.textContent = `${currentImageIndex + 1} / ${currentImageGallery.length}`;
+
+  const multiple = currentImageGallery.length > 1;
+  imageModalPrevBtn.disabled = !multiple;
+  imageModalNextBtn.disabled = !multiple;
+}
+
+function openImageModal(images: string[], index: number): void {
+  if (!images.length) {
+    return;
+  }
+  ensureImageModal();
+  if (!imageModal) {
+    return;
+  }
+  currentImageGallery = images;
+  currentImageIndex = index;
+  renderImageModal();
+  imageModal.classList.add("open");
+}
+
+function stepImageModal(step: number): void {
+  if (!currentImageGallery.length) {
+    return;
+  }
+  currentImageIndex += step;
+  renderImageModal();
+}
+
 function normalizeVideoItems(post: Post): Array<{ url: string; posterUrl: string }> {
   if (Array.isArray(post.video_items) && post.video_items.length > 0) {
     return post.video_items
@@ -214,6 +332,23 @@ function normalizeVideoItems(post: Post): Array<{ url: string; posterUrl: string
   }));
 }
 
+function normalizePostImages(post: Post, variant: "small" | "medium" | "original"): string[] {
+  if (Array.isArray(post.image_items) && post.image_items.length > 0) {
+    return post.image_items
+      .filter((item) => item && (item.original_url || item.medium_url || item.small_url))
+      .map((item) => {
+        if (variant === "small") {
+          return buildAssetUrl(item.small_url || item.medium_url || item.original_url);
+        }
+        if (variant === "medium") {
+          return buildAssetUrl(item.medium_url || item.original_url || item.small_url);
+        }
+        return buildAssetUrl(item.original_url || item.medium_url || item.small_url);
+      });
+  }
+  return (post.images || []).map((url) => buildAssetUrl(url));
+}
+
 function enhancePostVideos(container: ParentNode): void {
   container.querySelectorAll<HTMLVideoElement>(".post-videos video").forEach((videoEl) => {
     videoEl.addEventListener("click", (event) => {
@@ -223,6 +358,14 @@ function enhancePostVideos(container: ParentNode): void {
       const src = videoEl.currentSrc || source?.src || "";
       videoEl.pause();
       openVideoModal(src);
+    });
+  });
+}
+
+function enhancePostImages(container: ParentNode, images: string[]): void {
+  container.querySelectorAll<HTMLImageElement>(".post-images img").forEach((imageEl, index) => {
+    imageEl.addEventListener("click", () => {
+      openImageModal(images, index);
     });
   });
 }
@@ -278,8 +421,10 @@ async function loadReplies(postId: number): Promise<void> {
 }
 
 function renderPost(post: Post): void {
-  const images = (post.images || [])
-    .map((url) => `<img src="${buildAssetUrl(url)}" alt="post image" />`)
+  const postImagePreviews = normalizePostImages(post, "medium");
+  const postImageOriginals = normalizePostImages(post, "original");
+  const images = postImagePreviews
+    .map((url) => `<img src="${url}" alt="post image" loading="lazy" />`)
     .join("");
   const videos = normalizeVideoItems(post)
     .map(
@@ -399,6 +544,7 @@ function renderPost(post: Post): void {
   const likeBtn = byId<HTMLButtonElement>("detailLikeBtn");
   const deleteBtn = document.getElementById("detailDeleteBtn") as HTMLButtonElement | null;
   enhancePostVideos(postDetail);
+  enhancePostImages(postDetail, postImageOriginals);
 
   likeBtn.addEventListener("click", async () => {
     const method = post.liked_by_me ? "DELETE" : "POST";

@@ -17,6 +17,12 @@ type VideoItem = {
   poster_url?: string;
 };
 
+type ImageItem = {
+  original_url: string;
+  medium_url?: string;
+  small_url?: string;
+};
+
 type Reply = {
   username: string;
   user_icon?: string;
@@ -34,6 +40,7 @@ type Post = {
   created_at: string;
   content: string;
   images?: string[];
+  image_items?: ImageItem[];
   videos?: string[];
   video_items?: VideoItem[];
   liked_by_me: boolean;
@@ -215,6 +222,23 @@ function normalizeVideoItems(post: Post): Array<{ url: string; posterUrl: string
   }));
 }
 
+function normalizePostImages(post: Post, variant: "small" | "medium" | "original"): string[] {
+  if (Array.isArray(post.image_items) && post.image_items.length > 0) {
+    return post.image_items
+      .filter((item) => item && (item.original_url || item.medium_url || item.small_url))
+      .map((item) => {
+        if (variant === "small") {
+          return buildAssetUrl(item.small_url || item.medium_url || item.original_url);
+        }
+        if (variant === "medium") {
+          return buildAssetUrl(item.medium_url || item.original_url || item.small_url);
+        }
+        return buildAssetUrl(item.original_url || item.medium_url || item.small_url);
+      });
+  }
+  return (post.images || []).map((url) => buildAssetUrl(url));
+}
+
 function enhancePostVideos(container: ParentNode): void {
   container.querySelectorAll<HTMLVideoElement>(".post-videos video").forEach((videoEl) => {
     videoEl.addEventListener("click", (event) => {
@@ -244,8 +268,8 @@ function createPostCard(post: Post): HTMLElement {
   const card = document.createElement("div");
   card.className = "post-card panel";
 
-  const images = (post.images || [])
-    .map((url) => `<img src="${buildAssetUrl(url)}" alt="post image" />`)
+  const images = normalizePostImages(post, "small")
+    .map((url) => `<img src="${url}" alt="post image" loading="lazy" />`)
     .join("");
   const videos = normalizeVideoItems(post)
     .map(
