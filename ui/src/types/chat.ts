@@ -51,7 +51,11 @@ export type SharedMarkdownResponse = {
 export type ChatEventPayload = {
   type?: string;
   chat_id?: string;
+  message?: ChatMessage;
+  message_id?: string;
   user_id?: string;
+  read_at?: string;
+  deleted_at?: string;
   online?: boolean;
   device_type?: string;
   last_seen_at?: string;

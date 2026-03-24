@@ -24,6 +24,7 @@ let pollTimer: number | null = null;
 let ws: WebSocket | null = null;
 let wsConnected = false;
 let activeMessages: ChatMessage[] = [];
+let activeMessageLoadedAt = "";
 const expandedMarkdownMessages = new Set<string>();
 const sharedMarkdownContentCache = new Map<string, string>();
 const sharedMarkdownLoading = new Set<string>();
@@ -113,6 +114,56 @@ function updateActiveChatHeader(): void {
   chatSubtitle.textContent = formatPresence(chat);
 }
 
+function getMessageMarker(message?: ChatMessage | null): string {
+  if (!message) {
+    return "";
+  }
+  return `${message.created_at || ""}#${message.id || ""}`;
+}
+
+function updateActiveMessageLoadedAt(messages: ChatMessage[]): void {
+  const latest = messages[messages.length - 1];
+  activeMessageLoadedAt = getMessageMarker(latest);
+}
+
+function appendMessageIfNeeded(message: ChatMessage): boolean {
+  if (!message || activeMessages.some((item) => item.id === message.id)) {
+    return false;
+  }
+  activeMessages = [...activeMessages, message];
+  updateActiveMessageLoadedAt(activeMessages);
+  return true;
+}
+
+function markMessageRevoked(messageId: string): boolean {
+  const index = activeMessages.findIndex((item) => item.id === messageId);
+  if (index === -1) {
+    return false;
+  }
+  const target = activeMessages[index];
+  const nextMessages = activeMessages.slice();
+  nextMessages[index] = {
+    ...target,
+    deleted: true,
+    content: target.content || "",
+  };
+  activeMessages = nextMessages;
+  updateActiveMessageLoadedAt(activeMessages);
+  return true;
+}
+
+function shouldRefreshActiveMessages(threadId: string): boolean {
+  const chat = chatCache.find((item) => item.id === threadId);
+  if (!chat?.last_message_at) {
+    return activeMessages.length === 0;
+  }
+  if (!activeMessageLoadedAt) {
+    return true;
+  }
+  const [loadedAt] = activeMessageLoadedAt.split("#");
+  return chat.last_message_at > loadedAt;
+}
+
 function getTargetFromQuery(): { userId: string | null; username: string | null } {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -171,6 +222,23 @@ function renderChatList(chats: ChatSummary[]): void {
   });
 }
 
+function buildChatListSignature(chats: ChatSummary[]): string {
+  return chats
+    .map((chat) =>
+      [
+        chat.id,
+        chat.other_username,
+        chat.other_user_online ? "1" : "0",
+        chat.other_user_device_type || "",
+        chat.other_user_last_seen_at || "",
+        chat.unread_count || 0,
+        chat.last_message || "",
+        chat.last_message_at || "",
+      ].join("|")
+    )
+    .join("||");
+}
+
 async function loadChats(focusThreadId: string | null = null): Promise<void> {
   const { response, data } = await fetchChats();
   if (!response.ok) {
@@ -178,14 +246,19 @@ async function loadChats(focusThreadId: string | null = null): Promise<void> {
     return;
   }
 
-  chatCache = data.chats || [];
+  const nextChats = data.chats || [];
+  const previousSignature = buildChatListSignature(chatCache);
+  const nextSignature = buildChatListSignature(nextChats);
+  chatCache = nextChats;
   if (focusThreadId) {
     const match = chatCache.find((item) => item.id === focusThreadId);
     if (match) {
       activeThreadId = match.id;
     }
   }
-  renderChatList(chatCache);
+  if (previousSignature !== nextSignature) {
+    renderChatList(chatCache);
+  }
   updateActiveChatHeader();
 }
 
@@ -200,6 +273,7 @@ async function startChatWithUser(userId: string): Promise<ChatSummary | null> {
 
 function renderMessages(messages: ChatMessage[]): void {
   activeMessages = messages;
+  updateActiveMessageLoadedAt(messages);
   if (!messages.length) {
     messageList.innerHTML = "<div class='chat-empty'>暂无消息</div>";
     return;
@@ -404,8 +478,15 @@ async function loadMessages(threadId: string): Promise<void> {
   renderMessages(data.messages || []);
 }
 
+async function refreshActiveMessagesIfNeeded(threadId: string, force = false): Promise<void> {
+  if (force || shouldRefreshActiveMessages(threadId)) {
+    await loadMessages(threadId);
+  }
+}
+
 async function openChat(chat: ChatSummary): Promise<void> {
   activeThreadId = chat.id;
+  activeMessageLoadedAt = "";
   updateActiveChatHeader();
   messageInput.disabled = false;
   renderChatList(chatCache);
@@ -421,7 +502,11 @@ async function revokeMessage(messageId: string): Promise<void> {
   if (!response.ok) {
     return;
   }
-  await loadMessages(activeThreadId);
+  if (!markMessageRevoked(messageId)) {
+    await loadMessages(activeThreadId);
+  } else {
+    renderMessages(activeMessages);
+  }
   await loadChats(activeThreadId);
 }
 
@@ -435,7 +520,7 @@ function startPolling(): void {
   pollTimer = window.setInterval(async () => {
     await loadChats(activeThreadId);
     if (activeThreadId) {
-      await loadMessages(activeThreadId);
+      await refreshActiveMessagesIfNeeded(activeThreadId);
     }
   }, 5000);
 }
@@ -489,8 +574,10 @@ function connectWebSocket(): void {
 
     const chatId = payload.chat_id;
     if (payload.type === "message") {
-      if (activeThreadId === chatId && chatId) {
-        await loadMessages(chatId);
+      if (activeThreadId === chatId && chatId && payload.message) {
+        if (appendMessageIfNeeded(payload.message)) {
+          renderMessages(activeMessages);
+        }
       }
       await loadChats(activeThreadId);
       return;
@@ -507,8 +594,12 @@ function connectWebSocket(): void {
     }
 
     if (payload.type === "revoke") {
-      if (activeThreadId === chatId && chatId) {
-        await loadMessages(chatId);
+      if (activeThreadId === chatId && chatId && payload.message_id) {
+        if (markMessageRevoked(payload.message_id)) {
+          renderMessages(activeMessages);
+        } else {
+          await loadMessages(chatId);
+        }
       }
       await loadChats(activeThreadId);
     }
@@ -532,14 +623,16 @@ messageForm.addEventListener("submit", async (event) => {
   }
 
   messageInput.value = "";
-  await loadMessages(activeThreadId);
+  if (!wsConnected) {
+    await loadMessages(activeThreadId);
+  }
   await loadChats(activeThreadId);
 });
 
 chatRefreshBtn.addEventListener("click", async () => {
   await loadChats(activeThreadId);
   if (activeThreadId) {
-    await loadMessages(activeThreadId);
+    await refreshActiveMessagesIfNeeded(activeThreadId, true);
   }
 });
 
