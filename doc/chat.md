@@ -2,6 +2,10 @@
 
 本文整理私聊的核心设计、数据模型、HTTP API、WebSocket 事件，以及示例，方便 iOS 端快速对接。
 
+补充说明：
+
+- 用户级 `LLM Config`、`Bot User`、`llm_thread`、`shared_markdown` 与 Retry 的重构说明，见 [doc/llm-bot.md](/Users/apple/github/Polar-/doc/llm-bot.md)
+
 ## 设计概览
 - 私聊是双人会话（thread）+ 消息（message）模型。
 - 会话通过两位用户 ID 生成唯一对话。

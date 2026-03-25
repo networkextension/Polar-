@@ -433,6 +433,7 @@
 - `api_key` 当前由服务端保存，但接口不会回传明文
 - 建议先调用“测试配置”确认连通，再保存配置
 - 每个 Bot 都会对应一个可私聊的 `user_id`
+- Bot 与官方 `system` 助理共用同一套私聊入口，但运行时配置来源不同
 
 ### 获取 LLM Config 列表
 
@@ -1252,7 +1253,11 @@ curl -X POST http://localhost:3000/api/posts \
 - 系统内置了一个 `system` 用户作为 AI 助理
 - 发给 `system` 的私信会转给后台 AI agent
 - 用户也可以创建自己的 `bot user`，发给这些 Bot 的私信会按其绑定的 LLM Config 转给后台 AI agent
+- `system` 会读取程序运行目录下的文档摘要作为上下文的一部分
+- 用户自建 `bot user` 不读取运行目录文档，只读取当前 `llm thread` 下的消息上下文
+- Bot 会话支持 `llm_thread`，用于在同一个私聊里拆分多个话题
 - AI agent 的长回复会先写入 `markdown_entries`，再作为 `shared_markdown` 消息返回聊天线程
+- AI 调用失败时，会写入一条 `failed = true` 的失败消息；客户端可调用重试接口重新投递上一条用户消息
 
 ### AI 助理状态
 
@@ -1337,11 +1342,119 @@ curl -X POST http://localhost:3000/api/posts \
 - `other_user_device_type`：对方最近活跃设备类型
 - `other_user_last_seen_at`：对方最近在线时间，可能为空
 
+### 获取 Bot 话题列表
+
+**GET** `/api/chats/:id/llm-threads?active_thread_id=1`
+
+权限要求：会话参与者，且该会话对端必须是 `system` 或 `bot user`
+
+说明：
+
+- 用于列出当前 AI 会话下的话题列表
+- `active_thread_id` 可选，用于指定当前激活话题
+- 若当前会话尚无话题，服务端会按需要返回默认话题
+
+成功响应：
+```json
+{
+  "threads": [
+    {
+      "id": 21,
+      "chat_thread_id": 12,
+      "owner_user_id": "u_018",
+      "bot_user_id": "bot_translate_01",
+      "title": "合同翻译",
+      "created_at": "2026-03-25T09:00:00+08:00",
+      "updated_at": "2026-03-25T09:10:00+08:00",
+      "last_message_at": "2026-03-25T09:10:00+08:00"
+    }
+  ],
+  "active_thread": {
+    "id": 21,
+    "chat_thread_id": 12,
+    "owner_user_id": "u_018",
+    "bot_user_id": "bot_translate_01",
+    "title": "合同翻译",
+    "created_at": "2026-03-25T09:00:00+08:00",
+    "updated_at": "2026-03-25T09:10:00+08:00",
+    "last_message_at": "2026-03-25T09:10:00+08:00"
+  }
+}
+```
+
+### 创建 Bot 话题
+
+**POST** `/api/chats/:id/llm-threads`
+
+权限要求：会话参与者，且该会话对端必须是 `system` 或 `bot user`
+
+请求体：
+```json
+{
+  "title": "新话题"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "话题已创建",
+  "thread": {
+    "id": 22,
+    "chat_thread_id": 12,
+    "owner_user_id": "u_018",
+    "bot_user_id": "bot_translate_01",
+    "title": "新话题",
+    "created_at": "2026-03-25T09:30:00+08:00",
+    "updated_at": "2026-03-25T09:30:00+08:00",
+    "last_message_at": null
+  },
+  "threads": []
+}
+```
+
+### 更新 Bot 话题标题
+
+**PUT** `/api/chats/:id/llm-threads/:threadId`
+
+权限要求：会话参与者且为该话题拥有者
+
+请求体：
+```json
+{
+  "title": "报价整理"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "话题标题已更新",
+  "thread": {
+    "id": 22,
+    "chat_thread_id": 12,
+    "owner_user_id": "u_018",
+    "bot_user_id": "bot_translate_01",
+    "title": "报价整理",
+    "created_at": "2026-03-25T09:30:00+08:00",
+    "updated_at": "2026-03-25T09:35:00+08:00",
+    "last_message_at": "2026-03-25T09:34:00+08:00"
+  },
+  "threads": []
+}
+```
+
 ### 获取会话消息
 
-**GET** `/api/chats/:id/messages?limit=200&offset=0`
+**GET** `/api/chats/:id/messages?limit=200&offset=0&llm_thread_id=21`
 
 权限要求：会话参与者
+
+说明：
+
+- 普通私聊可不传 `llm_thread_id`
+- AI 会话建议传 `llm_thread_id`，仅拉取当前话题消息
+- 该接口会同时返回当前激活话题
 
 成功响应：
 ```json
@@ -1350,10 +1463,12 @@ curl -X POST http://localhost:3000/api/posts \
     {
       "id": 88,
       "thread_id": 12,
+      "llm_thread_id": 21,
       "sender_id": "system",
       "sender_username": "system",
       "sender_icon": "",
       "message_type": "shared_markdown",
+      "failed": false,
       "content": "以下是本次 AI 回复的摘要预览……",
       "markdown_entry_id": 135,
       "markdown_title": "活动执行 SOP 建议",
@@ -1361,6 +1476,17 @@ curl -X POST http://localhost:3000/api/posts \
       "deleted": false
     }
   ],
+  "active_thread": {
+    "id": 21,
+    "chat_thread_id": 12,
+    "owner_user_id": "u_018",
+    "bot_user_id": "system",
+    "title": "活动执行 SOP",
+    "created_at": "2026-03-24T10:00:00+08:00",
+    "updated_at": "2026-03-24T10:20:30+08:00",
+    "last_message_at": "2026-03-24T10:20:30+08:00"
+  },
+  "active_thread_id": 21,
   "has_more": false,
   "next_offset": 1
 }
@@ -1370,6 +1496,11 @@ curl -X POST http://localhost:3000/api/posts \
 
 - `text`：普通文本消息
 - `shared_markdown`：共享 Markdown 消息
+
+通用字段补充：
+
+- `llm_thread_id`：消息所属话题，普通私聊可能为空
+- `failed`：是否为失败态 AI 消息；通常只会出现在 `system` 或 `bot user` 回复失败时
 
 当 `message_type = "shared_markdown"` 时：
 
@@ -1424,15 +1555,52 @@ curl -X POST http://localhost:3000/api/posts \
 请求体：
 ```json
 {
-  "content": "你好"
+  "content": "你好",
+  "llm_thread_id": 21
 }
 ```
+
+说明：
+
+- 普通私聊不需要传 `llm_thread_id`
+- AI 会话传入 `llm_thread_id` 后，消息会进入指定话题
+- 若 `llm_thread_id` 对应话题标题仍是默认值“新话题”，服务端会在首轮消息后自动生成摘要标题
 
 成功响应：
 ```json
 {
   "message": "发送成功",
-  "id": 88
+  "id": 88,
+  "active_thread": {
+    "id": 21,
+    "chat_thread_id": 12,
+    "owner_user_id": "u_018",
+    "bot_user_id": "system",
+    "title": "活动执行 SOP",
+    "created_at": "2026-03-24T10:00:00+08:00",
+    "updated_at": "2026-03-24T10:20:30+08:00",
+    "last_message_at": "2026-03-24T10:20:30+08:00"
+  }
+}
+```
+
+### 重试失败的 AI 消息
+
+**POST** `/api/chats/:id/messages/:messageId/retry`
+
+权限要求：会话参与者
+
+说明：
+
+- 仅适用于 AI 会话中的失败消息，即 `failed = true`
+- 服务端会找到这条失败消息前的上一条用户消息，重新投递给 AI agent
+- 若重试请求被接受，原失败消息会被服务端标记为 `deleted_by = "retry"`，客户端应直接从列表移除
+
+成功响应：
+```json
+{
+  "message": "已重新提交上一条用户消息",
+  "content": "请帮我整理这份活动执行 SOP"
 }
 ```
 
@@ -1470,9 +1638,11 @@ curl -X POST http://localhost:3000/api/posts \
   "message": {
     "id": 88,
     "thread_id": 12,
+    "llm_thread_id": 21,
     "sender_id": "system",
     "sender_username": "system",
     "message_type": "shared_markdown",
+    "failed": false,
     "content": "以下是本次 AI 回复的摘要预览……",
     "markdown_entry_id": 135,
     "markdown_title": "活动执行 SOP 建议",
@@ -1499,9 +1669,14 @@ curl -X POST http://localhost:3000/api/posts \
   "type": "revoke",
   "chat_id": 12,
   "message_id": 88,
-  "deleted_at": "2026-03-24T10:22:00+08:00"
+  "deleted_at": "2026-03-24T10:22:00+08:00",
+  "user_id": "retry"
 }
 ```
+
+补充说明：
+
+- 当 `user_id = "retry"` 时，表示该条失败 AI 消息已被重试流程替换，前端可直接把这条消息从列表中移除，而不是显示“消息已撤回”
 
 #### 在线状态事件 `presence`
 
