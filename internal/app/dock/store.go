@@ -1010,7 +1010,7 @@ func (s *Server) createBotUser(ownerUserID, name, description, systemPrompt stri
 	}()
 
 	var configName string
-	err = tx.QueryRow(`SELECT name FROM llm_configs WHERE id = $1 AND owner_user_id = $2`, llmConfigID, ownerUserID).Scan(&configName)
+	err = tx.QueryRow(`SELECT name FROM llm_configs WHERE id = $1 AND (owner_user_id = $2 OR shared = TRUE)`, llmConfigID, ownerUserID).Scan(&configName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -1069,7 +1069,7 @@ func (s *Server) updateBotUser(ownerUserID string, id int64, name, description, 
 		return nil, err
 	}
 	var configName string
-	err = tx.QueryRow(`SELECT name FROM llm_configs WHERE id = $1 AND owner_user_id = $2`, llmConfigID, ownerUserID).Scan(&configName)
+	err = tx.QueryRow(`SELECT name FROM llm_configs WHERE id = $1 AND (owner_user_id = $2 OR shared = TRUE)`, llmConfigID, ownerUserID).Scan(&configName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil

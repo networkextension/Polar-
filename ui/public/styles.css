@@ -377,6 +377,21 @@ button:hover {
   flex-wrap: wrap;
 }
 
+.form-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.form-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .site-tags-header {
   display: flex;
   justify-content: space-between;

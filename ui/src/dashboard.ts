@@ -5,6 +5,7 @@ import {
   createTag,
   deleteApplePushCertificate,
   deleteEntry,
+  fetchAvailableLLMConfigs,
   fetchBotUsers,
   fetchEntries,
   fetchEntry,
@@ -99,6 +100,7 @@ const llmConfigBaseUrlInput = byId<HTMLInputElement>("llmConfigBaseUrlInput");
 const llmConfigModelInput = byId<HTMLInputElement>("llmConfigModelInput");
 const llmConfigApiKeyInput = byId<HTMLInputElement>("llmConfigApiKeyInput");
 const llmConfigSystemPromptInput = byId<HTMLTextAreaElement>("llmConfigSystemPromptInput");
+const llmConfigSharedInput = byId<HTMLInputElement>("llmConfigSharedInput");
 const llmConfigResetBtn = byId<HTMLButtonElement>("llmConfigResetBtn");
 const llmConfigTestBtn = byId<HTMLButtonElement>("llmConfigTestBtn");
 const llmConfigSubmitBtn = byId<HTMLButtonElement>("llmConfigSubmitBtn");
@@ -150,6 +152,7 @@ let currentTags: Tag[] = [];
 let editingLLMConfigId: number | null = null;
 let editingBotUserId: number | null = null;
 let currentLLMConfigs: LLMConfig[] = [];
+let currentAvailableLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
 let activeSettingsSection: "profile" | "personalization" | "settings" | "bots" | "site" = "personalization";
 
@@ -326,6 +329,7 @@ function renderLLMConfigList(configs: LLMConfig[]): void {
               <strong>${config.name}</strong>
               <span class="tag-chip">${config.model}</span>
               ${config.has_api_key ? `<span class="tag-chip">Key 已保存</span>` : `<span class="tag-chip">无 Key</span>`}
+              ${config.shared ? `<span class="tag-chip">共享</span>` : `<span class="tag-chip">私有</span>`}
             </div>
             <div class="tag-item-meta">${config.base_url}</div>
             <div class="tag-item-desc">${config.system_prompt || "未设置 System Prompt"}</div>
@@ -450,14 +454,22 @@ async function loadProfile(): Promise<void> {
 async function loadSiteAdminData(): Promise<void> {
   const tasks: Array<Promise<unknown>> = [
     (async () => {
-      const { response, data } = await fetchLLMConfigs();
-      if (response.ok) {
-        currentLLMConfigs = data.configs || [];
+      const [ownResult, availableResult] = await Promise.all([fetchLLMConfigs(), fetchAvailableLLMConfigs()]);
+      if (ownResult.response.ok) {
+        currentLLMConfigs = ownResult.data.configs || [];
         renderLLMConfigList(currentLLMConfigs);
-        syncBotConfigOptions(currentLLMConfigs);
       } else {
-        llmConfigStatus.textContent = data.error || "无法加载 LLM Config";
+        llmConfigStatus.textContent = ownResult.data.error || "无法加载 LLM Config";
         llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 LLM Config</li>`;
+      }
+
+      if (availableResult.response.ok) {
+        currentAvailableLLMConfigs = availableResult.data.configs || [];
+        syncBotConfigOptions(currentAvailableLLMConfigs);
+      } else {
+        currentAvailableLLMConfigs = [];
+        botUserStatus.textContent = availableResult.data.error || "无法加载可用配置";
+        syncBotConfigOptions(currentAvailableLLMConfigs);
       }
     })(),
     (async () => {
@@ -748,6 +760,7 @@ llmConfigTestBtn.addEventListener("click", async () => {
     model: llmConfigModelInput.value.trim(),
     api_key: llmConfigApiKeyInput.value.trim(),
     system_prompt: llmConfigSystemPromptInput.value.trim(),
+    shared: llmConfigSharedInput.checked,
   };
   if (!payload.base_url || !payload.model || !payload.api_key) {
     setStatusMessage(llmConfigStatus, "测试前请先填写 Base URL、Model 和 API Key", "error");
@@ -784,6 +797,7 @@ llmConfigForm.addEventListener("submit", async (event) => {
     model: llmConfigModelInput.value.trim(),
     api_key: llmConfigApiKeyInput.value.trim(),
     system_prompt: llmConfigSystemPromptInput.value.trim(),
+    shared: llmConfigSharedInput.checked,
   };
   if (!payload.name || !payload.base_url || !payload.model) {
     llmConfigStatus.textContent = "请先填写名称、Base URL 和 Model";
@@ -834,6 +848,7 @@ llmConfigList.addEventListener("click", async (event) => {
     llmConfigModelInput.value = config.model;
     llmConfigApiKeyInput.value = "";
     llmConfigSystemPromptInput.value = config.system_prompt || "";
+    llmConfigSharedInput.checked = config.shared;
     llmConfigSubmitBtn.textContent = "更新配置";
     llmConfigStatus.textContent = config.has_api_key ? "已保存 API Key，留空表示保持原值" : "";
     llmConfigNameInput.focus();

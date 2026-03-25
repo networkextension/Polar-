@@ -34,6 +34,9 @@ export async function fetchSiteSettings() {
 export async function fetchLLMConfigs() {
     return requestJson("/api/llm-configs");
 }
+export async function fetchAvailableLLMConfigs() {
+    return requestJson("/api/llm-configs/available");
+}
 export async function createLLMConfig(payload) {
     return requestJson("/api/llm-configs", {
         method: "POST",

@@ -431,6 +431,7 @@
 
 - 以下接口对普通已登录用户开放，每个用户只可管理自己的配置和 Bot
 - `api_key` 当前由服务端保存，但接口不会回传明文
+- `shared = true` 的 `LLM Config` 可被其他用户用于聊天切换和 Bot 绑定
 - 建议先调用“测试配置”确认连通，再保存配置
 - 每个 Bot 都会对应一个可私聊的 `user_id`
 - Bot 与官方 `system` 助理共用同一套私聊入口，但运行时配置来源不同
@@ -452,6 +453,8 @@
     {
       "id": 3,
       "owner_user_id": "u_018",
+      "share_id": "share_cfg_123",
+      "shared": false,
       "name": "OpenAI 生产配置",
       "base_url": "https://api.openai.com/v1/chat/completions",
       "model": "gpt-4.1-mini",
@@ -462,6 +465,41 @@
   ]
 }
 ```
+
+说明：
+
+- 该接口只返回当前用户自己创建的配置
+
+### 获取可用 LLM Config 列表
+
+**GET** `/api/llm-configs/available`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "configs": [
+    {
+      "id": 3,
+      "owner_user_id": "u_018",
+      "share_id": "share_cfg_123",
+      "shared": true,
+      "name": "OpenAI 生产配置",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-4.1-mini",
+      "has_api_key": true,
+      "created_at": "2026-03-24T12:00:00+08:00",
+      "updated_at": "2026-03-24T12:00:00+08:00"
+    }
+  ]
+}
+```
+
+说明：
+
+- 该接口返回“当前用户自己的配置”以及“其他用户已共享的配置”
+- 聊天里的模型切换和 Bot 绑定应使用该接口返回的数据
 
 ### 测试 LLM Config
 
@@ -512,7 +550,8 @@
   "name": "OpenAI 生产配置",
   "base_url": "https://api.openai.com/v1/chat/completions",
   "model": "gpt-4.1-mini",
-  "api_key": "sk-xxx"
+  "api_key": "sk-xxx",
+  "shared": true
 }
 ```
 
@@ -523,6 +562,8 @@
   "config": {
     "id": 3,
     "owner_user_id": "u_018",
+    "share_id": "share_cfg_123",
+    "shared": true,
     "name": "OpenAI 生产配置",
     "base_url": "https://api.openai.com/v1/chat/completions",
     "model": "gpt-4.1-mini",
@@ -546,6 +587,7 @@
   "base_url": "https://api.openai.com/v1/chat/completions",
   "model": "gpt-4.1-mini",
   "api_key": "sk-new",
+  "shared": true,
   "update_api_key": true
 }
 ```
@@ -553,7 +595,8 @@
 说明：
 
 - `update_api_key = false` 或不传时，服务端保持原有 key 不变
-- 编辑已有配置时可只改 `name/base_url/model`
+- 编辑已有配置时可只改 `name/base_url/model/shared`
+- 编辑已有配置时即使不传新 `api_key`，也可以单独更新 `shared`
 
 ### 删除 LLM Config
 
@@ -614,6 +657,10 @@
 }
 ```
 
+说明：
+
+- `llm_config_id` 可以是当前用户自己的配置，也可以是其他用户共享出来的配置
+
 成功响应：
 ```json
 {
@@ -646,6 +693,10 @@
   "llm_config_id": 3
 }
 ```
+
+说明：
+
+- `llm_config_id` 可以切换为当前用户自己的配置，或任意一个 `shared = true` 的配置
 
 成功响应：
 ```json

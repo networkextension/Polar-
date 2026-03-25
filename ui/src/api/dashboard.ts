@@ -60,6 +60,10 @@ export async function fetchLLMConfigs() {
   return requestJson<LLMConfigListResponse>("/api/llm-configs");
 }
 
+export async function fetchAvailableLLMConfigs() {
+  return requestJson<LLMConfigListResponse>("/api/llm-configs/available");
+}
+
 export async function createLLMConfig(payload: LLMConfigPayload) {
   return requestJson<LLMConfigListResponse>("/api/llm-configs", {
     method: "POST",

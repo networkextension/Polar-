@@ -254,6 +254,11 @@
                       <label class="form-label" for="llmConfigSystemPromptInput">测试 Prompt（可选）</label>
                       <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" placeholder="仅用于测试配置连通性，不作为 Bot 运行时 Prompt"></textarea>
 
+                      <label class="form-checkbox" for="llmConfigSharedInput">
+                        <input id="llmConfigSharedInput" type="checkbox" />
+                        <span>共享给其他用户使用这个 LLM Config</span>
+                      </label>
+
                       <div class="site-settings-actions inline-actions">
                         <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
                         <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
