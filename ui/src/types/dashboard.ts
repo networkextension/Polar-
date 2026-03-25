@@ -104,6 +104,7 @@ export type LLMConfigPayload = {
 export type LLMConfig = {
   id: number;
   owner_user_id: string;
+  share_id: string;
   name: string;
   base_url: string;
   model: string;

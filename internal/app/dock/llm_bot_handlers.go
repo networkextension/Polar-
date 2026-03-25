@@ -77,6 +77,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		model,
 		strings.TrimSpace(req.APIKey),
 		strings.TrimSpace(req.SystemPrompt),
+		generateSessionID()[:24],
 		time.Now(),
 	)
 	if err != nil {
@@ -248,4 +249,22 @@ func (s *Server) handleBotUserDelete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Bot 已删除"})
+}
+
+func (s *Server) handleLLMConfigGetByShareID(c *gin.Context) {
+	shareID := c.Param("shareId")
+	if shareID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的分享标识"})
+		return
+	}
+	item, err := s.getLLMConfigByShareID(shareID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if item == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"config": item})
 }

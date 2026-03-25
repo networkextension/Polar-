@@ -252,6 +252,7 @@ func (s *Server) registerRoutes() {
 		api.GET("/llm-configs", s.AuthMiddleware(), s.handleLLMConfigList)
 		api.POST("/llm-configs/test", s.AuthMiddleware(), s.handleLLMConfigTest)
 		api.POST("/llm-configs", s.AuthMiddleware(), s.handleLLMConfigCreate)
+		api.GET("/llm-configs/shared/:shareId", s.AuthMiddleware(), s.handleLLMConfigGetByShareID)
 		api.PUT("/llm-configs/:id", s.AuthMiddleware(), s.handleLLMConfigUpdate)
 		api.DELETE("/llm-configs/:id", s.AuthMiddleware(), s.handleLLMConfigDelete)
 		api.GET("/bots", s.AuthMiddleware(), s.handleBotUserList)
