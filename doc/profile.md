@@ -15,6 +15,7 @@ Profile 模块的目标是让用户在站内拥有可被查看的“个人名片
 - 自己看自己时，重点是“完善资料”
 - 看别人时，重点是“查看资料 + 写 Recommendation”
 - Profile 作为任务模块的配套能力，头像和用户名可直接跳转
+- Recommendation 当前采用“每位作者对同一用户一条，可重复更新覆盖”的模型
 
 ## 2. 核心对象
 
@@ -100,6 +101,7 @@ updated_at | 最近更新时间 | string (ISO8601)
 - 可以查看对方收到的 Recommendation
 - 可以给对方写 Recommendation
 - 再次提交时会覆盖自己之前的 Recommendation
+- 当前前端不会预填你之前写过的内容，但再次提交会更新旧记录
 
 ### 4.3 Recommendation 规则
 
@@ -136,6 +138,17 @@ updated_at | 最近更新时间 | string (ISO8601)
 当前已在 dashboard 顶部加入：
 
 - “我的 Profile” 入口
+
+## 5.4 其他页面入口
+
+当前以下位置也会跳转到 Profile：
+
+- 帖子广场中的作者头像与用户名
+- 帖子详情中的作者头像与用户名
+- 任务申请者列表中的头像与用户名
+- 任务成果列表中的头像与用户名
+
+这些入口的主要目的是让零工任务发布者在选择候选人前先查看资料。
 
 ## 6. 与零工任务模块的关系
 
@@ -197,6 +210,27 @@ Profile 模块重点服务于任务匹配：
 }
 ```
 
+### 7.1.1 获取当前用户基本身份信息
+
+`GET /api/me`
+
+说明：
+
+- 该接口不是 Profile 专属接口，但前端会先用它判断当前登录用户身份
+- 当前返回里已经包含 `bio`
+
+成功响应：
+
+```json
+{
+  "user_id": "u_018",
+  "username": "Bob",
+  "role": "user",
+  "icon_url": "/uploads/icon_u_018.png",
+  "bio": "做过活动执行、打扫卫生、搬运协助类零工，周末时间比较灵活。"
+}
+```
+
 ### 7.2 更新自己的 Profile
 
 `PUT /api/users/me/profile`
@@ -249,6 +283,7 @@ Profile 模块重点服务于任务匹配：
 - `:id` 为被推荐用户 ID
 - 不允许给自己写 Recommendation
 - 同一推荐人再次提交时会覆盖之前内容
+- 当前不是“追加多条评论”，而是“更新我对这个人的 Recommendation”
 
 成功响应：
 
@@ -287,6 +322,11 @@ HTTP 状态码 | 含义 | 场景
 401 | 未登录 | Session 失效
 404 | 用户不存在 | 目标用户不存在
 500 | 服务器错误 | 数据库或服务异常
+
+补充：
+
+- `GET /api/users/:id/profile` 在目标用户不存在时返回 `404`
+- `POST /api/users/:id/recommendations` 在给自己写 Recommendation 时返回 `400`
 
 ## 9. 后续可扩展方向
 

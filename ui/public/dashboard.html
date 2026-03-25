@@ -234,8 +234,8 @@
                   <div class="site-tags-header">
                     <div>
                       <div class="badge">LLM Config</div>
-                      <p class="drawer-help">配置你自己的模型地址、API Key 和 Model。Bot 的运行时 Prompt 现在单独维护在 Bot User 上。</p>
                     </div>
+                    <div id="llmConfigStatus" class="status-text"></div>
                   </div>
                   <div class="site-admin-grid site-admin-grid-wide">
                     <form id="llmConfigForm" class="site-settings-form">
@@ -254,14 +254,11 @@
                       <label class="form-label" for="llmConfigSystemPromptInput">测试 Prompt（可选）</label>
                       <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" placeholder="仅用于测试配置连通性，不作为 Bot 运行时 Prompt"></textarea>
 
-                      <div class="site-settings-actions site-settings-actions-split">
+                      <div class="site-settings-actions inline-actions">
                         <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                        <div class="inline-actions">
-                          <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
-                          <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
-                        </div>
+                        <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
+                        <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
                       </div>
-                      <div id="llmConfigStatus" class="status-text"></div>
                     </form>
                     <ul id="llmConfigList" class="tag-list"></ul>
                   </div>

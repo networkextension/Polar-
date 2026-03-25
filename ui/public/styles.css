@@ -364,13 +364,10 @@ button:hover {
 .site-settings-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 4px;
-}
-
-.site-settings-actions-split {
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
 }
 
 .inline-actions {
@@ -386,6 +383,12 @@ button:hover {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.site-tags-header .status-text {
+  margin-top: 0;
+  text-align: right;
+  max-width: 320px;
 }
 
 .tag-list {
@@ -681,7 +684,7 @@ button:hover {
 }
 
 .settings-center-card {
-  width: min(94vw, 1080px);
+  width: min(95vw, 1296px);
   padding: 0;
   overflow: hidden;
   border-radius: 28px;
@@ -1430,6 +1433,16 @@ button:hover {
   color: var(--muted);
 }
 
+.status-text.status-success {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.status-text.status-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .toolbar input {
   flex: 1;
   margin-bottom: 0;
@@ -1543,7 +1556,7 @@ textarea {
   }
 
   .settings-center-card {
-    width: min(96vw, 1080px);
+    width: min(97vw, 1296px);
     max-height: calc(100vh - 20px);
   }
 

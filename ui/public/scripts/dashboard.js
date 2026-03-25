@@ -111,6 +111,16 @@ let editingBotUserId = null;
 let currentLLMConfigs = [];
 let currentBotUsers = [];
 let activeSettingsSection = "personalization";
+function setStatusMessage(element, message, tone = "default") {
+    element.textContent = message;
+    element.classList.remove("status-success", "status-error");
+    if (tone === "success") {
+        element.classList.add("status-success");
+    }
+    else if (tone === "error") {
+        element.classList.add("status-error");
+    }
+}
 function setModalOpen(modal, open) {
     modal.classList.toggle("open", open);
     modal.setAttribute("aria-hidden", open ? "false" : "true");
@@ -149,7 +159,7 @@ function switchSettingsSection(section) {
         },
         settings: {
             title: "设置",
-            lead: "管理 LLM Config，以及管理员可见的站点 logo、intro、iOS Push 证书和 Tag。",
+            lead: "",
         },
         bots: {
             title: "Bot 管理",
@@ -629,18 +639,18 @@ llmConfigTestBtn.addEventListener("click", async () => {
         system_prompt: llmConfigSystemPromptInput.value.trim(),
     };
     if (!payload.base_url || !payload.model || !payload.api_key) {
-        llmConfigStatus.textContent = "测试前请先填写 Base URL、Model 和 API Key";
+        setStatusMessage(llmConfigStatus, "测试前请先填写 Base URL、Model 和 API Key", "error");
         return;
     }
     llmConfigTestBtn.disabled = true;
     llmConfigSubmitBtn.disabled = true;
-    llmConfigStatus.textContent = "正在测试模型配置...";
+    setStatusMessage(llmConfigStatus, "正在测试模型配置...");
     try {
         const { response, data } = await testLLMConfig(payload);
-        llmConfigStatus.textContent = response.ok ? data.message || "连接成功，模型配置可用" : data.error || "测试失败";
+        setStatusMessage(llmConfigStatus, response.ok ? data.message || "连接成功，模型配置可用" : data.error || "测试失败", response.ok ? "success" : "error");
     }
     catch {
-        llmConfigStatus.textContent = "网络错误，请重试";
+        setStatusMessage(llmConfigStatus, "网络错误，请重试", "error");
     }
     finally {
         llmConfigTestBtn.disabled = false;

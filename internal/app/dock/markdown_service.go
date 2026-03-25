@@ -49,8 +49,9 @@ func buildSystemMarkdownTitle(content string, now time.Time) string {
 		line = strings.TrimLeft(line, "#")
 		line = strings.TrimSpace(line)
 		if line != "" {
-			if len(line) > 60 {
-				line = line[:60]
+			runes := []rune(line)
+			if len(runes) > 60 {
+				line = string(runes[:60])
 			}
 			return line
 		}
@@ -79,8 +80,9 @@ func buildMarkdownPreview(content string, maxLength int) string {
 	if text == "" {
 		return "AI 文档回复"
 	}
-	if len(text) > maxLength {
-		return text[:maxLength] + "..."
+	runes := []rune(text)
+	if len(runes) > maxLength {
+		return string(runes[:maxLength]) + "..."
 	}
 	return text
 }
