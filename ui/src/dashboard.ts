@@ -72,6 +72,11 @@ const cancelIconBtn = byId<HTMLButtonElement>("cancelIconBtn");
 const iconStatus = byId<HTMLElement>("iconStatus");
 const groupName = byId<HTMLElement>("groupName");
 const groupMeta = byId<HTMLElement>("groupMeta");
+const settingsCardAvatar = byId<HTMLImageElement>("settingsCardAvatar");
+const settingsCardName = byId<HTMLElement>("settingsCardName");
+const settingsCardMeta = byId<HTMLElement>("settingsCardMeta");
+const settingsProfileName = byId<HTMLElement>("settingsProfileName");
+const settingsProfileMeta = byId<HTMLElement>("settingsProfileMeta");
 const addTagBtn = byId<HTMLButtonElement>("addTagBtn");
 const tagModal = byId<HTMLElement>("tagModal");
 const tagModalTitle = byId<HTMLElement>("tagModalTitle");
@@ -85,8 +90,11 @@ const tagFormStatus = byId<HTMLElement>("tagFormStatus");
 const tagSubmitBtn = byId<HTMLButtonElement>("tagSubmitBtn");
 const openSiteAdminBtn = byId<HTMLButtonElement>("openSiteAdminBtn");
 const siteAdminModal = byId<HTMLElement>("siteAdminModal");
+const siteAdminModalTitle = byId<HTMLElement>("siteAdminModalTitle");
 const siteAdminModalCloseBtn = byId<HTMLButtonElement>("siteAdminModalCloseBtn");
+const settingsSectionLead = byId<HTMLElement>("settingsSectionLead");
 const siteAdminPanel = byId<HTMLElement>("siteAdminPanel");
+const themeCurrentValue = byId<HTMLElement>("themeCurrentValue");
 const llmConfigForm = byId<HTMLFormElement>("llmConfigForm");
 const llmConfigNameInput = byId<HTMLInputElement>("llmConfigNameInput");
 const llmConfigBaseUrlInput = byId<HTMLInputElement>("llmConfigBaseUrlInput");
@@ -120,6 +128,9 @@ const applePushDevDeleteBtn = byId<HTMLButtonElement>("applePushDevDeleteBtn");
 const applePushProdDeleteBtn = byId<HTMLButtonElement>("applePushProdDeleteBtn");
 const siteAddTagBtnProxy = byId<HTMLButtonElement>("siteAddTagBtnProxy");
 const tagList = byId<HTMLUListElement>("tagList");
+const settingsNavButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-settings-nav]"));
+const settingsPanels = Array.from(document.querySelectorAll<HTMLElement>("[data-settings-panel]"));
+const settingsOpenButtons = Array.from(document.querySelectorAll<HTMLElement>("[data-open-settings-center], #openSiteAdminBtn"));
 
 const iconCtx = iconCanvas.getContext("2d");
 
@@ -141,6 +152,7 @@ let editingLLMConfigId: number | null = null;
 let editingBotUserId: number | null = null;
 let currentLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
+let activeSettingsSection: "profile" | "personalization" | "settings" = "personalization";
 
 function setModalOpen(modal: HTMLElement, open: boolean): void {
   modal.classList.toggle("open", open);
@@ -169,6 +181,35 @@ function setActiveEntryItem(): void {
 
 function syncThemeButton(theme: ThemeName): void {
   themeToggleBtn.textContent = theme === "mono" ? "切换到默认样式" : "切换到黑白样式";
+  themeCurrentValue.textContent = theme === "mono" ? "黑白" : "默认";
+}
+
+function switchSettingsSection(section: "profile" | "personalization" | "settings"): void {
+  activeSettingsSection = section;
+  const titles: Record<typeof activeSettingsSection, { title: string; lead: string }> = {
+    profile: {
+      title: "个人中心",
+      lead: "维护头像、登录方式和最近登录记录，把 Profile 与账户相关信息集中收好。",
+    },
+    personalization: {
+      title: "个性化",
+      lead: "管理界面风格和个人偏好，让工作台更贴近你的使用习惯。",
+    },
+    settings: {
+      title: "设置",
+      lead: "管理站点配置、LLM Config、Bot User 以及管理员可见的站点维护项。",
+    },
+  };
+  settingsNavButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.settingsNav === section);
+  });
+  settingsPanels.forEach((panel) => {
+    const matched = panel.dataset.settingsPanel === section;
+    panel.hidden = !matched;
+    panel.classList.toggle("active", matched);
+  });
+  siteAdminModalTitle.textContent = titles[section].title;
+  settingsSectionLead.textContent = titles[section].lead;
 }
 
 function formatLocation(record: LoginRecord): string {
@@ -368,16 +409,21 @@ async function loadProfile(): Promise<void> {
   welcomeText.textContent = `你好，${data.username}`;
   groupName.textContent = isAdmin ? "管理用户组" : "普通用户组";
   groupMeta.textContent = isAdmin ? "可管理站点信息、Tag 与内容" : "基础浏览与发帖";
+  settingsCardName.textContent = data.username || "当前用户";
+  settingsCardMeta.textContent = isAdmin ? "管理员 · 配置与站点管理" : "普通用户 · Profile 与个性化";
+  settingsProfileName.textContent = data.username || "当前用户";
+  settingsProfileMeta.textContent = isAdmin ? "管理员账号，可维护站点与 AI 配置" : "维护你的个人资料、设备与偏好";
   addTagBtn.disabled = !isAdmin;
   addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
   addTagBtn.hidden = !isAdmin;
   siteAdminPanel.hidden = !isAdmin;
 
+  const avatar = data.icon_url || makeDefaultAvatar(data.username || "U", 160);
   if (data.icon_url) {
     userIcon.src = data.icon_url;
-  } else {
-    userIcon.src = makeDefaultAvatar(data.username || "U", 160);
   }
+  userIcon.src = avatar;
+  settingsCardAvatar.src = avatar;
 }
 
 async function loadSiteAdminData(): Promise<void> {
@@ -447,9 +493,18 @@ function closeTagModal(): void {
   setModalOpen(tagModal, false);
 }
 
-function openSiteAdminModal(): void {
+function openSiteAdminModal(section: "profile" | "personalization" | "settings" = "personalization"): void {
+  switchSettingsSection(section);
   setModalOpen(siteAdminModal, true);
-  llmConfigNameInput.focus();
+  if (section === "settings") {
+    llmConfigNameInput.focus();
+    return;
+  }
+  if (section === "profile") {
+    passkeyRegisterBtn.focus();
+    return;
+  }
+  themeToggleBtn.focus();
 }
 
 function closeSiteAdminModal(): void {
@@ -566,9 +621,23 @@ addTagBtn.addEventListener("click", () => {
   openTagModal();
 });
 
-openSiteAdminBtn.addEventListener("click", openSiteAdminModal);
+settingsOpenButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = (button.dataset.settingsTarget as "profile" | "personalization" | "settings" | undefined) || "personalization";
+    openSiteAdminModal(target);
+  });
+});
 siteAdminModalCloseBtn.addEventListener("click", closeSiteAdminModal);
 query<HTMLElement>(siteAdminModal, ".modal-backdrop").addEventListener("click", closeSiteAdminModal);
+settingsNavButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const target = button.dataset.settingsNav as "profile" | "personalization" | "settings" | undefined;
+    if (!target) {
+      return;
+    }
+    switchSettingsSection(target);
+  });
+});
 
 siteAddTagBtnProxy.addEventListener("click", () => {
   if (!isAdmin) {
@@ -1126,7 +1195,9 @@ saveIconBtn.addEventListener("click", async () => {
         iconStatus.textContent = data.error || "上传失败";
         return;
       }
-      userIcon.src = `${data.icon_url || ""}?v=${Date.now()}`;
+      const nextAvatar = `${data.icon_url || ""}?v=${Date.now()}`;
+      userIcon.src = nextAvatar;
+      settingsCardAvatar.src = nextAvatar;
       iconEditor.classList.remove("active");
       iconFile.value = "";
       iconStatus.textContent = "头像已更新。";
@@ -1191,6 +1262,7 @@ passkeyRegisterBtn.addEventListener("click", async () => {
 const initialTheme = initStoredTheme();
 syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
+switchSettingsSection(activeSettingsSection);
 
 void (async () => {
   await hydrateSiteBrand();

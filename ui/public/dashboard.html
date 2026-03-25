@@ -19,97 +19,72 @@
       </a>
 
       <div class="dashboard">
-      <div class="dashboard-header">
-        <div>
-          <h1>控制台</h1>
-          <p id="welcomeText">正在加载用户信息...</p>
+        <div class="dashboard-header">
+          <div>
+            <h1>控制台</h1>
+            <p id="welcomeText">正在加载用户信息...</p>
+          </div>
+          <div class="header-actions">
+            <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button">记录列表</button>
+            <button class="btn-inline btn-secondary header-nav-link" type="button" data-open-settings-center data-settings-target="profile">Profile / 设置</button>
+            <button id="newEntryBtn" class="btn-inline btn-secondary header-nav-link" type="button">新建 Markdown</button>
+            <a class="btn-inline btn-secondary header-nav-link" href="/markdowns.html">公开 Markdown</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html">帖子</a>
+          </div>
         </div>
-        <div class="header-actions">
-          <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button">记录列表</button>
-          <a class="btn-inline btn-secondary header-nav-link" href="/profile.html">我的 Profile</a>
-          <button id="newEntryBtn" class="btn-inline btn-secondary header-nav-link" type="button">新建 Markdown</button>
-          <a class="btn-inline btn-secondary header-nav-link" href="/markdowns.html">公开 Markdown</a>
-          <a class="btn-inline btn-secondary header-nav-link" href="/posts.html">帖子</a>
-        </div>
-      </div>
 
-      <div class="drawer-layout">
-        <div id="drawerBackdrop" class="drawer-backdrop"></div>
-        <aside id="entryDrawer" class="panel entry-drawer">
-          <div class="drawer-header">
-            <div class="badge">Markdown 记录</div>
-            <button id="drawerCloseBtn" class="btn-inline btn-secondary drawer-close" type="button">收起</button>
-          </div>
-          <div class="drawer-body">
-            <div class="group-card">
-              <div class="badge">用户组</div>
-              <div id="groupName" class="group-name">加载中...</div>
-              <div id="groupMeta" class="group-meta"></div>
-              <button id="addTagBtn" class="btn-secondary group-action-btn" type="button" hidden>新建 Tag</button>
+        <div class="drawer-layout">
+          <div id="drawerBackdrop" class="drawer-backdrop"></div>
+          <aside id="entryDrawer" class="panel entry-drawer">
+            <div class="drawer-header">
+              <div class="badge">Markdown 记录</div>
+              <button id="drawerCloseBtn" class="btn-inline btn-secondary drawer-close" type="button">收起</button>
             </div>
-            <ul id="entryList" class="list"></ul>
-            <button id="loadMoreBtn" class="btn-inline btn-secondary" type="button">加载更多</button>
-            <div class="drawer-section drawer-history-section">
-              <div class="badge">最近登录</div>
-              <ul id="loginHistoryList" class="meta-list"></ul>
-            </div>
-            <div class="drawer-section">
-              <div class="badge">站点管理</div>
-              <p class="drawer-help">集中维护 AI Bot、模型配置，以及管理员可见的站点设置。</p>
-              <button id="openSiteAdminBtn" class="btn-secondary drawer-action-btn" type="button">站点信息 / AI Bot</button>
-            </div>
-          </div>
-          <div class="drawer-footer">
-            <div class="drawer-section">
-              <div class="badge">外观</div>
-              <p class="drawer-help">在默认风格和黑白样式之间切换。</p>
-              <button id="themeToggleBtn" class="btn-secondary drawer-action-btn" type="button">切换到黑白样式</button>
-            </div>
-            <div class="drawer-section">
-              <div class="badge">头像</div>
-              <div class="profile-panel">
-                <img id="userIcon" class="avatar" alt="用户头像" />
-                <div class="profile-meta">
-                  <input id="iconFile" type="file" accept="image/*" />
-                  <div id="iconEditor" class="icon-editor">
-                    <canvas id="iconCanvas" class="icon-canvas" width="160" height="160"></canvas>
-                    <div class="toolbar">
-                      <label for="iconZoom">缩放</label>
-                      <input id="iconZoom" class="range-input" type="range" min="1" max="3" step="0.01" value="1" />
-                    </div>
-                    <div class="toolbar">
-                      <button id="saveIconBtn" class="btn-secondary drawer-action-btn" type="button">保存头像</button>
-                      <button id="cancelIconBtn" class="btn-secondary drawer-action-btn" type="button">取消</button>
-                    </div>
+            <div class="drawer-body">
+              <div class="group-card settings-entry-card">
+                <div class="settings-entry-head">
+                  <img id="settingsCardAvatar" class="avatar avatar-sm" alt="用户头像" />
+                  <div class="settings-entry-copy">
+                    <div id="settingsCardName" class="group-name">加载中...</div>
+                    <div id="settingsCardMeta" class="group-meta"></div>
                   </div>
-                  <div id="iconStatus" class="status-text">支持上传与简单裁切。</div>
+                </div>
+                <div class="settings-entry-actions">
+                  <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="profile">Profile</button>
+                  <button id="openSiteAdminBtn" class="btn-secondary group-action-btn" type="button" data-settings-target="personalization">设置中心</button>
                 </div>
               </div>
+
+              <div class="group-card">
+                <div class="badge">用户组</div>
+                <div id="groupName" class="group-name">加载中...</div>
+                <div id="groupMeta" class="group-meta"></div>
+                <button id="addTagBtn" class="btn-secondary group-action-btn" type="button" hidden>新建 Tag</button>
+              </div>
+
+              <ul id="entryList" class="list"></ul>
+              <button id="loadMoreBtn" class="btn-inline btn-secondary" type="button">加载更多</button>
             </div>
-            <div class="drawer-section">
-              <div class="badge">Passkey</div>
-              <p class="drawer-help">绑定 Passkey 后可使用指纹或人脸快速登录。</p>
-              <button id="passkeyRegisterBtn" class="btn-secondary drawer-action-btn" type="button">绑定 Passkey</button>
-              <div id="passkeyStatus" class="status-text"></div>
+            <div class="drawer-footer">
+              <div class="drawer-section">
+                <div class="badge">快捷入口</div>
+                <p class="drawer-help">快速进入私聊会话列表或联系 AI 助理。</p>
+                <a class="btn-secondary drawer-action-btn" href="/chat.html">私聊</a>
+                <a class="btn-secondary drawer-action-btn" href="/chat.html?user_id=system&username=system">AI 助理</a>
+              </div>
+              <button id="logoutBtn" class="drawer-action-btn" type="button">退出登录</button>
             </div>
-            <div class="drawer-section">
-              <div class="badge">快捷入口</div>
-              <p class="drawer-help">快速进入私聊会话列表或联系 AI 助理。</p>
-              <a class="btn-secondary drawer-action-btn" href="/chat.html">私聊</a>
-              <a class="btn-secondary drawer-action-btn" href="/chat.html?user_id=system&username=system">AI 助理</a>
+          </aside>
+
+          <div class="panel drawer-main">
+            <div class="badge">内容预览</div>
+            <div id="entryContent" class="content-box">请选择侧边栏中的记录</div>
+            <div class="toolbar" style="margin-top: 12px;">
+              <button id="editBtn" class="btn-inline btn-secondary" type="button">编辑</button>
+              <button id="deleteBtn" class="btn-inline" type="button">删除</button>
             </div>
-            <button id="logoutBtn" class="drawer-action-btn" type="button">退出登录</button>
-          </div>
-        </aside>
-        <div class="panel drawer-main">
-          <div class="badge">内容预览</div>
-          <div id="entryContent" class="content-box">请选择侧边栏中的记录</div>
-          <div class="toolbar" style="margin-top: 12px;">
-            <button id="editBtn" class="btn-inline btn-secondary" type="button">编辑</button>
-            <button id="deleteBtn" class="btn-inline" type="button">删除</button>
           </div>
         </div>
-      </div>
       </div>
     </div>
 
@@ -143,142 +118,245 @@
 
     <div id="siteAdminModal" class="modal" aria-hidden="true">
       <div class="modal-backdrop"></div>
-      <div class="modal-card modal-card-wide" role="dialog" aria-modal="true" aria-labelledby="siteAdminModalTitle">
-        <div class="modal-header">
-          <div>
-            <div class="badge">站点管理</div>
-            <h3 id="siteAdminModalTitle" class="modal-title">站点信息 / AI Bot</h3>
-          </div>
-          <button id="siteAdminModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
-        </div>
-        <div class="site-admin-panel">
-          <div class="site-tags-section">
-            <div class="site-tags-header">
+      <div class="modal-card modal-card-wide settings-center-card" role="dialog" aria-modal="true" aria-labelledby="siteAdminModalTitle">
+        <div class="settings-center-shell">
+          <aside class="settings-center-nav">
+            <button id="siteAdminModalCloseBtn" class="settings-center-close" type="button" aria-label="关闭">×</button>
+            <div class="settings-center-nav-title">设置中心</div>
+            <div class="settings-center-nav-list">
+              <button class="settings-center-nav-btn active" type="button" data-settings-nav="profile">
+                <span class="settings-center-nav-icon">◎</span>
+                <span>Profile</span>
+              </button>
+              <button class="settings-center-nav-btn" type="button" data-settings-nav="personalization">
+                <span class="settings-center-nav-icon">◌</span>
+                <span>个性化</span>
+              </button>
+              <button class="settings-center-nav-btn" type="button" data-settings-nav="settings">
+                <span class="settings-center-nav-icon">⚙</span>
+                <span>设置</span>
+              </button>
+            </div>
+          </aside>
+
+          <div class="settings-center-main">
+            <div class="settings-center-header">
               <div>
-                <div class="badge">LLM Config</div>
-                <p class="drawer-help">配置你自己的模型地址、API Key、Model 和系统提示词。</p>
+                <div class="badge">偏好与管理</div>
+                <h3 id="siteAdminModalTitle" class="modal-title">个人中心</h3>
+                <p id="settingsSectionLead" class="settings-center-lead">维护你的头像、登录方式、界面风格和站点相关配置。</p>
               </div>
             </div>
-            <div class="site-admin-grid site-admin-grid-wide">
-              <form id="llmConfigForm" class="site-settings-form">
-                <label class="form-label" for="llmConfigNameInput">配置名称</label>
-                <input id="llmConfigNameInput" class="input" type="text" maxlength="60" placeholder="例如：OpenAI 生产配置" />
 
-                <label class="form-label" for="llmConfigBaseUrlInput">Base URL</label>
-                <input id="llmConfigBaseUrlInput" class="input" type="url" maxlength="300" placeholder="https://api.openai.com/v1/chat/completions" />
-
-                <label class="form-label" for="llmConfigModelInput">Model</label>
-                <input id="llmConfigModelInput" class="input" type="text" maxlength="120" placeholder="gpt-4.1-mini" />
-
-                <label class="form-label" for="llmConfigApiKeyInput">API Key</label>
-                <input id="llmConfigApiKeyInput" class="input" type="password" maxlength="300" placeholder="新增时建议填写，编辑时留空表示保持原值" />
-
-                <label class="form-label" for="llmConfigSystemPromptInput">System Prompt</label>
-                <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" placeholder="告诉这个 Bot 应该如何回答"></textarea>
-
-                <div class="site-settings-actions site-settings-actions-split">
-                  <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                  <div class="inline-actions">
-                    <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
-                    <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
+            <section class="settings-panel active" data-settings-panel="profile">
+              <div class="settings-section-card">
+                <div class="settings-profile-hero">
+                  <img id="userIcon" class="avatar settings-avatar-lg" alt="用户头像" />
+                  <div class="settings-profile-copy">
+                    <div id="settingsProfileName" class="settings-profile-name">加载中...</div>
+                    <div id="settingsProfileMeta" class="settings-profile-meta">准备你的个人信息和登录方式</div>
+                    <div class="inline-actions">
+                      <a class="btn-inline btn-secondary" href="/profile.html">查看公开 Profile</a>
+                      <label class="btn-inline btn-secondary settings-upload-trigger" for="iconFile">更换头像</label>
+                    </div>
                   </div>
                 </div>
-                <div id="llmConfigStatus" class="status-text"></div>
-              </form>
-              <ul id="llmConfigList" class="tag-list"></ul>
-            </div>
-          </div>
-
-          <div class="site-tags-section">
-            <div class="site-tags-header">
-              <div>
-                <div class="badge">Bot User</div>
-                <p class="drawer-help">每个 Bot 都是一个可私聊的用户，绑定配置后就能直接在消息里使用。</p>
-              </div>
-            </div>
-            <div class="site-admin-grid site-admin-grid-wide">
-              <form id="botUserForm" class="site-settings-form">
-                <label class="form-label" for="botUserNameInput">Bot 名称</label>
-                <input id="botUserNameInput" class="input" type="text" maxlength="60" placeholder="例如：翻译助手" />
-
-                <label class="form-label" for="botUserConfigSelect">绑定配置</label>
-                <select id="botUserConfigSelect" class="input"></select>
-
-                <label class="form-label" for="botUserDescriptionInput">Bot 简介</label>
-                <textarea id="botUserDescriptionInput" class="input textarea" rows="4" maxlength="500" placeholder="告诉用户这个 Bot 擅长做什么"></textarea>
-
-                <div class="site-settings-actions site-settings-actions-split">
-                  <button id="botUserResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                  <button id="botUserSubmitBtn" class="btn-secondary" type="submit">保存 Bot</button>
+                <input id="iconFile" type="file" accept="image/*" hidden />
+                <div id="iconEditor" class="icon-editor">
+                  <canvas id="iconCanvas" class="icon-canvas" width="160" height="160"></canvas>
+                  <div class="toolbar">
+                    <label for="iconZoom">缩放</label>
+                    <input id="iconZoom" class="range-input" type="range" min="1" max="3" step="0.01" value="1" />
+                  </div>
+                  <div class="toolbar">
+                    <button id="saveIconBtn" class="btn-secondary btn-inline" type="button">保存头像</button>
+                    <button id="cancelIconBtn" class="btn-secondary btn-inline" type="button">取消</button>
+                  </div>
                 </div>
-                <div id="botUserStatus" class="status-text"></div>
-              </form>
-              <ul id="botUserList" class="tag-list"></ul>
-            </div>
-          </div>
-
-        <div id="siteAdminPanel" class="site-admin-panel" hidden>
-          <div class="site-admin-grid">
-            <div class="site-identity-card">
-              <img id="siteIconPreview" class="site-icon" alt="站点图标" />
-              <div class="site-icon-tools">
-                <label class="form-label" for="siteIconFile">站点图标</label>
-                <input id="siteIconFile" class="input" type="file" accept="image/*" />
-                <p class="drawer-help">建议使用方形图标，上传后会立即生效。</p>
+                <div id="iconStatus" class="status-text">支持上传与简单裁切。</div>
               </div>
-            </div>
-            <div class="site-settings-form">
-              <label class="form-label" for="siteNameInput">站点名称</label>
-              <input id="siteNameInput" class="input" type="text" maxlength="60" placeholder="输入站点名称" />
 
-              <label class="form-label" for="siteDescriptionInput">站点介绍</label>
-              <textarea id="siteDescriptionInput" class="input textarea" rows="4" maxlength="300" placeholder="一句话介绍你的站点"></textarea>
-
-              <div class="site-settings-actions">
-                <button id="saveSiteBtn" class="btn-secondary" type="button">保存站点信息</button>
+              <div class="settings-section-card">
+                <div class="settings-section-heading">
+                  <div>
+                    <div class="settings-section-title">账户安全</div>
+                    <p class="settings-section-text">绑定 Passkey 后可使用指纹或人脸快速登录。</p>
+                  </div>
+                  <button id="passkeyRegisterBtn" class="btn-inline btn-secondary" type="button">绑定 Passkey</button>
+                </div>
+                <div id="passkeyStatus" class="status-text"></div>
               </div>
-              <div id="siteStatus" class="status-text"></div>
-            </div>
-          </div>
 
-          <div class="site-tags-section">
-            <div class="site-tags-header">
-              <div>
-                <div class="badge">Apple Push 证书</div>
-                <p class="drawer-help">为后续 APNs 推送预先维护开发环境与生产环境证书。</p>
+              <div class="settings-section-card">
+                <div class="settings-section-heading">
+                  <div>
+                    <div class="settings-section-title">最近登录</div>
+                    <p class="settings-section-text">查看最近登录设备、IP 和位置记录。</p>
+                  </div>
+                </div>
+                <ul id="loginHistoryList" class="meta-list"></ul>
               </div>
-            </div>
-            <div class="site-admin-grid">
-              <div class="site-settings-form">
-                <label class="form-label" for="applePushDevFile">开发环境证书（dev）</label>
-                <input id="applePushDevFile" class="input" type="file" accept=".p8,.p12,.pem,.cer,.crt,.key" />
-                <p id="applePushDevMeta" class="drawer-help">未上传</p>
-                <div class="site-settings-actions">
-                  <button id="applePushDevDeleteBtn" class="btn-inline btn-secondary" type="button">删除 dev 证书</button>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="personalization" hidden>
+              <div class="settings-section-card">
+                <div class="settings-row">
+                  <div>
+                    <div class="settings-row-title">界面样式</div>
+                    <div class="settings-row-text">在默认风格和黑白风格之间切换，立即预览页面变化。</div>
+                  </div>
+                  <div class="settings-row-action">
+                    <span id="themeCurrentValue" class="settings-value-pill">默认</span>
+                    <button id="themeToggleBtn" class="btn-inline btn-secondary" type="button">切换到黑白样式</button>
+                  </div>
                 </div>
               </div>
-              <div class="site-settings-form">
-                <label class="form-label" for="applePushProdFile">生产环境证书（prod）</label>
-                <input id="applePushProdFile" class="input" type="file" accept=".p8,.p12,.pem,.cer,.crt,.key" />
-                <p id="applePushProdMeta" class="drawer-help">未上传</p>
-                <div class="site-settings-actions">
-                  <button id="applePushProdDeleteBtn" class="btn-inline btn-secondary" type="button">删除 prod 证书</button>
+
+              <div class="settings-section-card">
+                <div class="settings-row">
+                  <div>
+                    <div class="settings-row-title">内容浏览习惯</div>
+                    <div class="settings-row-text">当前保持清爽、轻量的工作台布局，后续可继续扩展更多个性化选项。</div>
+                  </div>
+                  <div class="settings-row-action">
+                    <span class="settings-value-pill">默认</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            </section>
 
-          <div class="site-tags-section">
-            <div class="site-tags-header">
-              <div>
-                <div class="badge">Tag 管理</div>
-                <p class="drawer-help">可新增、编辑或删除站点内的内容标签。</p>
+            <section class="settings-panel" data-settings-panel="settings" hidden>
+              <div class="site-admin-panel">
+                <div class="site-tags-section">
+                  <div class="site-tags-header">
+                    <div>
+                      <div class="badge">LLM Config</div>
+                      <p class="drawer-help">配置你自己的模型地址、API Key、Model 和系统提示词。</p>
+                    </div>
+                  </div>
+                  <div class="site-admin-grid site-admin-grid-wide">
+                    <form id="llmConfigForm" class="site-settings-form">
+                      <label class="form-label" for="llmConfigNameInput">配置名称</label>
+                      <input id="llmConfigNameInput" class="input" type="text" maxlength="60" placeholder="例如：OpenAI 生产配置" />
+
+                      <label class="form-label" for="llmConfigBaseUrlInput">Base URL</label>
+                      <input id="llmConfigBaseUrlInput" class="input" type="url" maxlength="300" placeholder="https://api.openai.com/v1/chat/completions" />
+
+                      <label class="form-label" for="llmConfigModelInput">Model</label>
+                      <input id="llmConfigModelInput" class="input" type="text" maxlength="120" placeholder="gpt-4.1-mini" />
+
+                      <label class="form-label" for="llmConfigApiKeyInput">API Key</label>
+                      <input id="llmConfigApiKeyInput" class="input" type="password" maxlength="300" placeholder="新增时建议填写，编辑时留空表示保持原值" />
+
+                      <label class="form-label" for="llmConfigSystemPromptInput">System Prompt</label>
+                      <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" placeholder="告诉这个 Bot 应该如何回答"></textarea>
+
+                      <div class="site-settings-actions site-settings-actions-split">
+                        <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                        <div class="inline-actions">
+                          <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
+                          <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
+                        </div>
+                      </div>
+                      <div id="llmConfigStatus" class="status-text"></div>
+                    </form>
+                    <ul id="llmConfigList" class="tag-list"></ul>
+                  </div>
+                </div>
+
+                <div class="site-tags-section">
+                  <div class="site-tags-header">
+                    <div>
+                      <div class="badge">Bot User</div>
+                      <p class="drawer-help">每个 Bot 都是一个可私聊的用户，绑定配置后就能直接在消息里使用。</p>
+                    </div>
+                  </div>
+                  <div class="site-admin-grid site-admin-grid-wide">
+                    <form id="botUserForm" class="site-settings-form">
+                      <label class="form-label" for="botUserNameInput">Bot 名称</label>
+                      <input id="botUserNameInput" class="input" type="text" maxlength="60" placeholder="例如：翻译助手" />
+
+                      <label class="form-label" for="botUserConfigSelect">绑定配置</label>
+                      <select id="botUserConfigSelect" class="input"></select>
+
+                      <label class="form-label" for="botUserDescriptionInput">Bot 简介</label>
+                      <textarea id="botUserDescriptionInput" class="input textarea" rows="4" maxlength="500" placeholder="告诉用户这个 Bot 擅长做什么"></textarea>
+
+                      <div class="site-settings-actions site-settings-actions-split">
+                        <button id="botUserResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                        <button id="botUserSubmitBtn" class="btn-secondary" type="submit">保存 Bot</button>
+                      </div>
+                      <div id="botUserStatus" class="status-text"></div>
+                    </form>
+                    <ul id="botUserList" class="tag-list"></ul>
+                  </div>
+                </div>
+
+                <div id="siteAdminPanel" class="site-admin-panel" hidden>
+                  <div class="site-admin-grid">
+                    <div class="site-identity-card">
+                      <img id="siteIconPreview" class="site-icon" alt="站点图标" />
+                      <div class="site-icon-tools">
+                        <label class="form-label" for="siteIconFile">站点图标</label>
+                        <input id="siteIconFile" class="input" type="file" accept="image/*" />
+                        <p class="drawer-help">建议使用方形图标，上传后会立即生效。</p>
+                      </div>
+                    </div>
+                    <div class="site-settings-form">
+                      <label class="form-label" for="siteNameInput">站点名称</label>
+                      <input id="siteNameInput" class="input" type="text" maxlength="60" placeholder="输入站点名称" />
+
+                      <label class="form-label" for="siteDescriptionInput">站点介绍</label>
+                      <textarea id="siteDescriptionInput" class="input textarea" rows="4" maxlength="300" placeholder="一句话介绍你的站点"></textarea>
+
+                      <div class="site-settings-actions">
+                        <button id="saveSiteBtn" class="btn-secondary" type="button">保存站点信息</button>
+                      </div>
+                      <div id="siteStatus" class="status-text"></div>
+                    </div>
+                  </div>
+
+                  <div class="site-tags-section">
+                    <div class="site-tags-header">
+                      <div>
+                        <div class="badge">Apple Push 证书</div>
+                        <p class="drawer-help">为后续 APNs 推送预先维护开发环境与生产环境证书。</p>
+                      </div>
+                    </div>
+                    <div class="site-admin-grid">
+                      <div class="site-settings-form">
+                        <label class="form-label" for="applePushDevFile">开发环境证书（dev）</label>
+                        <input id="applePushDevFile" class="input" type="file" accept=".p8,.p12,.pem,.cer,.crt,.key" />
+                        <p id="applePushDevMeta" class="drawer-help">未上传</p>
+                        <div class="site-settings-actions">
+                          <button id="applePushDevDeleteBtn" class="btn-inline btn-secondary" type="button">删除 dev 证书</button>
+                        </div>
+                      </div>
+                      <div class="site-settings-form">
+                        <label class="form-label" for="applePushProdFile">生产环境证书（prod）</label>
+                        <input id="applePushProdFile" class="input" type="file" accept=".p8,.p12,.pem,.cer,.crt,.key" />
+                        <p id="applePushProdMeta" class="drawer-help">未上传</p>
+                        <div class="site-settings-actions">
+                          <button id="applePushProdDeleteBtn" class="btn-inline btn-secondary" type="button">删除 prod 证书</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="site-tags-section">
+                    <div class="site-tags-header">
+                      <div>
+                        <div class="badge">Tag 管理</div>
+                        <p class="drawer-help">可新增、编辑或删除站点内的内容标签。</p>
+                      </div>
+                      <button class="btn-inline btn-secondary" type="button" id="siteAddTagBtnProxy">新建 Tag</button>
+                    </div>
+                    <ul id="tagList" class="tag-list"></ul>
+                  </div>
+                </div>
               </div>
-              <button class="btn-inline btn-secondary" type="button" id="siteAddTagBtnProxy">新建 Tag</button>
-            </div>
-            <ul id="tagList" class="tag-list"></ul>
+            </section>
           </div>
-        </div>
         </div>
       </div>
     </div>
