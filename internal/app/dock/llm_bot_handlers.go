@@ -58,6 +58,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		Model        string `json:"model" binding:"required"`
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
+		Shared       bool   `json:"shared"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
@@ -78,6 +79,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		strings.TrimSpace(req.APIKey),
 		strings.TrimSpace(req.SystemPrompt),
 		generateSessionID()[:24],
+		req.Shared,
 		time.Now(),
 	)
 	if err != nil {
@@ -101,6 +103,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		Model        string `json:"model" binding:"required"`
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
+		Shared       bool   `json:"shared"`
 		UpdateAPIKey bool   `json:"update_api_key"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -121,6 +124,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		model,
 		strings.TrimSpace(req.APIKey),
 		strings.TrimSpace(req.SystemPrompt),
+		req.Shared,
 		req.UpdateAPIKey,
 		time.Now(),
 	)
@@ -249,6 +253,17 @@ func (s *Server) handleBotUserDelete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Bot 已删除"})
+}
+
+func (s *Server) handleAvailableLLMConfigList(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, _ := userID.(string)
+	items, err := s.listAvailableLLMConfigs(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"configs": items})
 }
 
 func (s *Server) handleLLMConfigGetByShareID(c *gin.Context) {

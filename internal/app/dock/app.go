@@ -250,6 +250,7 @@ func (s *Server) registerRoutes() {
 		api.POST("/site-settings/apple-push-cert", s.AuthMiddleware(), s.AdminMiddleware(), s.handleApplePushCertificateUpload)
 		api.DELETE("/site-settings/apple-push-cert", s.AuthMiddleware(), s.AdminMiddleware(), s.handleApplePushCertificateDelete)
 		api.GET("/llm-configs", s.AuthMiddleware(), s.handleLLMConfigList)
+		api.GET("/llm-configs/available", s.AuthMiddleware(), s.handleAvailableLLMConfigList)
 		api.POST("/llm-configs/test", s.AuthMiddleware(), s.handleLLMConfigTest)
 		api.POST("/llm-configs", s.AuthMiddleware(), s.handleLLMConfigCreate)
 		api.GET("/llm-configs/shared/:shareId", s.AuthMiddleware(), s.handleLLMConfigGetByShareID)

@@ -101,6 +101,7 @@ type LLMConfig struct {
 	ID           int64     `json:"id"`
 	OwnerUserID  string    `json:"owner_user_id"`
 	ShareID      string    `json:"share_id"`
+	Shared       bool      `json:"shared"`
 	Name         string    `json:"name"`
 	BaseURL      string    `json:"base_url"`
 	Model        string    `json:"model"`
@@ -461,6 +462,8 @@ ALTER TABLE bot_users
 
 ALTER TABLE llm_configs
 	ADD COLUMN IF NOT EXISTS share_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE llm_configs
+	ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS posts (
 	id BIGSERIAL PRIMARY KEY,
@@ -801,7 +804,7 @@ func (s *Server) getUserByUsername(username string) (*User, error) {
 
 func (s *Server) listLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
 	rows, err := s.db.Query(
-		`SELECT id, owner_user_id, share_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE owner_user_id = $1
 		  ORDER BY updated_at DESC, id DESC`,
@@ -815,7 +818,7 @@ func (s *Server) listLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
 	items := make([]LLMConfig, 0)
 	for rows.Next() {
 		var item LLMConfig
-		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -827,12 +830,12 @@ func (s *Server) getLLMConfigForOwner(ownerUserID string, id int64) (*LLMConfig,
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
-		`SELECT id, owner_user_id, share_id, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE id = $1 AND owner_user_id = $2`,
 		id,
 		ownerUserID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", nil
@@ -846,12 +849,12 @@ func (s *Server) getLLMConfigForBot(botUserID string) (*LLMConfig, string, error
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
-		`SELECT c.id, c.owner_user_id, c.share_id, c.name, c.base_url, c.model, c.api_key, c.system_prompt, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
+		`SELECT c.id, c.owner_user_id, c.share_id, c.shared, c.name, c.base_url, c.model, c.api_key, c.system_prompt, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
 		   FROM bot_users b
 		   JOIN llm_configs c ON c.id = b.llm_config_id
 		  WHERE b.bot_user_id = $1`,
 		botUserID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", nil
@@ -861,36 +864,37 @@ func (s *Server) getLLMConfigForBot(botUserID string) (*LLMConfig, string, error
 	return &item, apiKey, nil
 }
 
-func (s *Server) createLLMConfig(ownerUserID, name, baseURL, model, apiKey, systemPrompt, shareID string, now time.Time) (*LLMConfig, error) {
+func (s *Server) createLLMConfig(ownerUserID, name, baseURL, model, apiKey, systemPrompt, shareID string, shared bool, now time.Time) (*LLMConfig, error) {
 	var item LLMConfig
 	err := s.db.QueryRow(
-		`INSERT INTO llm_configs (owner_user_id, share_id, name, base_url, model, api_key, system_prompt, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-		 RETURNING id, owner_user_id, share_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`,
-		ownerUserID, shareID, name, baseURL, model, apiKey, systemPrompt, now,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+		`INSERT INTO llm_configs (owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+		 RETURNING id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`,
+		ownerUserID, shareID, shared, name, baseURL, model, apiKey, systemPrompt, now,
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
-func (s *Server) updateLLMConfig(ownerUserID string, id int64, name, baseURL, model, apiKey, systemPrompt string, replaceAPIKey bool, now time.Time) (*LLMConfig, error) {
+func (s *Server) updateLLMConfig(ownerUserID string, id int64, name, baseURL, model, apiKey, systemPrompt string, shared, replaceAPIKey bool, now time.Time) (*LLMConfig, error) {
 	query := `UPDATE llm_configs
 	             SET name = $3,
 	                 base_url = $4,
 	                 model = $5,
 	                 system_prompt = $6,
-	                 updated_at = $7`
-	args := []any{id, ownerUserID, name, baseURL, model, systemPrompt, now}
+	                 shared = $7,
+	                 updated_at = $8`
+	args := []any{id, ownerUserID, name, baseURL, model, systemPrompt, shared, now}
 	if replaceAPIKey {
-		query += `, api_key = $8`
+		query += `, api_key = $9`
 		args = append(args, apiKey)
 	}
 	query += ` WHERE id = $1 AND owner_user_id = $2
-	           RETURNING id, owner_user_id, share_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`
+	           RETURNING id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`
 	var item LLMConfig
-	err := s.db.QueryRow(query, args...).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	err := s.db.QueryRow(query, args...).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -912,14 +916,37 @@ func (s *Server) deleteLLMConfig(ownerUserID string, id int64) (bool, error) {
 	return affected > 0, nil
 }
 
+func (s *Server) listAvailableLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
+	rows, err := s.db.Query(
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		   FROM llm_configs
+		  WHERE owner_user_id = $1 OR shared = TRUE
+		  ORDER BY (owner_user_id = $1) DESC, updated_at DESC, id DESC`,
+		ownerUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]LLMConfig, 0)
+	for rows.Next() {
+		var item LLMConfig
+		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *Server) getLLMConfigByShareID(shareID string) (*LLMConfig, error) {
 	var item LLMConfig
 	err := s.db.QueryRow(
-		`SELECT id, owner_user_id, share_id, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE share_id = $1 AND share_id <> ''`,
 		shareID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -3215,7 +3242,7 @@ func (s *Server) updateLLMThreadTitle(chatThreadID int64, ownerUserID string, ll
 func (s *Server) updateLLMThreadConfig(chatThreadID int64, ownerUserID string, llmThreadID, llmConfigID int64, now time.Time) (*LLMThread, error) {
 	var configName, configModel string
 	if err := s.db.QueryRow(
-		`SELECT name, model FROM llm_configs WHERE id = $1 AND owner_user_id = $2`,
+		`SELECT name, model FROM llm_configs WHERE id = $1 AND (owner_user_id = $2 OR shared = TRUE)`,
 		llmConfigID,
 		ownerUserID,
 	).Scan(&configName, &configModel); err != nil {
