@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,6 +66,34 @@ type aiChatCompletionResponse struct {
 		Message aiChatCompletionMessage `json:"message"`
 	} `json:"choices"`
 	Error json.RawMessage `json:"error,omitempty"`
+}
+
+type aiProvider string
+
+const (
+	aiProviderOpenAICompatible aiProvider = "openai_compatible"
+	aiProviderGemini           aiProvider = "gemini"
+)
+
+type geminiGenerateContentRequest struct {
+	SystemInstruction *geminiContent  `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent `json:"contents"`
+}
+
+type geminiGenerateContentResponse struct {
+	Candidates []struct {
+		Content geminiContent `json:"content"`
+	} `json:"candidates"`
+	Error json.RawMessage `json:"error,omitempty"`
+}
+
+type geminiContent struct {
+	Role  string       `json:"role,omitempty"`
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text,omitempty"`
 }
 
 func newAIAgent(server *Server, cfg Config) *aiAgent {
@@ -219,6 +248,15 @@ func (a *aiAgent) testRuntimeConfig(runtimeConfig aiRuntimeConfig) error {
 }
 
 func (a *aiAgent) requestChatCompletion(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
+	switch detectAIProvider(runtimeConfig.BaseURL) {
+	case aiProviderGemini:
+		return a.requestGeminiContent(runtimeConfig, payload)
+	default:
+		return a.requestOpenAICompatibleChatCompletion(runtimeConfig, payload)
+	}
+}
+
+func (a *aiAgent) requestOpenAICompatibleChatCompletion(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -255,6 +293,63 @@ func (a *aiAgent) requestChatCompletion(runtimeConfig aiRuntimeConfig, payload a
 		return nil, fmt.Errorf("ai api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
 	}
 	return &result, nil
+}
+
+func (a *aiAgent) requestGeminiContent(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
+	reqURL, err := buildGeminiRequestURL(runtimeConfig.BaseURL, runtimeConfig.Model, runtimeConfig.APIKey)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyPayload := convertToGeminiRequest(payload)
+	body, err := json.Marshal(bodyPayload)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent request: provider=gemini url=%s model=%s payload=%s", reqURL, runtimeConfig.Model, compactLogJSON(body))
+
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent response: provider=gemini status=%d body=%s", resp.StatusCode, compactLogJSON(responseBody))
+
+	var result geminiGenerateContentResponse
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		if message := parseAIErrorMessage(result.Error); message != "" {
+			return nil, errors.New(message)
+		}
+		return nil, fmt.Errorf("gemini api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+
+	text := extractGeminiResponseText(result)
+	return &aiChatCompletionResponse{
+		Choices: []struct {
+			Message aiChatCompletionMessage `json:"message"`
+		}{
+			{
+				Message: aiChatCompletionMessage{
+					Role:    "assistant",
+					Content: text,
+				},
+			},
+		},
+	}, nil
 }
 
 func (a *aiAgent) runtimeConfig(threadID int64, llmThreadID *int64, responderUserID string) (aiRuntimeConfig, error) {
@@ -353,6 +448,111 @@ func parseAIErrorMessage(raw json.RawMessage) string {
 	}
 
 	return strings.TrimSpace(string(raw))
+}
+
+func detectAIProvider(baseURL string) aiProvider {
+	text := strings.ToLower(strings.TrimSpace(baseURL))
+	if strings.Contains(text, "generativelanguage.googleapis.com") || strings.Contains(text, "googleapis.com") && strings.Contains(text, "generatecontent") {
+		return aiProviderGemini
+	}
+	return aiProviderOpenAICompatible
+}
+
+func buildGeminiRequestURL(baseURL, model, apiKey string) (string, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	model = strings.TrimSpace(model)
+	apiKey = strings.TrimSpace(apiKey)
+	if baseURL == "" || model == "" || apiKey == "" {
+		return "", errors.New("Gemini 配置缺少 Base URL、Model 或 API Key")
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	path := strings.TrimRight(parsed.Path, "/")
+	switch {
+	case strings.Contains(path, ":generateContent"):
+		if idx := strings.Index(path, "/models/"); idx >= 0 {
+			prefix := path[:idx+len("/models/")]
+			suffix := path[strings.Index(path, ":generateContent"):]
+			path = prefix + url.PathEscape(model) + suffix
+		}
+	case strings.HasSuffix(path, "/models"):
+		path = path + "/" + url.PathEscape(model) + ":generateContent"
+	case strings.Contains(path, "/models/"):
+		if !strings.HasSuffix(path, "/"+model) {
+			path = path + "/" + url.PathEscape(model)
+		}
+		path = path + ":generateContent"
+	default:
+		path = path + "/models/" + url.PathEscape(model) + ":generateContent"
+	}
+	parsed.Path = path
+
+	query := parsed.Query()
+	if query.Get("key") == "" {
+		query.Set("key", apiKey)
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
+}
+
+func convertToGeminiRequest(payload aiChatCompletionRequest) geminiGenerateContentRequest {
+	req := geminiGenerateContentRequest{
+		Contents: make([]geminiContent, 0, len(payload.Messages)),
+	}
+
+	var systemTexts []string
+	for _, msg := range payload.Messages {
+		text := strings.TrimSpace(msg.Content)
+		if text == "" {
+			continue
+		}
+		switch strings.TrimSpace(msg.Role) {
+		case "system":
+			systemTexts = append(systemTexts, text)
+		case "assistant", "model":
+			req.Contents = append(req.Contents, geminiContent{
+				Role: "model",
+				Parts: []geminiPart{
+					{Text: text},
+				},
+			})
+		default:
+			req.Contents = append(req.Contents, geminiContent{
+				Role: "user",
+				Parts: []geminiPart{
+					{Text: text},
+				},
+			})
+		}
+	}
+
+	if len(systemTexts) > 0 {
+		req.SystemInstruction = &geminiContent{
+			Parts: []geminiPart{
+				{Text: strings.Join(systemTexts, "\n\n")},
+			},
+		}
+	}
+	return req
+}
+
+func extractGeminiResponseText(result geminiGenerateContentResponse) string {
+	if len(result.Candidates) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, part := range result.Candidates[0].Content.Parts {
+		text := strings.TrimSpace(part.Text)
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 func (a *aiAgent) buildContext(threadID int64, llmThreadID *int64) (string, error) {

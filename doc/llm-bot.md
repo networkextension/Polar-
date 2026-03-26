@@ -75,6 +75,56 @@
 - `api_key` 由服务端保存
 - 接口不会把明文 key 回传前端
 - 目前尚未加密存储，后续可切换为 env key 或独立密钥加密
+- 当前运行时支持两类接入：
+  - OpenAI Chat Completions 兼容接口
+  - Gemini 原生 `generateContent` 接口
+
+### Gemini 支持说明
+
+Gemini 不能直接按 OpenAI Chat Completions 的请求格式调用。
+
+例如 Gemini 原生接口通常像这样：
+
+```bash
+curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$API_KEY" \
+  -H 'Content-Type: application/json' \
+  -X POST \
+  -d '{
+    "contents": [
+      {"role": "user", "parts": [{"text": "Who is the CEO of Google?"}]},
+      {"role": "model", "parts": [{"text": "Sundar Pichai is the CEO of Google and Alphabet."}]},
+      {"role": "user", "parts": [{"text": "How long has he been in that role?"}]}
+    ]
+  }'
+```
+
+而当前站内 `LLM Config` 在服务端统一抽象成“同一个聊天请求”，运行时再按 provider 转换：
+
+- OpenAI 兼容接口：
+  - 发送 `model + messages`
+  - 使用 `Authorization: Bearer <api_key>`
+- Gemini 原生接口：
+  - 发送 `systemInstruction + contents`
+  - 使用 `?key=<api_key>`
+  - 自动把内部 `system / user / assistant` 消息映射成 Gemini 的 `systemInstruction / user / model`
+
+也就是说：
+
+- `LLM Config` 仍然保持 `Base URL / Model / API Key`
+- 但 Gemini 不再要求你手动把完整 curl 请求拼到 `Base URL`
+- 服务端会根据 Google Gemini 地址自动切到 Gemini 请求格式
+
+推荐填写方式：
+
+- `Base URL`：`https://generativelanguage.googleapis.com/v1beta`
+  - 也可以填到 `/v1beta/models`
+  - 如果你已经填的是完整 `...:generateContent` 地址，也可以继续工作
+- `Model`：`gemini-2.5-flash`
+- `API Key`：Google AI Studio 或 Gemini API key
+
+服务端最终会自动拼成：
+
+- `https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent?key=<api_key>`
 
 ### `bot_users`
 
