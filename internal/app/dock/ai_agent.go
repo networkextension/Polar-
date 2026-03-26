@@ -73,6 +73,7 @@ type aiProvider string
 const (
 	aiProviderOpenAICompatible aiProvider = "openai_compatible"
 	aiProviderGemini           aiProvider = "gemini"
+	aiProviderXAIResponses     aiProvider = "xai_responses"
 )
 
 type geminiGenerateContentRequest struct {
@@ -93,6 +94,38 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
+	Text string `json:"text,omitempty"`
+}
+
+type xAIResponsesRequest struct {
+	Model string                 `json:"model"`
+	Input []xAIResponsesMessage  `json:"input"`
+	Tools []xAIResponsesToolSpec `json:"tools,omitempty"`
+}
+
+type xAIResponsesMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type xAIResponsesToolSpec struct {
+	Type string `json:"type"`
+}
+
+type xAIResponsesResponse struct {
+	OutputText string               `json:"output_text,omitempty"`
+	Output     []xAIResponsesOutput `json:"output,omitempty"`
+	Error      json.RawMessage      `json:"error,omitempty"`
+}
+
+type xAIResponsesOutput struct {
+	Type    string                      `json:"type,omitempty"`
+	Text    string                      `json:"text,omitempty"`
+	Content []xAIResponsesOutputContent `json:"content,omitempty"`
+}
+
+type xAIResponsesOutputContent struct {
+	Type string `json:"type,omitempty"`
 	Text string `json:"text,omitempty"`
 }
 
@@ -251,6 +284,8 @@ func (a *aiAgent) requestChatCompletion(runtimeConfig aiRuntimeConfig, payload a
 	switch detectAIProvider(runtimeConfig.BaseURL) {
 	case aiProviderGemini:
 		return a.requestGeminiContent(runtimeConfig, payload)
+	case aiProviderXAIResponses:
+		return a.requestXAIResponses(runtimeConfig, payload)
 	default:
 		return a.requestOpenAICompatibleChatCompletion(runtimeConfig, payload)
 	}
@@ -338,6 +373,64 @@ func (a *aiAgent) requestGeminiContent(runtimeConfig aiRuntimeConfig, payload ai
 	}
 
 	text := extractGeminiResponseText(result)
+	return &aiChatCompletionResponse{
+		Choices: []struct {
+			Message aiChatCompletionMessage `json:"message"`
+		}{
+			{
+				Message: aiChatCompletionMessage{
+					Role:    "assistant",
+					Content: text,
+				},
+			},
+		},
+	}, nil
+}
+
+func (a *aiAgent) requestXAIResponses(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
+	reqURL, err := buildXAIResponsesRequestURL(runtimeConfig.BaseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyPayload := convertToXAIResponsesRequest(payload)
+	body, err := json.Marshal(bodyPayload)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent request: provider=xai url=%s model=%s payload=%s", reqURL, runtimeConfig.Model, compactLogJSON(body))
+
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+runtimeConfig.APIKey)
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent response: provider=xai status=%d body=%s", resp.StatusCode, compactLogJSON(responseBody))
+
+	var result xAIResponsesResponse
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		if message := parseAIErrorMessage(result.Error); message != "" {
+			return nil, errors.New(message)
+		}
+		return nil, fmt.Errorf("xai api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+
+	text := extractXAIResponseText(result)
 	return &aiChatCompletionResponse{
 		Choices: []struct {
 			Message aiChatCompletionMessage `json:"message"`
@@ -455,6 +548,9 @@ func detectAIProvider(baseURL string) aiProvider {
 	if strings.Contains(text, "generativelanguage.googleapis.com") || strings.Contains(text, "googleapis.com") && strings.Contains(text, "generatecontent") {
 		return aiProviderGemini
 	}
+	if strings.Contains(text, "api.x.ai") {
+		return aiProviderXAIResponses
+	}
 	return aiProviderOpenAICompatible
 }
 
@@ -499,6 +595,32 @@ func buildGeminiRequestURL(baseURL, model, apiKey string) (string, error) {
 	return parsed.String(), nil
 }
 
+func buildXAIResponsesRequestURL(baseURL string) (string, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", errors.New("xAI 配置缺少 Base URL")
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	path := strings.TrimRight(parsed.Path, "/")
+	switch {
+	case path == "":
+		path = "/v1/responses"
+	case strings.HasSuffix(path, "/responses"):
+		// Already points to the responses endpoint.
+	case strings.HasSuffix(path, "/v1"):
+		path = path + "/responses"
+	default:
+		path = path + "/responses"
+	}
+	parsed.Path = path
+	return parsed.String(), nil
+}
+
 func convertToGeminiRequest(payload aiChatCompletionRequest) geminiGenerateContentRequest {
 	req := geminiGenerateContentRequest{
 		Contents: make([]geminiContent, 0, len(payload.Messages)),
@@ -540,6 +662,37 @@ func convertToGeminiRequest(payload aiChatCompletionRequest) geminiGenerateConte
 	return req
 }
 
+func convertToXAIResponsesRequest(payload aiChatCompletionRequest) xAIResponsesRequest {
+	req := xAIResponsesRequest{
+		Model: payload.Model,
+		Input: make([]xAIResponsesMessage, 0, len(payload.Messages)),
+		Tools: []xAIResponsesToolSpec{
+			{Type: "web_search"},
+		},
+	}
+
+	for _, msg := range payload.Messages {
+		text := strings.TrimSpace(msg.Content)
+		if text == "" {
+			continue
+		}
+
+		role := strings.TrimSpace(msg.Role)
+		switch role {
+		case "system", "assistant", "user":
+		default:
+			role = "user"
+		}
+
+		req.Input = append(req.Input, xAIResponsesMessage{
+			Role:    role,
+			Content: text,
+		})
+	}
+
+	return req
+}
+
 func extractGeminiResponseText(result geminiGenerateContentResponse) string {
 	if len(result.Candidates) == 0 {
 		return ""
@@ -552,6 +705,26 @@ func extractGeminiResponseText(result geminiGenerateContentResponse) string {
 			parts = append(parts, text)
 		}
 	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func extractXAIResponseText(result xAIResponsesResponse) string {
+	if text := strings.TrimSpace(result.OutputText); text != "" {
+		return text
+	}
+
+	var parts []string
+	for _, item := range result.Output {
+		if text := strings.TrimSpace(item.Text); text != "" {
+			parts = append(parts, text)
+		}
+		for _, content := range item.Content {
+			if text := strings.TrimSpace(content.Text); text != "" {
+				parts = append(parts, text)
+			}
+		}
+	}
+
 	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 

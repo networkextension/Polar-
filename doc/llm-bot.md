@@ -75,9 +75,10 @@
 - `api_key` 由服务端保存
 - 接口不会把明文 key 回传前端
 - 目前尚未加密存储，后续可切换为 env key 或独立密钥加密
-- 当前运行时支持两类接入：
+- 当前运行时支持三类接入：
   - OpenAI Chat Completions 兼容接口
   - Gemini 原生 `generateContent` 接口
+  - xAI 原生 `Responses` 接口（默认启用 `web_search`）
 
 ### Gemini 支持说明
 
@@ -125,6 +126,63 @@ curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:g
 服务端最终会自动拼成：
 
 - `https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent?key=<api_key>`
+
+### xAI 支持说明
+
+xAI 不能直接按当前 OpenAI Chat Completions 的 `messages -> choices[].message.content` 方式处理。
+
+例如 xAI 官方接口通常像这样：
+
+```bash
+curl https://api.x.ai/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $XAI_API_KEY" \
+  -d '{
+    "model": "grok-4.20-reasoning",
+    "input": [
+      {
+        "role": "user",
+        "content": "What is xAI?"
+      }
+    ],
+    "tools": [
+      {
+        "type": "web_search"
+      }
+    ]
+  }'
+```
+
+而当前站内 `LLM Config` 在服务端仍然统一抽象成“同一个聊天请求”，运行时再按 provider 转换：
+
+- xAI 原生接口：
+  - 发送 `model + input + tools`
+  - 使用 `Authorization: Bearer <api_key>`
+  - 默认启用 `web_search`
+  - 自动把内部 `system / user / assistant` 消息映射成 xAI 的 `input`
+
+也就是说：
+
+- `LLM Config` 仍然保持 `Base URL / Model / API Key`
+- xAI 不需要你手动在前端拼完整请求体
+- 服务端会根据 xAI 地址自动切到 `Responses` 请求格式
+
+推荐填写方式：
+
+- `Base URL`：`https://api.x.ai/v1`
+  - 也可以直接填成 `https://api.x.ai/v1/responses`
+- `Model`：例如 `grok-4.20-reasoning`
+- `API Key`：xAI API key
+
+服务端最终会自动请求：
+
+- `https://api.x.ai/v1/responses`
+
+当前实现说明：
+
+- 第一版只统一启用 `web_search`
+- 暂不把 `allowed_domains`、`excluded_domains` 等搜索细节上提到通用配置层
+- 这类参数后续如有真实需求，可只在 xAI provider 侧按扩展字段增加
 
 ### `bot_users`
 
