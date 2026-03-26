@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>用户 Profile</title>
+    <title data-i18n-title="profile.title">User Profile</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,23 +11,23 @@
   <body class="site-shell">
     <div class="page-shell-wide">
       <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="posts-page profile-page">
         <div class="dashboard-header">
           <div>
-            <h1>用户 Profile</h1>
-            <p id="profileWelcome">正在加载用户资料...</p>
+            <h1 data-i18n="profile.title">User Profile</h1>
+            <p id="profileWelcome" data-i18n="profile.loading">Loading user profile...</p>
           </div>
           <div class="header-actions">
-            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html">帖子</a>
-            <a class="btn-inline btn-secondary header-nav-link" href="/chat.html">私聊</a>
-            <a class="btn-inline btn-secondary header-nav-link" href="/dashboard.html">控制台</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html" data-i18n="profile.backToPosts">Posts</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/chat.html" data-i18n="profile.backToChat">Chat</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/dashboard.html" data-i18n="profile.backToDashboard">Dashboard</a>
           </div>
         </div>
 

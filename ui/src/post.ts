@@ -3,6 +3,7 @@ import { byId, query } from "./lib/dom.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
+import { t } from "./lib/i18n.js";
 
 const API_BASE = "";
 const postWelcome = byId<HTMLElement>("postWelcome");
@@ -156,7 +157,7 @@ async function loadTagOptions(): Promise<void> {
   }
   currentTags = data.tags || [];
   postTag.innerHTML = [
-    '<option value="">不选择板块</option>',
+    `<option value="">${t("post.noSection")}</option>`,
     ...currentTags.map((tag) => `<option value="${tag.id}">${tag.name}</option>`),
   ].join("");
 }
@@ -171,7 +172,7 @@ function ensureVideoModal(): void {
   modal.innerHTML = `
     <div class="video-modal-backdrop"></div>
     <div class="video-modal-content panel">
-      <button class="video-modal-close btn-inline btn-secondary" type="button">关闭</button>
+      <button class="video-modal-close btn-inline btn-secondary" type="button">${t("common.close")}</button>
       <video class="video-modal-player" controls autoplay preload="metadata"></video>
     </div>
   `;
@@ -225,12 +226,12 @@ function ensureImageModal(): void {
     <div class="image-modal-content">
       <div class="image-modal-toolbar">
         <div class="image-modal-counter">1 / 1</div>
-        <button class="image-modal-close btn-inline btn-secondary" type="button">关闭</button>
+        <button class="image-modal-close btn-inline btn-secondary" type="button">${t("common.close")}</button>
       </div>
       <div class="image-modal-stage">
-        <button class="image-modal-nav image-modal-prev btn-inline btn-secondary" type="button" aria-label="上一张">上一张</button>
+        <button class="image-modal-nav image-modal-prev btn-inline btn-secondary" type="button" aria-label="${t("post.prevImage")}">${t("post.prevImage")}</button>
         <img class="image-modal-viewer" alt="post image preview" />
-        <button class="image-modal-nav image-modal-next btn-inline btn-secondary" type="button" aria-label="下一张">下一张</button>
+        <button class="image-modal-nav image-modal-next btn-inline btn-secondary" type="button" aria-label="${t("post.nextImage")}">${t("post.nextImage")}</button>
       </div>
     </div>
   `;
@@ -379,7 +380,7 @@ async function loadProfile(): Promise<void> {
   const data = await res.json();
   currentUserId = data.user_id;
   currentUserRole = data.role || "user";
-  postWelcome.textContent = `你好，${data.username}`;
+  postWelcome.textContent = t("post.welcome", { username: data.username });
 }
 
 async function loadReplies(postId: number): Promise<void> {
@@ -388,19 +389,19 @@ async function loadReplies(postId: number): Promise<void> {
     return;
   }
 
-  replyList.innerHTML = "<div class='reply-empty'>加载中...</div>";
+  replyList.innerHTML = `<div class='reply-empty'>${t("post.loadingReplies")}</div>`;
   const res = await fetch(`${API_BASE}/api/posts/${postId}/replies?limit=50`, {
     credentials: "include",
   });
   if (!res.ok) {
-    replyList.innerHTML = "<div class='reply-empty'>无法加载回复</div>";
+    replyList.innerHTML = `<div class='reply-empty'>${t("post.repliesLoadFailed")}</div>`;
     return;
   }
 
   const data = await res.json();
   const replies: Reply[] = data.replies || [];
   if (replies.length === 0) {
-    replyList.innerHTML = "<div class='reply-empty'>暂无回复</div>";
+    replyList.innerHTML = `<div class='reply-empty'>${t("post.noReplies")}</div>`;
     return;
   }
 
@@ -431,7 +432,7 @@ function renderPost(post: Post): void {
       (item) => `
         <video controls preload="metadata" ${item.posterUrl ? `poster="${item.posterUrl}"` : ""}>
           <source src="${item.url}" />
-          你的浏览器不支持 video 标签
+          ${t("post.videoNotSupported")}
         </video>
       `
     )
@@ -447,17 +448,17 @@ function renderPost(post: Post): void {
   const taskInfo = isTask
     ? `
       <div class="task-meta-card">
-        <div class="badge">零工任务</div>
+        <div class="badge">${t("post.gigTaskBadge")}</div>
         <div class="task-meta-grid">
-          <div><strong>时间范围：</strong>${formatTime(post.task!.start_at)} - ${formatTime(post.task!.end_at)}</div>
-          <div><strong>Working hours：</strong>${escapeHtml(post.task!.working_hours)}</div>
-          <div><strong>申请截止：</strong>${formatTime(post.task!.apply_deadline)}</div>
-          <div><strong>地理位置：</strong>${escapeHtml(post.task!.location || "未限制")}</div>
-          <div><strong>申请状态：</strong>${post.task!.application_status === "open" ? "开放中" : "已关闭"}</div>
-          <div><strong>当前申请数：</strong>${post.task!.applicant_count || 0}</div>
+          <div><strong>${t("post.timeRange")}</strong>${formatTime(post.task!.start_at)} - ${formatTime(post.task!.end_at)}</div>
+          <div><strong>${t("post.workingHoursLabel")}</strong>${escapeHtml(post.task!.working_hours)}</div>
+          <div><strong>${t("post.applyDeadline")}</strong>${formatTime(post.task!.apply_deadline)}</div>
+          <div><strong>${t("post.location")}</strong>${escapeHtml(post.task!.location || t("post.noLocation"))}</div>
+          <div><strong>${t("post.status")}</strong>${post.task!.application_status === "open" ? t("post.statusOpen") : t("post.statusClosed")}</div>
+          <div><strong>${t("post.applicantCount")}</strong>${post.task!.applicant_count || 0}</div>
           ${
             post.task!.selected_applicant_name
-              ? `<div><strong>已选候选人：</strong>${escapeHtml(post.task!.selected_applicant_name)}</div>`
+              ? `<div><strong>${t("post.selectedApplicant")}</strong>${escapeHtml(post.task!.selected_applicant_name)}</div>`
               : ""
           }
         </div>
@@ -471,13 +472,13 @@ function renderPost(post: Post): void {
       <div class="task-actions">
         ${
           post.task!.can_apply
-            ? `<button id="taskApplyBtn" class="btn-inline btn-secondary" type="button">${post.task!.applied_by_me ? "撤销申请" : "申请任务"}</button>`
+            ? `<button id="taskApplyBtn" class="btn-inline btn-secondary" type="button">${post.task!.applied_by_me ? t("post.withdrawApplication") : t("post.applyTask")}</button>`
             : ""
         }
         ${
           post.task!.can_manage && post.task!.application_status === "open"
-            ? `<button id="taskCloseBtn" class="btn-inline btn-secondary" type="button">关闭申请</button>
-               <button id="taskLoadApplicantsBtn" class="btn-inline btn-secondary" type="button">查看申请者</button>`
+            ? `<button id="taskCloseBtn" class="btn-inline btn-secondary" type="button">${t("post.closeApplications")}</button>
+               <button id="taskLoadApplicantsBtn" class="btn-inline btn-secondary" type="button">${t("post.viewApplicants")}</button>`
             : ""
         }
       </div>
@@ -487,20 +488,20 @@ function renderPost(post: Post): void {
   const taskResultSection = isTask && post.task!.can_view_results
     ? `
       <div class="task-results-card">
-        <div class="badge">任务成果</div>
+        <div class="badge">${t("post.taskResults")}</div>
         ${
           post.task!.can_submit_result
             ? `
               <form id="taskResultForm" class="task-result-form">
-                <label class="form-label" for="taskResultNote">成果说明</label>
-                <textarea id="taskResultNote" class="input textarea" rows="3" placeholder="补充说明本次完成内容..."></textarea>
-                <label class="form-label" for="taskResultImages">成果图片</label>
+                <label class="form-label" for="taskResultNote">${t("post.resultDescription")}</label>
+                <textarea id="taskResultNote" class="input textarea" rows="3" placeholder="${t("post.resultDescriptionPlaceholder")}"></textarea>
+                <label class="form-label" for="taskResultImages">${t("post.resultImages")}</label>
                 <input id="taskResultImages" class="input" type="file" accept="image/*" multiple />
-                <label class="form-label" for="taskResultVideos">成果视频</label>
+                <label class="form-label" for="taskResultVideos">${t("post.resultVideos")}</label>
                 <input id="taskResultVideos" class="input" type="file" accept="video/*" multiple />
                 <div id="taskResultStatus" class="status-text"></div>
                 <div class="task-form-actions">
-                  <button id="taskResultSubmitBtn" class="btn-inline btn-secondary" type="submit">提交任务成果</button>
+                  <button id="taskResultSubmitBtn" class="btn-inline btn-secondary" type="submit">${t("post.submitResult")}</button>
                 </div>
               </form>
             `
@@ -526,17 +527,17 @@ function renderPost(post: Post): void {
     ${videoSection}
     <div class="post-actions">
       <button id="detailLikeBtn" class="btn-inline btn-secondary" type="button">
-        ${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}
+        ${post.liked_by_me ? t("post.liked") : t("post.like")} · ${post.like_count}
       </button>
-      ${canDelete ? '<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">删除帖子</button>' : ""}
+      ${canDelete ? `<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">${t("post.deletePost")}</button>` : ""}
     </div>
     ${taskActions}
     ${taskResultSection}
     <div class="reply-box open">
       <div class="reply-list" id="replyList"></div>
       <form id="replyForm" class="reply-form">
-        <input id="replyInput" class="input reply-input" type="text" placeholder="写下你的回复..." required />
-        <button class="btn-inline btn-secondary" type="submit">发送</button>
+        <input id="replyInput" class="input reply-input" type="text" placeholder="${t("post.replyPlaceholder")}" required />
+        <button class="btn-inline btn-secondary" type="submit">${t("post.sendReply")}</button>
       </form>
     </div>
   `;
@@ -557,11 +558,11 @@ function renderPost(post: Post): void {
     }
     post.liked_by_me = !post.liked_by_me;
     post.like_count += post.liked_by_me ? 1 : -1;
-    likeBtn.textContent = `${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}`;
+    likeBtn.textContent = `${post.liked_by_me ? t("post.liked") : t("post.like")} · ${post.like_count}`;
   });
 
   deleteBtn?.addEventListener("click", async () => {
-    if (!window.confirm("确认删除这条帖子吗？此操作不可恢复。")) {
+    if (!window.confirm(t("post.confirmDelete"))) {
       return;
     }
     deleteBtn.disabled = true;
@@ -635,25 +636,25 @@ function renderPost(post: Post): void {
     if (!taskApplicantsPanel) {
       return;
     }
-    taskApplicantsPanel.innerHTML = "<div class='reply-empty'>加载申请者中...</div>";
+    taskApplicantsPanel.innerHTML = `<div class='reply-empty'>${t("post.loadingApplicants")}</div>`;
     const res = await fetch(`${API_BASE}/api/tasks/${post.id}/applications`, {
       credentials: "include",
     });
     if (!res.ok) {
-      taskApplicantsPanel.innerHTML = "<div class='reply-empty'>无法加载申请者</div>";
+      taskApplicantsPanel.innerHTML = `<div class='reply-empty'>${t("post.applicantsLoadFailed")}</div>`;
       return;
     }
     const data = await res.json();
     const applications: TaskApplication[] = data.applications || [];
     if (!applications.length) {
-      taskApplicantsPanel.innerHTML = "<div class='reply-empty'>暂无申请者</div>";
+      taskApplicantsPanel.innerHTML = `<div class='reply-empty'>${t("post.noApplicants")}</div>`;
       return;
     }
     taskApplicantsPanel.innerHTML = applications
       .map((item) => {
         const avatarUrl = resolveAvatar(item.username, item.user_icon, 40);
         const defaultTemplate = post.task?.invitation_template
-          || `你好，你已被选为该零工任务的候选人。\n\n任务内容：${post.content}\n如果你确认参与，请直接回复。`;
+          || t("post.invitationDefault", { content: post.content });
         return `
           <div class="task-applicant-item">
             <div class="task-applicant-head">
@@ -664,7 +665,7 @@ function renderPost(post: Post): void {
               </div>
             </div>
             <textarea class="input textarea task-template-input" data-user-id="${item.user_id}" rows="4">${escapeHtml(defaultTemplate)}</textarea>
-            <button class="btn-inline btn-secondary task-select-btn" data-user-id="${item.user_id}" type="button">确认并发送私信</button>
+            <button class="btn-inline btn-secondary task-select-btn" data-user-id="${item.user_id}" type="button">${t("post.confirmAndMessage")}</button>
           </div>
         `;
       })
@@ -711,7 +712,7 @@ function renderPost(post: Post): void {
     }
     Array.from(taskResultImages.files || []).forEach((file) => formData.append("images", file));
     Array.from(taskResultVideos.files || []).forEach((file) => formData.append("videos", file));
-    taskResultStatus.textContent = "正在提交任务成果...";
+    taskResultStatus.textContent = t("post.submittingResult");
     taskResultSubmitBtn.disabled = true;
     const res = await fetch(`${API_BASE}/api/tasks/${post.id}/results`, {
       method: "POST",
@@ -720,11 +721,11 @@ function renderPost(post: Post): void {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      taskResultStatus.textContent = data.error || "提交失败";
+      taskResultStatus.textContent = data.error || t("common.submitFailed");
       taskResultSubmitBtn.disabled = false;
       return;
     }
-    taskResultStatus.textContent = "任务成果已提交";
+    taskResultStatus.textContent = t("post.resultSubmitted");
     taskResultForm.reset();
     taskResultSubmitBtn.disabled = false;
     await loadTaskResults(post.id);
@@ -740,18 +741,18 @@ async function loadTaskResults(postId: number): Promise<void> {
   if (!container) {
     return;
   }
-  container.innerHTML = "<div class='reply-empty'>加载任务成果中...</div>";
+  container.innerHTML = `<div class='reply-empty'>${t("post.loadingResults")}</div>`;
   const res = await fetch(`${API_BASE}/api/tasks/${postId}/results`, {
     credentials: "include",
   });
   if (!res.ok) {
-    container.innerHTML = "<div class='reply-empty'>无法加载任务成果</div>";
+    container.innerHTML = `<div class='reply-empty'>${t("post.resultsLoadFailed")}</div>`;
     return;
   }
   const data = await res.json();
   const results: TaskResult[] = data.results || [];
   if (!results.length) {
-    container.innerHTML = "<div class='reply-empty'>暂未提交任务成果</div>";
+    container.innerHTML = `<div class='reply-empty'>${t("post.noResults")}</div>`;
     return;
   }
   container.innerHTML = results
@@ -767,7 +768,7 @@ async function loadTaskResults(postId: number): Promise<void> {
           return `
             <video controls preload="metadata" ${posterUrl ? `poster="${posterUrl}"` : ""}>
               <source src="${videoUrl}" />
-              你的浏览器不支持 video 标签
+              ${t("post.videoNotSupported")}
             </video>
           `;
         })
@@ -791,7 +792,7 @@ async function loadTaskResults(postId: number): Promise<void> {
 async function loadPost(): Promise<void> {
   const postId = getPostId();
   if (!postId) {
-    postDetail.innerHTML = "<div class='post-empty'>无效的帖子</div>";
+    postDetail.innerHTML = `<div class='post-empty'>${t("post.invalidPost")}</div>`;
     return;
   }
 
@@ -799,14 +800,14 @@ async function loadPost(): Promise<void> {
     credentials: "include",
   });
   if (!res.ok) {
-    postDetail.innerHTML = "<div class='post-empty'>无法加载帖子</div>";
+    postDetail.innerHTML = `<div class='post-empty'>${t("post.loadFailed")}</div>`;
     return;
   }
 
   const data = await res.json();
   const post: Post | null = data.post || null;
   if (!post) {
-    postDetail.innerHTML = "<div class='post-empty'>未找到帖子</div>";
+    postDetail.innerHTML = `<div class='post-empty'>${t("post.notFound")}</div>`;
     return;
   }
 
@@ -829,17 +830,17 @@ postForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const content = postContent.value.trim();
   if (!content) {
-    postFormStatus.textContent = "内容不能为空";
+    postFormStatus.textContent = t("post.contentRequired");
     return;
   }
   if (postType.value === "task") {
     if (!taskStartAt.value || !taskEndAt.value || !workingHours.value.trim() || !applyDeadline.value) {
-      postFormStatus.textContent = "请填写完整的任务信息";
+      postFormStatus.textContent = t("post.taskInfoRequired");
       return;
     }
   }
 
-  postFormStatus.textContent = "正在发布...";
+  postFormStatus.textContent = t("post.publishing");
   postSubmitBtn.disabled = true;
 
   const formData = new FormData();
@@ -870,14 +871,14 @@ postForm.addEventListener("submit", async (event) => {
     });
     const data = await res.json();
     if (!res.ok) {
-      postFormStatus.textContent = data.error || "发布失败";
+      postFormStatus.textContent = data.error || t("post.publishFailed");
       return;
     }
-    postFormStatus.textContent = "发布成功";
+    postFormStatus.textContent = t("post.publishSuccess");
     postForm.reset();
     window.location.href = `/post.html?id=${data.id}`;
   } catch {
-    postFormStatus.textContent = "发布失败，请重试";
+    postFormStatus.textContent = t("post.publishFailedRetry");
   } finally {
     postSubmitBtn.disabled = false;
   }

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard</title>
+    <title data-i18n-title="dashboard.title">Dashboard</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,25 +11,25 @@
   <body class="site-shell">
     <div class="page-shell-wide">
       <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="dashboard">
         <div class="dashboard-header">
           <div>
-            <h1>控制台</h1>
-            <p id="welcomeText">正在加载用户信息...</p>
+            <h1 data-i18n="dashboard.title">Dashboard</h1>
+            <p id="welcomeText" data-i18n="dashboard.loading">Loading user info...</p>
           </div>
           <div class="header-actions">
-            <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button">记录列表</button>
-            <button class="btn-inline btn-secondary header-nav-link" type="button" data-open-settings-center data-settings-target="profile">Profile / 设置</button>
-            <button id="newEntryBtn" class="btn-inline btn-secondary header-nav-link" type="button">新建 Markdown</button>
-            <a class="btn-inline btn-secondary header-nav-link" href="/markdowns.html">公开 Markdown</a>
-            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html">帖子</a>
+            <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button" data-i18n="dashboard.drawerToggle">Entry list</button>
+            <button class="btn-inline btn-secondary header-nav-link" type="button" data-open-settings-center data-settings-target="profile" data-i18n="dashboard.profileSettings">Profile / Settings</button>
+            <button id="newEntryBtn" class="btn-inline btn-secondary header-nav-link" type="button" data-i18n="dashboard.newMarkdown">New Markdown</button>
+            <a class="btn-inline btn-secondary header-nav-link" href="/markdowns.html" data-i18n="dashboard.publicMarkdowns">Public Markdowns</a>
+            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html" data-i18n="dashboard.posts">Posts</a>
           </div>
         </div>
 
@@ -37,46 +37,46 @@
           <div id="drawerBackdrop" class="drawer-backdrop"></div>
           <aside id="entryDrawer" class="panel entry-drawer">
             <div class="drawer-header">
-              <div class="badge">Markdown 记录</div>
-              <button id="drawerCloseBtn" class="btn-inline btn-secondary drawer-close" type="button">收起</button>
+              <div class="badge" data-i18n="dashboard.markdownEntries">Markdown entries</div>
+              <button id="drawerCloseBtn" class="btn-inline btn-secondary drawer-close" type="button" data-i18n="dashboard.drawerClose">Collapse</button>
             </div>
             <div class="drawer-body">
               <div class="drawer-section">
-                <div class="badge">快捷入口</div>
-                <p class="drawer-help">快速进入私聊会话列表或联系 AI 助理。</p>
-                <a class="btn-secondary drawer-action-btn" href="/chat.html">私聊</a>
-                <a class="btn-secondary drawer-action-btn" href="/chat.html?user_id=system&username=system">AI 助理</a>
+                <div class="badge" data-i18n="dashboard.quickAccess">Quick access</div>
+                <p class="drawer-help" data-i18n="dashboard.drawerHelp">Quick access to direct messages or AI assistant.</p>
+                <a class="btn-secondary drawer-action-btn" href="/chat.html" data-i18n="dashboard.privateChat">Chat</a>
+                <a class="btn-secondary drawer-action-btn" href="/chat.html?user_id=system&username=system" data-i18n="dashboard.aiAssistant">AI Assistant</a>
               </div>
 
-              <button id="addTagBtn" class="btn-secondary group-action-btn" type="button" hidden>新建 Tag</button>
+              <button id="addTagBtn" class="btn-secondary group-action-btn" type="button" hidden data-i18n="dashboard.newTag">New Tag</button>
 
               <ul id="entryList" class="list"></ul>
-              <button id="loadMoreBtn" class="btn-inline btn-secondary" type="button">加载更多</button>
+              <button id="loadMoreBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.loadMore">Load more</button>
             </div>
             <div class="drawer-footer">
               <div class="group-card settings-entry-card">
                 <div class="settings-entry-head">
-                  <img id="settingsCardAvatar" class="avatar avatar-sm" alt="用户头像" />
+                  <img id="settingsCardAvatar" class="avatar avatar-sm" alt="User avatar" />
                   <div class="settings-entry-copy">
-                    <div id="settingsCardName" class="group-name">加载中...</div>
+                    <div id="settingsCardName" class="group-name" data-i18n="dashboard.loadingUser">Loading...</div>
                     <div id="settingsCardMeta" class="group-meta"></div>
                   </div>
                 </div>
                 <div class="settings-entry-actions">
-                  <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="profile">Profile</button>
-                  <button id="openSiteAdminBtn" class="btn-secondary group-action-btn" type="button" data-settings-target="site">设置中心</button>
+                  <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="profile" data-i18n="dashboard.profile">Profile</button>
+                  <button id="openSiteAdminBtn" class="btn-secondary group-action-btn" type="button" data-settings-target="site" data-i18n="dashboard.settingsCenter">Settings Center</button>
                 </div>
-                <button id="logoutBtn" class="btn-secondary group-action-btn" type="button">退出登录</button>
+                <button id="logoutBtn" class="btn-secondary group-action-btn" type="button" data-i18n="dashboard.logout">Log out</button>
               </div>
             </div>
           </aside>
 
           <div class="panel drawer-main">
-            <div class="badge">内容预览</div>
-            <div id="entryContent" class="content-box">请选择侧边栏中的记录</div>
+            <div class="badge" data-i18n="dashboard.contentPreview">Content preview</div>
+            <div id="entryContent" class="content-box" data-i18n="dashboard.selectEntry">Select an entry from the sidebar</div>
             <div class="toolbar" style="margin-top: 12px;">
-              <button id="editBtn" class="btn-inline btn-secondary" type="button">编辑</button>
-              <button id="deleteBtn" class="btn-inline" type="button">删除</button>
+              <button id="editBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.editEntry">Edit</button>
+              <button id="deleteBtn" class="btn-inline" type="button" data-i18n="dashboard.deleteEntry">Delete</button>
             </div>
           </div>
         </div>
@@ -87,25 +87,25 @@
       <div class="modal-backdrop"></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="tagModalTitle">
         <div class="modal-header">
-          <h3 id="tagModalTitle">添加 Tag</h3>
-          <button id="tagModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
+          <h3 id="tagModalTitle" data-i18n="dashboard.tagModalAdd">Add Tag</h3>
+          <button id="tagModalCloseBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.modalClose">Close</button>
         </div>
         <form id="tagForm" class="modal-body">
-          <label class="form-label" for="tagName">名称</label>
-          <input id="tagName" class="input" type="text" required placeholder="例如：Go语言" />
+          <label class="form-label" for="tagName" data-i18n="dashboard.tagNameLabel">Name</label>
+          <input id="tagName" class="input" type="text" required data-i18n-placeholder="dashboard.tagNamePlaceholder" placeholder="e.g. Go Language" />
 
-          <label class="form-label" for="tagSlug">标识（可选）</label>
-          <input id="tagSlug" class="input" type="text" placeholder="例如：golang" />
+          <label class="form-label" for="tagSlug" data-i18n="dashboard.tagSlugLabel">Identifier (optional)</label>
+          <input id="tagSlug" class="input" type="text" data-i18n-placeholder="dashboard.tagSlugPlaceholder" placeholder="e.g. golang" />
 
-          <label class="form-label" for="tagDesc">描述（可选）</label>
-          <textarea id="tagDesc" class="input textarea" rows="3" placeholder="简短描述"></textarea>
+          <label class="form-label" for="tagDesc" data-i18n="dashboard.tagDescLabel">Description (optional)</label>
+          <textarea id="tagDesc" class="input textarea" rows="3" data-i18n-placeholder="dashboard.tagDescPlaceholder" placeholder="Brief description"></textarea>
 
-          <label class="form-label" for="tagOrder">排序（可选）</label>
+          <label class="form-label" for="tagOrder" data-i18n="dashboard.tagOrderLabel">Order (optional)</label>
           <input id="tagOrder" class="input" type="number" value="0" />
 
           <div id="tagFormStatus" class="status-text"></div>
           <div class="modal-actions">
-            <button id="tagSubmitBtn" class="btn-secondary" type="submit">创建</button>
+            <button id="tagSubmitBtn" class="btn-secondary" type="submit" data-i18n="dashboard.tagCreateBtn">Create</button>
           </div>
         </form>
       </div>
@@ -116,28 +116,28 @@
       <div class="modal-card modal-card-wide settings-center-card" role="dialog" aria-modal="true" aria-labelledby="siteAdminModalTitle">
         <div class="settings-center-shell">
           <aside class="settings-center-nav">
-            <button id="siteAdminModalCloseBtn" class="settings-center-close" type="button" aria-label="关闭">×</button>
-            <div class="settings-center-nav-title">设置中心</div>
+            <button id="siteAdminModalCloseBtn" class="settings-center-close" type="button" aria-label="Close">×</button>
+            <div class="settings-center-nav-title" data-i18n="dashboard.settingsCenterTitle">Settings Center</div>
             <div class="settings-center-nav-list">
               <button class="settings-center-nav-btn active" type="button" data-settings-nav="profile">
                 <span class="settings-center-nav-icon">◎</span>
-                <span>Profile</span>
+                <span data-i18n="dashboard.navProfile">Profile</span>
               </button>
               <button class="settings-center-nav-btn" type="button" data-settings-nav="personalization">
                 <span class="settings-center-nav-icon">◌</span>
-                <span>个性化</span>
+                <span data-i18n="dashboard.navPersonalization">Personalization</span>
               </button>
               <button class="settings-center-nav-btn" type="button" data-settings-nav="settings">
                 <span class="settings-center-nav-icon">⚙</span>
-                <span>设置</span>
+                <span data-i18n="dashboard.navSettings">Settings</span>
               </button>
               <button class="settings-center-nav-btn" type="button" data-settings-nav="bots">
                 <span class="settings-center-nav-icon">◉</span>
-                <span>Bot 管理</span>
+                <span data-i18n="dashboard.navBots">Bot Management</span>
               </button>
               <button class="settings-center-nav-btn" type="button" data-settings-nav="site" hidden>
                 <span class="settings-center-nav-icon">▣</span>
-                <span>站点管理</span>
+                <span data-i18n="dashboard.navSite">Site Management</span>
               </button>
             </div>
           </aside>
@@ -145,22 +145,22 @@
           <div class="settings-center-main">
             <div class="settings-center-header">
               <div>
-                <div class="badge">偏好与管理</div>
-                <h3 id="siteAdminModalTitle" class="modal-title">个人中心</h3>
-                <p id="settingsSectionLead" class="settings-center-lead">维护你的头像、登录方式、界面风格和站点相关配置。</p>
+                <div class="badge" data-i18n="dashboard.preferencesBadge">Preferences &amp; Management</div>
+                <h3 id="siteAdminModalTitle" class="modal-title" data-i18n="dashboard.personalCenter">Personal Center</h3>
+                <p id="settingsSectionLead" class="settings-center-lead" data-i18n="dashboard.profileLead">Manage your avatar, login methods, and recent login history.</p>
               </div>
             </div>
 
             <section class="settings-panel active" data-settings-panel="profile">
               <div class="settings-section-card">
                 <div class="settings-profile-hero">
-                  <img id="userIcon" class="avatar settings-avatar-lg" alt="用户头像" />
+                  <img id="userIcon" class="avatar settings-avatar-lg" alt="User avatar" />
                   <div class="settings-profile-copy">
-                    <div id="settingsProfileName" class="settings-profile-name">加载中...</div>
-                    <div id="settingsProfileMeta" class="settings-profile-meta">准备你的个人信息和登录方式</div>
+                    <div id="settingsProfileName" class="settings-profile-name" data-i18n="dashboard.loadingUser">Loading...</div>
+                    <div id="settingsProfileMeta" class="settings-profile-meta" data-i18n="dashboard.userProfileMeta">Manage your profile, devices and preferences</div>
                     <div class="inline-actions">
-                      <a class="btn-inline btn-secondary" href="/profile.html">查看公开 Profile</a>
-                      <label class="btn-inline btn-secondary settings-upload-trigger" for="iconFile">更换头像</label>
+                      <a class="btn-inline btn-secondary" href="/profile.html" data-i18n="dashboard.viewPublicProfile">View public Profile</a>
+                      <label class="btn-inline btn-secondary settings-upload-trigger" for="iconFile" data-i18n="dashboard.changeAvatar">Change avatar</label>
                     </div>
                   </div>
                 </div>
@@ -168,24 +168,24 @@
                 <div id="iconEditor" class="icon-editor">
                   <canvas id="iconCanvas" class="icon-canvas" width="160" height="160"></canvas>
                   <div class="toolbar">
-                    <label for="iconZoom">缩放</label>
+                    <label for="iconZoom" data-i18n="dashboard.zoomLabel">Zoom</label>
                     <input id="iconZoom" class="range-input" type="range" min="1" max="3" step="0.01" value="1" />
                   </div>
                   <div class="toolbar">
-                    <button id="saveIconBtn" class="btn-secondary btn-inline" type="button">保存头像</button>
-                    <button id="cancelIconBtn" class="btn-secondary btn-inline" type="button">取消</button>
+                    <button id="saveIconBtn" class="btn-secondary btn-inline" type="button" data-i18n="dashboard.saveAvatar">Save avatar</button>
+                    <button id="cancelIconBtn" class="btn-secondary btn-inline" type="button" data-i18n="dashboard.cancelAvatar">Cancel</button>
                   </div>
                 </div>
-                <div id="iconStatus" class="status-text">支持上传与简单裁切。</div>
+                <div id="iconStatus" class="status-text" data-i18n="dashboard.avatarHint">Supports upload and basic cropping.</div>
               </div>
 
               <div class="settings-section-card">
                 <div class="settings-section-heading">
                   <div>
-                    <div class="settings-section-title">账户安全</div>
-                    <p class="settings-section-text">绑定 Passkey 后可使用指纹或人脸快速登录。</p>
+                    <div class="settings-section-title" data-i18n="dashboard.securityTitle">Account security</div>
+                    <p class="settings-section-text" data-i18n="dashboard.securityText">Bind Passkey for fingerprint or face login.</p>
                   </div>
-                  <button id="passkeyRegisterBtn" class="btn-inline btn-secondary" type="button">绑定 Passkey</button>
+                  <button id="passkeyRegisterBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.bindPasskey">Bind Passkey</button>
                 </div>
                 <div id="passkeyStatus" class="status-text"></div>
               </div>
@@ -193,8 +193,8 @@
               <div class="settings-section-card">
                 <div class="settings-section-heading">
                   <div>
-                    <div class="settings-section-title">最近登录</div>
-                    <p class="settings-section-text">查看最近登录设备、IP 和位置记录。</p>
+                    <div class="settings-section-title" data-i18n="dashboard.recentLogins">Recent logins</div>
+                    <p class="settings-section-text" data-i18n="dashboard.recentLoginsText">View recent login devices, IPs, and locations.</p>
                   </div>
                 </div>
                 <ul id="loginHistoryList" class="meta-list"></ul>
@@ -205,12 +205,12 @@
               <div class="settings-section-card">
                 <div class="settings-row">
                   <div>
-                    <div class="settings-row-title">界面样式</div>
-                    <div class="settings-row-text">在默认风格和黑白风格之间切换，立即预览页面变化。</div>
+                    <div class="settings-row-title" data-i18n="dashboard.interfaceStyle">Interface style</div>
+                    <div class="settings-row-text" data-i18n="dashboard.interfaceStyleText">Toggle between default and monochrome styles.</div>
                   </div>
                   <div class="settings-row-action">
-                    <span id="themeCurrentValue" class="settings-value-pill">默认</span>
-                    <button id="themeToggleBtn" class="btn-inline btn-secondary" type="button">切换到黑白样式</button>
+                    <span id="themeCurrentValue" class="settings-value-pill" data-i18n="dashboard.themeDefault">Default</span>
+                    <button id="themeToggleBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.switchToMonochrome">Switch to monochrome</button>
                   </div>
                 </div>
               </div>
@@ -218,11 +218,11 @@
               <div class="settings-section-card">
                 <div class="settings-row">
                   <div>
-                    <div class="settings-row-title">内容浏览习惯</div>
-                    <div class="settings-row-text">当前保持清爽、轻量的工作台布局，后续可继续扩展更多个性化选项。</div>
+                    <div class="settings-row-title" data-i18n="dashboard.browsingHabits">Browsing preferences</div>
+                    <div class="settings-row-text" data-i18n="dashboard.browsingHabitsText">Currently keeping a clean, lightweight layout.</div>
                   </div>
                   <div class="settings-row-action">
-                    <span class="settings-value-pill">默认</span>
+                    <span class="settings-value-pill" data-i18n="dashboard.themeDefault">Default</span>
                   </div>
                 </div>
               </div>
@@ -239,8 +239,8 @@
                   </div>
                   <div class="site-admin-grid site-admin-grid-wide">
                     <form id="llmConfigForm" class="site-settings-form">
-                      <label class="form-label" for="llmConfigNameInput">配置名称</label>
-                      <input id="llmConfigNameInput" class="input" type="text" maxlength="60" placeholder="例如：OpenAI 生产配置" />
+                      <label class="form-label" for="llmConfigNameInput" data-i18n="dashboard.llmConfigNameLabel">Config name</label>
+                      <input id="llmConfigNameInput" class="input" type="text" maxlength="60" data-i18n-placeholder="dashboard.llmConfigNamePlaceholder" placeholder="e.g. OpenAI production config" />
 
                       <label class="form-label" for="llmConfigBaseUrlInput">Base URL</label>
                       <input id="llmConfigBaseUrlInput" class="input" type="url" maxlength="300" placeholder="https://api.openai.com/v1/chat/completions" />
@@ -248,21 +248,21 @@
                       <label class="form-label" for="llmConfigModelInput">Model</label>
                       <input id="llmConfigModelInput" class="input" type="text" maxlength="120" placeholder="gpt-4.1-mini" />
 
-                      <label class="form-label" for="llmConfigApiKeyInput">API Key</label>
-                      <input id="llmConfigApiKeyInput" class="input" type="password" maxlength="300" placeholder="新增时建议填写，编辑时留空表示保持原值" />
+                      <label class="form-label" for="llmConfigApiKeyInput" data-i18n="dashboard.llmConfigApiKeyLabel">API Key</label>
+                      <input id="llmConfigApiKeyInput" class="input" type="password" maxlength="300" data-i18n-placeholder="dashboard.llmConfigApiKeyPlaceholder" placeholder="Recommended on create; leave empty when editing to keep current value" />
 
-                      <label class="form-label" for="llmConfigSystemPromptInput">测试 Prompt（可选）</label>
-                      <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" placeholder="仅用于测试配置连通性，不作为 Bot 运行时 Prompt"></textarea>
+                      <label class="form-label" for="llmConfigSystemPromptInput" data-i18n="dashboard.llmConfigSystemPromptLabel">Test Prompt (optional)</label>
+                      <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="5" maxlength="5000" data-i18n-placeholder="dashboard.llmConfigSystemPromptPlaceholder" placeholder="Only for testing config connectivity, not used as Bot runtime prompt"></textarea>
 
                       <label class="form-checkbox" for="llmConfigSharedInput">
                         <input id="llmConfigSharedInput" type="checkbox" />
-                        <span>共享给其他用户使用这个 LLM Config</span>
+                        <span data-i18n="dashboard.llmConfigSharedLabel">Share this LLM Config with other users</span>
                       </label>
 
                       <div class="site-settings-actions inline-actions">
-                        <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                        <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button">测试配置</button>
-                        <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
+                        <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.llmConfigClear">Clear</button>
+                        <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.llmConfigTest">Test config</button>
+                        <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit" data-i18n="dashboard.llmConfigSave">Save config</button>
                       </div>
                     </form>
                     <ul id="llmConfigList" class="tag-list"></ul>
@@ -278,26 +278,26 @@
                   <div class="site-tags-header">
                     <div>
                       <div class="badge">Bot User</div>
-                      <p class="drawer-help">每个 Bot 都是一个可私聊的用户。这里维护 Bot 默认模型配置和 Bot Prompt。</p>
+                      <p class="drawer-help" data-i18n="dashboard.botHelp">Each Bot is a user you can chat with directly. Manage Bot model configs and prompts here.</p>
                     </div>
                   </div>
                   <div class="site-admin-grid site-admin-grid-wide">
                     <form id="botUserForm" class="site-settings-form">
-                      <label class="form-label" for="botUserNameInput">Bot 名称</label>
-                      <input id="botUserNameInput" class="input" type="text" maxlength="60" placeholder="例如：翻译助手" />
+                      <label class="form-label" for="botUserNameInput" data-i18n="dashboard.botNameLabel">Bot name</label>
+                      <input id="botUserNameInput" class="input" type="text" maxlength="60" data-i18n-placeholder="dashboard.botNamePlaceholder" placeholder="e.g. Translation assistant" />
 
-                      <label class="form-label" for="botUserConfigSelect">绑定配置</label>
+                      <label class="form-label" for="botUserConfigSelect" data-i18n="dashboard.botConfigLabel">Bind config</label>
                       <select id="botUserConfigSelect" class="input"></select>
 
-                      <label class="form-label" for="botUserDescriptionInput">Bot 简介</label>
-                      <textarea id="botUserDescriptionInput" class="input textarea" rows="4" maxlength="500" placeholder="告诉用户这个 Bot 擅长做什么"></textarea>
+                      <label class="form-label" for="botUserDescriptionInput" data-i18n="dashboard.botDescriptionLabel">Bot description</label>
+                      <textarea id="botUserDescriptionInput" class="input textarea" rows="4" maxlength="500" data-i18n-placeholder="dashboard.botDescriptionPlaceholder" placeholder="Tell users what this Bot is good at"></textarea>
 
-                      <label class="form-label" for="botUserSystemPromptInput">Bot 配置 Prompt</label>
-                      <textarea id="botUserSystemPromptInput" class="input textarea" rows="6" maxlength="5000" placeholder="定义这个 Bot 的人设、回答风格、边界和行为规则"></textarea>
+                      <label class="form-label" for="botUserSystemPromptInput" data-i18n="dashboard.botSystemPromptLabel">Bot config prompt</label>
+                      <textarea id="botUserSystemPromptInput" class="input textarea" rows="6" maxlength="5000" data-i18n-placeholder="dashboard.botSystemPromptPlaceholder" placeholder="Define this Bot's persona, tone, boundaries, and behavior"></textarea>
 
                       <div class="site-settings-actions site-settings-actions-split">
-                        <button id="botUserResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                        <button id="botUserSubmitBtn" class="btn-secondary" type="submit">保存 Bot</button>
+                        <button id="botUserResetBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.botClear">Clear</button>
+                        <button id="botUserSubmitBtn" class="btn-secondary" type="submit" data-i18n="dashboard.botSave">Save Bot</button>
                       </div>
                       <div id="botUserStatus" class="status-text"></div>
                     </form>
@@ -312,30 +312,30 @@
                 <div class="site-tags-section">
                   <div class="site-tags-header">
                     <div>
-                      <div class="badge">站点管理</div>
-                      <p class="drawer-help">在这里维护站点 logo、intro、iOS Push 证书，以及 Tag 管理。</p>
+                      <div class="badge" data-i18n="dashboard.siteManagementBadge">Site Management</div>
+                      <p class="drawer-help" data-i18n="dashboard.siteHelp">Manage site logo, intro, iOS Push certs, and tags here.</p>
                     </div>
                   </div>
                 </div>
 
                 <div class="site-admin-grid">
                   <div class="site-identity-card">
-                    <img id="siteIconPreview" class="site-icon" alt="站点图标" />
+                    <img id="siteIconPreview" class="site-icon" alt="Site icon" />
                     <div class="site-icon-tools">
-                      <label class="form-label" for="siteIconFile">站点图标</label>
+                      <label class="form-label" for="siteIconFile" data-i18n="dashboard.siteIconLabel">Site icon</label>
                       <input id="siteIconFile" class="input" type="file" accept="image/*" />
-                      <p class="drawer-help">建议使用方形图标，上传后会立即生效。</p>
+                      <p class="drawer-help" data-i18n="dashboard.siteIconHint">Use a square icon. Changes take effect immediately.</p>
                     </div>
                   </div>
                   <div class="site-settings-form">
-                    <label class="form-label" for="siteNameInput">站点名称</label>
-                    <input id="siteNameInput" class="input" type="text" maxlength="60" placeholder="输入站点名称" />
+                    <label class="form-label" for="siteNameInput" data-i18n="dashboard.siteNameLabel">Site name</label>
+                    <input id="siteNameInput" class="input" type="text" maxlength="60" data-i18n-placeholder="dashboard.siteNamePlaceholder" placeholder="Enter site name" />
 
-                    <label class="form-label" for="siteDescriptionInput">站点介绍</label>
-                    <textarea id="siteDescriptionInput" class="input textarea" rows="4" maxlength="300" placeholder="一句话介绍你的站点"></textarea>
+                    <label class="form-label" for="siteDescriptionInput" data-i18n="dashboard.siteDescriptionLabel">Site description</label>
+                    <textarea id="siteDescriptionInput" class="input textarea" rows="4" maxlength="300" data-i18n-placeholder="dashboard.siteDescriptionPlaceholder" placeholder="One-line description of your site"></textarea>
 
                     <div class="site-settings-actions">
-                      <button id="saveSiteBtn" class="btn-secondary" type="button">保存站点信息</button>
+                      <button id="saveSiteBtn" class="btn-secondary" type="button" data-i18n="dashboard.saveSite">Save site info</button>
                     </div>
                     <div id="siteStatus" class="status-text"></div>
                   </div>
@@ -344,25 +344,25 @@
                 <div class="site-tags-section">
                   <div class="site-tags-header">
                     <div>
-                      <div class="badge">Apple Push 证书</div>
-                      <p class="drawer-help">为后续 APNs 推送预先维护开发环境与生产环境证书。</p>
+                      <div class="badge" data-i18n="dashboard.applePushBadge">Apple Push Certificates</div>
+                      <p class="drawer-help" data-i18n="dashboard.applePushHelp">Maintain dev and production APNs certificates for future push notifications.</p>
                     </div>
                   </div>
                   <div class="site-admin-grid">
                     <div class="site-settings-form">
-                      <label class="form-label" for="applePushDevFile">开发环境证书（dev）</label>
+                      <label class="form-label" for="applePushDevFile" data-i18n="dashboard.applePushDevLabel">Dev certificate (dev)</label>
                       <input id="applePushDevFile" class="input" type="file" accept=".p8,.p12,.pem,.cer,.crt,.key" />
-                      <p id="applePushDevMeta" class="drawer-help">未上传</p>
+                      <p id="applePushDevMeta" class="drawer-help" data-i18n="dashboard.notUploaded">Not uploaded</p>
                       <div class="site-settings-actions">
-                        <button id="applePushDevDeleteBtn" class="btn-inline btn-secondary" type="button">删除 dev 证书</button>
+                        <button id="applePushDevDeleteBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.deleteDevCert">Delete dev certificate</button>
                       </div>
                     </div>
                     <div class="site-settings-form">
-                      <label class="form-label" for="applePushProdFile">生产环境证书（prod）</label>
+                      <label class="form-label" for="applePushProdFile" data-i18n="dashboard.applePushProdLabel">Production certificate (prod)</label>
                       <input id="applePushProdFile" class="input" type="file" accept=".p8,.p12,.pem,.cer,.crt,.key" />
-                      <p id="applePushProdMeta" class="drawer-help">未上传</p>
+                      <p id="applePushProdMeta" class="drawer-help" data-i18n="dashboard.notUploaded">Not uploaded</p>
                       <div class="site-settings-actions">
-                        <button id="applePushProdDeleteBtn" class="btn-inline btn-secondary" type="button">删除 prod 证书</button>
+                        <button id="applePushProdDeleteBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.deleteProdCert">Delete prod certificate</button>
                       </div>
                     </div>
                   </div>
@@ -371,10 +371,10 @@
                 <div class="site-tags-section">
                   <div class="site-tags-header">
                     <div>
-                      <div class="badge">Tag 管理</div>
-                      <p class="drawer-help">可新增、编辑或删除站点内的内容标签。</p>
+                      <div class="badge" data-i18n="dashboard.tagManagementBadge">Tag Management</div>
+                      <p class="drawer-help" data-i18n="dashboard.tagManagementHelp">Create, edit, or delete content tags.</p>
                     </div>
-                    <button class="btn-inline btn-secondary" type="button" id="siteAddTagBtnProxy">新建 Tag</button>
+                    <button class="btn-inline btn-secondary" type="button" id="siteAddTagBtnProxy" data-i18n="dashboard.siteNewTag">New Tag</button>
                   </div>
                   <ul id="tagList" class="tag-list"></ul>
                 </div>

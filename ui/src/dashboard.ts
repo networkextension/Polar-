@@ -34,6 +34,7 @@ import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
 import { hydrateSiteBrand, renderSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
+import { t } from "./lib/i18n.js";
 import type {
   ApplePushCertificate,
   BotPayload,
@@ -192,32 +193,32 @@ function setActiveEntryItem(): void {
 }
 
 function syncThemeButton(theme: ThemeName): void {
-  themeToggleBtn.textContent = theme === "mono" ? "切换到默认样式" : "切换到黑白样式";
-  themeCurrentValue.textContent = theme === "mono" ? "黑白" : "默认";
+  themeToggleBtn.textContent = theme === "mono" ? t("dashboard.switchToDefault") : t("dashboard.switchToMonochrome");
+  themeCurrentValue.textContent = theme === "mono" ? t("dashboard.themeMonochrome") : t("dashboard.themeDefault");
 }
 
 function switchSettingsSection(section: "profile" | "personalization" | "settings" | "bots" | "site"): void {
   activeSettingsSection = section;
   const titles: Record<typeof activeSettingsSection, { title: string; lead: string }> = {
     profile: {
-      title: "个人中心",
-      lead: "维护头像、登录方式和最近登录记录，把 Profile 与账户相关信息集中收好。",
+      title: t("dashboard.personalCenter"),
+      lead: t("dashboard.profileLead"),
     },
     personalization: {
-      title: "个性化",
-      lead: "管理界面风格和个人偏好，让工作台更贴近你的使用习惯。",
+      title: t("dashboard.personalizationTitle"),
+      lead: t("dashboard.personalizationLead"),
     },
     settings: {
-      title: "设置",
+      title: t("dashboard.settingsTitle"),
       lead: "",
     },
     bots: {
-      title: "Bot 管理",
-      lead: "在这里维护 Bot 的默认模型配置、简介和专属 Prompt。",
+      title: t("dashboard.botsManagementTitle"),
+      lead: t("dashboard.botsLead"),
     },
     site: {
-      title: "站点管理",
-      lead: "管理员可见的站点 logo、intro、iOS Push 证书和 Tag 管理项。",
+      title: t("dashboard.siteManagementTitle"),
+      lead: t("dashboard.siteLead"),
     },
   };
   settingsPanels.forEach((panel) => {
@@ -234,7 +235,7 @@ function switchSettingsSection(section: "profile" | "personalization" | "setting
 
 function formatLocation(record: LoginRecord): string {
   const parts = [record.city, record.region, record.country].filter(Boolean);
-  return parts.length > 0 ? parts.join(", ") : "位置未知";
+  return parts.length > 0 ? parts.join(", ") : t("dashboard.unknownLocation");
 }
 
 function formatLoginMethod(method?: string): string {
@@ -242,9 +243,9 @@ function formatLoginMethod(method?: string): string {
     return "Passkey";
   }
   if (method === "register") {
-    return "注册";
+    return t("dashboard.loginMethodRegister");
   }
-  return "密码";
+  return t("dashboard.loginMethodPassword");
 }
 
 function defaultSiteIcon(name: string): string {
@@ -253,10 +254,10 @@ function defaultSiteIcon(name: string): string {
 
 function formatCertificateMeta(cert?: ApplePushCertificate): string {
   if (!cert?.file_name) {
-    return "未上传";
+    return t("dashboard.notUploaded");
   }
-  const uploadedAt = cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleString() : "未知时间";
-  return `当前文件：${cert.file_name} · 上传时间：${uploadedAt}`;
+  const uploadedAt = cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleString() : t("dashboard.unknownTime");
+  return t("dashboard.certMeta", { filename: cert.file_name, time: uploadedAt });
 }
 
 function renderSiteSettings(site?: SiteSettings): void {
@@ -273,7 +274,7 @@ function renderSiteSettings(site?: SiteSettings): void {
 
 function renderTagList(tags: Tag[]): void {
   if (!tags.length) {
-    tagList.innerHTML = `<li class="tag-item tag-item-empty">还没有 Tag，先创建第一个吧。</li>`;
+    tagList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noTags")}</li>`;
     return;
   }
 
@@ -286,12 +287,12 @@ function renderTagList(tags: Tag[]): void {
               <strong>${tag.name}</strong>
               <span class="tag-chip">${tag.slug}</span>
             </div>
-            <div class="tag-item-meta">排序 ${tag.sort_order}</div>
-            <div class="tag-item-desc">${tag.description || "暂无描述"}</div>
+            <div class="tag-item-meta">${t("dashboard.tagOrder", { order: String(tag.sort_order) })}</div>
+            <div class="tag-item-desc">${tag.description || t("dashboard.noDescription")}</div>
           </div>
           <div class="tag-item-actions">
-            <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
-            <button class="btn-inline" type="button" data-action="delete">删除</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+            <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>
           </div>
         </li>
       `
@@ -304,19 +305,19 @@ function resetLLMConfigForm(): void {
   llmConfigForm.reset();
   llmConfigApiKeyInput.value = "";
   llmConfigStatus.textContent = "";
-  llmConfigSubmitBtn.textContent = "保存配置";
+  llmConfigSubmitBtn.textContent = t("dashboard.saveConfigBtn");
 }
 
 function resetBotUserForm(): void {
   editingBotUserId = null;
   botUserForm.reset();
   botUserStatus.textContent = "";
-  botUserSubmitBtn.textContent = "保存 Bot";
+  botUserSubmitBtn.textContent = t("dashboard.saveBotBtn");
 }
 
 function renderLLMConfigList(configs: LLMConfig[]): void {
   if (!configs.length) {
-    llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">还没有 LLM Config，先创建一个吧。</li>`;
+    llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noLLMConfigs")}</li>`;
     return;
   }
 
@@ -328,15 +329,15 @@ function renderLLMConfigList(configs: LLMConfig[]): void {
             <div class="tag-item-header">
               <strong>${config.name}</strong>
               <span class="tag-chip">${config.model}</span>
-              ${config.has_api_key ? `<span class="tag-chip">Key 已保存</span>` : `<span class="tag-chip">无 Key</span>`}
-              ${config.shared ? `<span class="tag-chip">共享</span>` : `<span class="tag-chip">私有</span>`}
+              ${config.has_api_key ? `<span class="tag-chip">${t("dashboard.keySaved")}</span>` : `<span class="tag-chip">${t("dashboard.noKey")}</span>`}
+              ${config.shared ? `<span class="tag-chip">${t("dashboard.shared")}</span>` : `<span class="tag-chip">${t("dashboard.private")}</span>`}
             </div>
             <div class="tag-item-meta">${config.base_url}</div>
-            <div class="tag-item-desc">${config.system_prompt || "未设置 System Prompt"}</div>
+            <div class="tag-item-desc">${config.system_prompt || t("dashboard.noSystemPrompt")}</div>
           </div>
           <div class="tag-item-actions">
-            <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
-            <button class="btn-inline" type="button" data-action="delete">删除</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+            <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>
           </div>
         </li>
       `
@@ -346,7 +347,7 @@ function renderLLMConfigList(configs: LLMConfig[]): void {
 
 function syncBotConfigOptions(configs: LLMConfig[]): void {
   if (!configs.length) {
-    botUserConfigSelect.innerHTML = `<option value="">请先创建 LLM Config</option>`;
+    botUserConfigSelect.innerHTML = `<option value="">${t("dashboard.createLLMConfigFirst")}</option>`;
     botUserConfigSelect.disabled = true;
     botUserSubmitBtn.disabled = true;
     return;
@@ -365,7 +366,7 @@ function syncBotConfigOptions(configs: LLMConfig[]): void {
 
 function renderBotUserList(bots: BotUser[]): void {
   if (!bots.length) {
-    botUserList.innerHTML = `<li class="tag-item tag-item-empty">还没有 Bot，创建后就能直接私聊使用。</li>`;
+    botUserList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noBots")}</li>`;
     return;
   }
 
@@ -378,14 +379,14 @@ function renderBotUserList(bots: BotUser[]): void {
               <strong>${bot.name}</strong>
               <span class="tag-chip">${bot.config_name}</span>
             </div>
-            <div class="tag-item-meta">用户 ID：${bot.bot_user_id}</div>
-            <div class="tag-item-desc">${bot.description || "暂无简介"}</div>
-            <div class="tag-item-meta">${bot.system_prompt ? `Bot Prompt：${bot.system_prompt.slice(0, 36)}${bot.system_prompt.length > 36 ? "..." : ""}` : "未配置 Bot Prompt"}</div>
+            <div class="tag-item-meta">${t("dashboard.botUserId", { id: bot.bot_user_id })}</div>
+            <div class="tag-item-desc">${bot.description || t("dashboard.noDescription")}</div>
+            <div class="tag-item-meta">${bot.system_prompt ? t("dashboard.botPromptPreview", { preview: bot.system_prompt.slice(0, 36) + (bot.system_prompt.length > 36 ? "" : "") }) : t("dashboard.noBotPrompt")}</div>
           </div>
           <div class="tag-item-actions">
-            <button class="btn-inline btn-secondary" type="button" data-action="chat">对话</button>
-            <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
-            <button class="btn-inline" type="button" data-action="delete">删除</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="chat">${t("dashboard.chat")}</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+            <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>
           </div>
         </li>
       `
@@ -396,13 +397,13 @@ function renderBotUserList(bots: BotUser[]): void {
 async function loadLoginHistory(): Promise<void> {
   const { response, data } = await fetchLoginHistory();
   if (!response.ok) {
-    loginHistoryList.innerHTML = "<li>无法加载登录记录</li>";
+    loginHistoryList.innerHTML = `<li>${t("dashboard.loginHistoryLoadFailed")}</li>`;
     return;
   }
 
   const records: LoginRecord[] = data.records || [];
   if (!records.length) {
-    loginHistoryList.innerHTML = "<li>暂无登录记录</li>";
+    loginHistoryList.innerHTML = `<li>${t("dashboard.noLoginHistory")}</li>`;
     return;
   }
 
@@ -411,7 +412,7 @@ async function loadLoginHistory(): Promise<void> {
       const time = new Date(record.logged_in_at).toLocaleString();
       return `
         <li>
-          <div class="meta-title">${record.ip_address || "未知 IP"} · ${formatLoginMethod(record.login_method)} · ${formatDeviceType(record.device_type)}</div>
+          <div class="meta-title">${record.ip_address || t("dashboard.unknownIp")} · ${formatLoginMethod(record.login_method)} · ${formatDeviceType(record.device_type, t)}</div>
           <div class="meta-subtitle">${formatLocation(record)}</div>
           <div class="meta-time">${time}</div>
         </li>
@@ -428,13 +429,13 @@ async function loadProfile(): Promise<void> {
   }
 
   isAdmin = data.role === "admin";
-  welcomeText.textContent = `你好，${data.username}`;
-  settingsCardName.textContent = data.username || "当前用户";
-  settingsCardMeta.textContent = isAdmin ? "Profile、个性化与站点管理" : "Profile 与个性化";
-  settingsProfileName.textContent = data.username || "当前用户";
-  settingsProfileMeta.textContent = isAdmin ? "维护你的个人资料、设备偏好与站点配置" : "维护你的个人资料、设备与偏好";
+  welcomeText.textContent = t("dashboard.welcome", { username: data.username });
+  settingsCardName.textContent = data.username || t("dashboard.currentUser");
+  settingsCardMeta.textContent = isAdmin ? t("dashboard.adminMeta") : t("dashboard.userMeta");
+  settingsProfileName.textContent = data.username || t("dashboard.currentUser");
+  settingsProfileMeta.textContent = isAdmin ? t("dashboard.adminProfileMeta") : t("dashboard.userProfileMeta");
   addTagBtn.disabled = !isAdmin;
-  addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
+  addTagBtn.textContent = isAdmin ? t("dashboard.newTag") : t("dashboard.adminOnlyTag");
   addTagBtn.hidden = !isAdmin;
   siteAdminPanel.hidden = !isAdmin;
   settingsNavButtons.forEach((button) => {
@@ -459,8 +460,8 @@ async function loadSiteAdminData(): Promise<void> {
         currentLLMConfigs = ownResult.data.configs || [];
         renderLLMConfigList(currentLLMConfigs);
       } else {
-        llmConfigStatus.textContent = ownResult.data.error || "无法加载 LLM Config";
-        llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 LLM Config</li>`;
+        llmConfigStatus.textContent = ownResult.data.error || t("dashboard.llmConfigLoadFailed");
+        llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.llmConfigLoadFailed")}</li>`;
       }
 
       if (availableResult.response.ok) {
@@ -468,7 +469,7 @@ async function loadSiteAdminData(): Promise<void> {
         syncBotConfigOptions(currentAvailableLLMConfigs);
       } else {
         currentAvailableLLMConfigs = [];
-        botUserStatus.textContent = availableResult.data.error || "无法加载可用配置";
+        botUserStatus.textContent = availableResult.data.error || t("dashboard.availableConfigLoadFailed");
         syncBotConfigOptions(currentAvailableLLMConfigs);
       }
     })(),
@@ -478,8 +479,8 @@ async function loadSiteAdminData(): Promise<void> {
         currentBotUsers = data.bots || [];
         renderBotUserList(currentBotUsers);
       } else {
-        botUserStatus.textContent = data.error || "无法加载 Bot 列表";
-        botUserList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 Bot 列表</li>`;
+        botUserStatus.textContent = data.error || t("dashboard.botListLoadFailed");
+        botUserList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.botListLoadFailed")}</li>`;
       }
     })(),
   ];
@@ -491,14 +492,14 @@ async function loadSiteAdminData(): Promise<void> {
         if (siteResult.response.ok) {
           renderSiteSettings(siteResult.data.site);
         } else {
-          siteStatus.textContent = siteResult.data.error || "无法加载站点信息";
+          siteStatus.textContent = siteResult.data.error || t("dashboard.siteInfoLoadFailed");
         }
 
         if (tagResult.response.ok) {
           currentTags = tagResult.data.tags || [];
           renderTagList(currentTags);
         } else {
-          tagList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 Tag 列表</li>`;
+          tagList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.tagListLoadFailed")}</li>`;
         }
       })()
     );
@@ -515,8 +516,8 @@ function openTagModal(tag?: Tag): void {
   tagSlug.value = tag?.slug || "";
   tagDesc.value = tag?.description || "";
   tagFormStatus.textContent = "";
-  tagModalTitle.textContent = editingTagId ? "编辑 Tag" : "添加 Tag";
-  tagSubmitBtn.textContent = editingTagId ? "保存" : "创建";
+  tagModalTitle.textContent = editingTagId ? t("dashboard.editTag") : t("dashboard.addTag");
+  tagSubmitBtn.textContent = editingTagId ? t("common.save") : t("common.create");
   setModalOpen(tagModal, true);
   tagName.focus();
 }
@@ -557,12 +558,12 @@ async function loadEntries(reset = false): Promise<void> {
 
   const { response, data } = await fetchEntries(nextOffset);
   if (!response.ok) {
-    entryList.innerHTML = "<li>无法加载记录</li>";
+    entryList.innerHTML = `<li>${t("dashboard.entryLoadFailed")}</li>`;
     return;
   }
   const entries: EntrySummary[] = data.entries || [];
   if (reset && !entries.length) {
-    entryList.innerHTML = "<li>暂无记录</li>";
+    entryList.innerHTML = `<li>${t("dashboard.noEntries")}</li>`;
     hasMore = false;
     loadMoreBtn.style.display = "none";
     return;
@@ -588,13 +589,13 @@ async function loadEntries(reset = false): Promise<void> {
 async function loadEntry(id: number): Promise<void> {
   const { response, data } = await fetchEntry(id);
   if (!response.ok) {
-    entryContent.textContent = "读取失败";
+    entryContent.textContent = t("dashboard.entryReadFailed");
     return;
   }
 
   activeEntryId = data.entry ? data.entry.id : null;
   setActiveEntryItem();
-  const rawContent = data.content || "空内容";
+  const rawContent = data.content || t("dashboard.emptyContent");
   entryContent.innerHTML = renderMarkdown(rawContent);
   editBtn.disabled = data.can_edit === false;
   deleteBtn.disabled = data.can_edit === false;
@@ -684,7 +685,7 @@ query<HTMLElement>(tagModal, ".modal-backdrop").addEventListener("click", closeT
 
 tagForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  tagFormStatus.textContent = editingTagId ? "正在保存..." : "正在创建...";
+  tagFormStatus.textContent = editingTagId ? t("dashboard.tagSaving") : t("dashboard.tagCreating");
   tagSubmitBtn.disabled = true;
 
   const payload: TagPayload = {
@@ -699,16 +700,16 @@ tagForm.addEventListener("submit", async (event) => {
       ? await updateTag(editingTagId, payload)
       : await createTag(payload);
     if (!response.ok) {
-      tagFormStatus.textContent = data.error || "保存失败";
+      tagFormStatus.textContent = data.error || t("dashboard.tagSaveFailed");
       return;
     }
-    tagFormStatus.textContent = editingTagId ? "保存成功" : "创建成功";
+    tagFormStatus.textContent = editingTagId ? t("dashboard.tagSaved") : t("dashboard.tagCreated");
     await loadSiteAdminData();
     window.setTimeout(() => {
       closeTagModal();
     }, 400);
   } catch {
-    tagFormStatus.textContent = "保存失败，请重试";
+    tagFormStatus.textContent = t("dashboard.tagSaveFailedRetry");
   } finally {
     tagSubmitBtn.disabled = false;
   }
@@ -735,16 +736,16 @@ tagList.addEventListener("click", async (event) => {
   }
 
   if (action === "delete") {
-    if (!window.confirm(`确定删除 Tag “${tag.name}” 吗？`)) {
+    if (!window.confirm(t("dashboard.confirmDeleteTag", { name: tag.name }))) {
       return;
     }
 
     const { response, data } = await removeTag(tag.id);
     if (!response.ok) {
-      siteStatus.textContent = data.error || "删除失败";
+      siteStatus.textContent = data.error || t("common.deleteFailed");
       return;
     }
-    siteStatus.textContent = `已删除 Tag：${tag.name}`;
+    siteStatus.textContent = t("dashboard.tagDeleted", { name: tag.name });
     await loadSiteAdminData();
   }
 });
@@ -763,22 +764,22 @@ llmConfigTestBtn.addEventListener("click", async () => {
     shared: llmConfigSharedInput.checked,
   };
   if (!payload.base_url || !payload.model || !payload.api_key) {
-    setStatusMessage(llmConfigStatus, "测试前请先填写 Base URL、Model 和 API Key", "error");
+    setStatusMessage(llmConfigStatus, t("dashboard.llmTestMissingFields"), "error");
     return;
   }
 
   llmConfigTestBtn.disabled = true;
   llmConfigSubmitBtn.disabled = true;
-  setStatusMessage(llmConfigStatus, "正在测试模型配置...");
+  setStatusMessage(llmConfigStatus, t("dashboard.llmTesting"));
   try {
     const { response, data } = await testLLMConfig(payload);
     setStatusMessage(
       llmConfigStatus,
-      response.ok ? data.message || "连接成功，模型配置可用" : data.error || "测试失败",
+      response.ok ? data.message || t("dashboard.llmTestSuccess") : data.error || t("dashboard.llmTestFailed"),
       response.ok ? "success" : "error"
     );
   } catch {
-    setStatusMessage(llmConfigStatus, "网络错误，请重试", "error");
+    setStatusMessage(llmConfigStatus, t("common.networkErrorRetry"), "error");
   } finally {
     llmConfigTestBtn.disabled = false;
     llmConfigSubmitBtn.disabled = false;
@@ -800,12 +801,12 @@ llmConfigForm.addEventListener("submit", async (event) => {
     shared: llmConfigSharedInput.checked,
   };
   if (!payload.name || !payload.base_url || !payload.model) {
-    llmConfigStatus.textContent = "请先填写名称、Base URL 和 Model";
+    llmConfigStatus.textContent = t("dashboard.llmConfigMissingFields");
     return;
   }
 
   llmConfigSubmitBtn.disabled = true;
-  llmConfigStatus.textContent = editingLLMConfigId ? "正在保存配置..." : "正在创建配置...";
+  llmConfigStatus.textContent = editingLLMConfigId ? t("dashboard.llmConfigSaving") : t("dashboard.llmConfigCreating");
   try {
     const { response, data } = editingLLMConfigId
       ? await updateLLMConfig(editingLLMConfigId, {
@@ -814,14 +815,14 @@ llmConfigForm.addEventListener("submit", async (event) => {
         })
       : await createLLMConfig(payload);
     if (!response.ok) {
-      llmConfigStatus.textContent = data.error || "保存失败";
+      llmConfigStatus.textContent = data.error || t("common.saveFailed");
       return;
     }
-    llmConfigStatus.textContent = editingLLMConfigId ? "配置已更新" : "配置已创建";
+    llmConfigStatus.textContent = editingLLMConfigId ? t("dashboard.llmConfigUpdated") : t("dashboard.llmConfigCreated");
     resetLLMConfigForm();
     await loadSiteAdminData();
   } catch {
-    llmConfigStatus.textContent = "网络错误，请重试";
+    llmConfigStatus.textContent = t("common.networkErrorRetry");
   } finally {
     llmConfigSubmitBtn.disabled = false;
   }
@@ -849,22 +850,22 @@ llmConfigList.addEventListener("click", async (event) => {
     llmConfigApiKeyInput.value = "";
     llmConfigSystemPromptInput.value = config.system_prompt || "";
     llmConfigSharedInput.checked = config.shared;
-    llmConfigSubmitBtn.textContent = "更新配置";
-    llmConfigStatus.textContent = config.has_api_key ? "已保存 API Key，留空表示保持原值" : "";
+    llmConfigSubmitBtn.textContent = t("dashboard.updateConfig");
+    llmConfigStatus.textContent = config.has_api_key ? t("dashboard.apiKeySaved") : "";
     llmConfigNameInput.focus();
     return;
   }
 
   if (action === "delete") {
-    if (!window.confirm(`确定删除配置“${config.name}”吗？已绑定的 Bot 需要先改绑或删除。`)) {
+    if (!window.confirm(t("dashboard.confirmDeleteConfig", { name: config.name }))) {
       return;
     }
     const { response, data } = await removeLLMConfig(config.id);
     if (!response.ok) {
-      llmConfigStatus.textContent = data.error || "删除失败";
+      llmConfigStatus.textContent = data.error || t("common.deleteFailed");
       return;
     }
-    llmConfigStatus.textContent = `已删除配置：${config.name}`;
+    llmConfigStatus.textContent = t("dashboard.configDeleted", { name: config.name });
     resetLLMConfigForm();
     await loadSiteAdminData();
   }
@@ -879,25 +880,25 @@ botUserForm.addEventListener("submit", async (event) => {
     llm_config_id: Number(botUserConfigSelect.value || 0),
   };
   if (!payload.name || payload.llm_config_id <= 0) {
-    botUserStatus.textContent = "请先填写 Bot 名称并选择一个配置";
+    botUserStatus.textContent = t("dashboard.botMissingFields");
     return;
   }
 
   botUserSubmitBtn.disabled = true;
-  botUserStatus.textContent = editingBotUserId ? "正在保存 Bot..." : "正在创建 Bot...";
+  botUserStatus.textContent = editingBotUserId ? t("dashboard.botSaving") : t("dashboard.botCreating");
   try {
     const { response, data } = editingBotUserId
       ? await updateBotUser(editingBotUserId, payload)
       : await createBotUser(payload);
     if (!response.ok) {
-      botUserStatus.textContent = data.error || "保存失败";
+      botUserStatus.textContent = data.error || t("common.saveFailed");
       return;
     }
-    botUserStatus.textContent = editingBotUserId ? "Bot 已更新" : "Bot 已创建";
+    botUserStatus.textContent = editingBotUserId ? t("dashboard.botUpdated") : t("dashboard.botCreated");
     resetBotUserForm();
     await loadSiteAdminData();
   } catch {
-    botUserStatus.textContent = "网络错误，请重试";
+    botUserStatus.textContent = t("common.networkErrorRetry");
   } finally {
     botUserSubmitBtn.disabled = false;
   }
@@ -927,28 +928,28 @@ botUserList.addEventListener("click", async (event) => {
     botUserDescriptionInput.value = bot.description || "";
     botUserSystemPromptInput.value = bot.system_prompt || "";
     botUserConfigSelect.value = String(bot.llm_config_id);
-    botUserSubmitBtn.textContent = "更新 Bot";
+    botUserSubmitBtn.textContent = t("dashboard.updateBot");
     botUserStatus.textContent = "";
     botUserNameInput.focus();
     return;
   }
   if (action === "delete") {
-    if (!window.confirm(`确定删除 Bot “${bot.name}”吗？这会同时移除这个 Bot 用户。`)) {
+    if (!window.confirm(t("dashboard.confirmDeleteBot", { name: bot.name }))) {
       return;
     }
     const { response, data } = await removeBotUser(bot.id);
     if (!response.ok) {
-      botUserStatus.textContent = data.error || "删除失败";
+      botUserStatus.textContent = data.error || t("common.deleteFailed");
       return;
     }
-    botUserStatus.textContent = `已删除 Bot：${bot.name}`;
+    botUserStatus.textContent = t("dashboard.botDeleted", { name: bot.name });
     resetBotUserForm();
     await loadSiteAdminData();
   }
 });
 
 saveSiteBtn.addEventListener("click", async () => {
-  siteStatus.textContent = "正在保存站点信息...";
+  siteStatus.textContent = t("dashboard.savingSiteInfo");
   saveSiteBtn.disabled = true;
 
   try {
@@ -958,13 +959,13 @@ saveSiteBtn.addEventListener("click", async () => {
       icon_url: siteIconPreview.src,
     });
     if (!response.ok) {
-      siteStatus.textContent = data.error || "保存失败";
+      siteStatus.textContent = data.error || t("common.saveFailed");
       return;
     }
     renderSiteSettings(data.site);
-    siteStatus.textContent = "站点信息已保存";
+    siteStatus.textContent = t("dashboard.siteInfoSaved");
   } catch {
-    siteStatus.textContent = "网络错误，请重试";
+    siteStatus.textContent = t("common.networkErrorRetry");
   } finally {
     saveSiteBtn.disabled = false;
   }
@@ -976,26 +977,26 @@ siteIconFile.addEventListener("change", async () => {
     return;
   }
   if (!file.type.startsWith("image/")) {
-    siteStatus.textContent = "请选择图片文件";
+    siteStatus.textContent = t("dashboard.selectImageFile");
     siteIconFile.value = "";
     return;
   }
 
-  siteStatus.textContent = "正在上传站点图标...";
+  siteStatus.textContent = t("dashboard.uploadingSiteIcon");
   const formData = new FormData();
   formData.append("icon", file);
 
   try {
     const { response, data } = await uploadSiteIcon(formData);
     if (!response.ok) {
-      siteStatus.textContent = data.error || "上传失败";
+      siteStatus.textContent = data.error || t("common.submitFailed");
       return;
     }
     renderSiteSettings(data.site);
     siteIconPreview.src = `${data.icon_url || data.site?.icon_url || ""}?v=${Date.now()}`;
-    siteStatus.textContent = "站点图标已更新";
+    siteStatus.textContent = t("dashboard.siteIconUpdated");
   } catch {
-    siteStatus.textContent = "网络错误，请重试";
+    siteStatus.textContent = t("common.networkErrorRetry");
   } finally {
     siteIconFile.value = "";
   }
@@ -1009,46 +1010,46 @@ async function handleApplePushCertificateUpload(environment: "dev" | "prod", fil
 
   const lowerName = file.name.toLowerCase();
   if (![".p8", ".p12", ".pem", ".cer", ".crt", ".key"].some((ext) => lowerName.endsWith(ext))) {
-    siteStatus.textContent = "仅支持 .p8、.p12、.pem、.cer、.crt、.key 文件";
+    siteStatus.textContent = t("dashboard.certUnsupportedFormat");
     fileInput.value = "";
     return;
   }
 
-  siteStatus.textContent = `正在上传 ${environment} Apple Push 证书...`;
+  siteStatus.textContent = t("dashboard.uploadingCert", { env: environment });
   const formData = new FormData();
   formData.append("certificate", file);
 
   try {
     const { response, data } = await uploadApplePushCertificate(environment, formData);
     if (!response.ok) {
-      siteStatus.textContent = data.error || "上传失败";
+      siteStatus.textContent = data.error || t("common.submitFailed");
       return;
     }
     renderSiteSettings(data.site);
-    siteStatus.textContent = `${environment} Apple Push 证书已更新`;
+    siteStatus.textContent = t("dashboard.certUpdated", { env: environment });
   } catch {
-    siteStatus.textContent = "网络错误，请重试";
+    siteStatus.textContent = t("common.networkErrorRetry");
   } finally {
     fileInput.value = "";
   }
 }
 
 async function handleApplePushCertificateDelete(environment: "dev" | "prod"): Promise<void> {
-  if (!window.confirm(`确定删除 ${environment} Apple Push 证书吗？`)) {
+  if (!window.confirm(t("dashboard.confirmDeleteCert", { env: environment }))) {
     return;
   }
 
-  siteStatus.textContent = `正在删除 ${environment} Apple Push 证书...`;
+  siteStatus.textContent = t("dashboard.deletingCert", { env: environment });
   try {
     const { response, data } = await deleteApplePushCertificate(environment);
     if (!response.ok) {
-      siteStatus.textContent = data.error || "删除失败";
+      siteStatus.textContent = data.error || t("common.deleteFailed");
       return;
     }
     renderSiteSettings(data.site);
-    siteStatus.textContent = `${environment} Apple Push 证书已删除`;
+    siteStatus.textContent = t("dashboard.certDeleted", { env: environment });
   } catch {
-    siteStatus.textContent = "网络错误，请重试";
+    siteStatus.textContent = t("common.networkErrorRetry");
   }
 }
 
@@ -1073,12 +1074,12 @@ logoutBtn.addEventListener("click", async () => {
   try {
     const response = await logout();
     if (!response.ok) {
-      welcomeText.textContent = "退出失败，请重试";
+      welcomeText.textContent = t("dashboard.logoutFailed");
       return;
     }
     window.location.replace("/login.html");
   } catch {
-    welcomeText.textContent = "退出失败，请检查网络后重试";
+    welcomeText.textContent = t("dashboard.logoutNetworkFailed");
   } finally {
     logoutBtn.disabled = false;
   }
@@ -1121,14 +1122,14 @@ deleteBtn.addEventListener("click", async () => {
   if (!activeEntryId) {
     return;
   }
-  if (!window.confirm("确定要删除该记录吗？")) {
+  if (!window.confirm(t("dashboard.confirmDeleteEntry"))) {
     return;
   }
 
   const response = await deleteEntry(activeEntryId);
   if (response.ok) {
     activeEntryId = null;
-    entryContent.textContent = "请选择侧边栏中的记录";
+    entryContent.textContent = t("dashboard.selectEntry");
     await loadEntries(true);
   }
 });
@@ -1139,7 +1140,7 @@ iconFile.addEventListener("change", () => {
     return;
   }
   if (!file.type.startsWith("image/")) {
-    iconStatus.textContent = "请选择图片文件。";
+    iconStatus.textContent = t("dashboard.selectImageFileWithPeriod");
     return;
   }
 
@@ -1214,17 +1215,17 @@ window.addEventListener("keydown", (event) => {
 cancelIconBtn.addEventListener("click", () => {
   iconEditor.classList.remove("active");
   iconFile.value = "";
-  iconStatus.textContent = "已取消编辑。";
+  iconStatus.textContent = t("dashboard.canceledEdit");
 });
 
 saveIconBtn.addEventListener("click", async () => {
   if (!iconImage) {
     return;
   }
-  iconStatus.textContent = "正在上传...";
+  iconStatus.textContent = t("common.uploading");
   iconCanvas.toBlob(async (blob) => {
     if (!blob) {
-      iconStatus.textContent = "生成图片失败。";
+      iconStatus.textContent = t("dashboard.generatingImageFailed");
       return;
     }
 
@@ -1234,7 +1235,7 @@ saveIconBtn.addEventListener("click", async () => {
     try {
       const { response, data } = await uploadUserIcon(formData);
       if (!response.ok) {
-        iconStatus.textContent = data.error || "上传失败";
+        iconStatus.textContent = data.error || t("common.submitFailed");
         return;
       }
       const nextAvatar = `${data.icon_url || ""}?v=${Date.now()}`;
@@ -1242,9 +1243,9 @@ saveIconBtn.addEventListener("click", async () => {
       settingsCardAvatar.src = nextAvatar;
       iconEditor.classList.remove("active");
       iconFile.value = "";
-      iconStatus.textContent = "头像已更新。";
+      iconStatus.textContent = t("dashboard.avatarUpdated");
     } catch {
-      iconStatus.textContent = "网络错误，请重试。";
+      iconStatus.textContent = t("dashboard.networkErrorPeriod");
     }
   }, "image/png", 0.92);
 });
@@ -1257,15 +1258,15 @@ themeToggleBtn.addEventListener("click", () => {
 
 passkeyRegisterBtn.addEventListener("click", async () => {
   if (!window.PublicKeyCredential) {
-    passkeyStatus.textContent = "当前浏览器不支持 Passkey。";
+    passkeyStatus.textContent = t("dashboard.passkeyNotSupported");
     return;
   }
 
-  passkeyStatus.textContent = "正在启动 Passkey...";
+  passkeyStatus.textContent = t("dashboard.passkeyStarting");
   try {
     const { response: beginResponse, data: beginResult } = await beginPasskeyRegistration();
     if (!beginResponse.ok) {
-      passkeyStatus.textContent = beginResult.error || "无法发起 Passkey 绑定";
+      passkeyStatus.textContent = beginResult.error || t("dashboard.passkeyBeginFailed");
       return;
     }
 
@@ -1294,10 +1295,10 @@ passkeyRegisterBtn.addEventListener("click", async () => {
     );
 
     passkeyStatus.textContent = finishResponse.ok
-      ? "Passkey 绑定成功！"
-      : finishResult.error || "Passkey 绑定失败";
+      ? t("dashboard.passkeySuccess")
+      : finishResult.error || t("dashboard.passkeyFailed");
   } catch {
-    passkeyStatus.textContent = "网络错误，请重试";
+    passkeyStatus.textContent = t("common.networkErrorRetry");
   }
 });
 

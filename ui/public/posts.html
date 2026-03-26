@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>帖子广场</title>
+    <title data-i18n-title="posts.title">Posts Square</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,35 +11,35 @@
   <body class="site-shell">
     <div class="page-shell-wide">
       <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="posts-page">
       <div class="dashboard-header">
         <div>
-          <h1>帖子广场</h1>
-          <p id="postWelcome">正在加载用户信息...</p>
+          <h1 data-i18n="posts.title">Posts Square</h1>
+          <p id="postWelcome" data-i18n="posts.loading">Loading user info...</p>
         </div>
         <div class="header-actions">
-          <a class="btn-inline btn-secondary" href="/dashboard.html">返回控制台</a>
-          <a class="btn-inline btn-secondary" href="/markdowns.html">公开 Markdown</a>
-          <a class="btn-inline btn-secondary" href="/post.html">发帖</a>
+          <a class="btn-inline btn-secondary" href="/dashboard.html" data-i18n="posts.backToDashboard">Back to Dashboard</a>
+          <a class="btn-inline btn-secondary" href="/markdowns.html" data-i18n="posts.publicMarkdowns">Public Markdowns</a>
+          <a class="btn-inline btn-secondary" href="/post.html" data-i18n="posts.newPost">New Post</a>
         </div>
       </div>
 
       <div class="posts-list">
         <div class="posts-filter-panel panel">
-          <div class="badge">帖子筛选</div>
+          <div class="badge" data-i18n="posts.filterBadge">Filter Posts</div>
           <div id="postTypeFilters" class="post-filter-tabs"></div>
           <div id="tagFilters" class="post-filter-chips"></div>
         </div>
-        <div id="postListBadge" class="badge">最新帖子</div>
+        <div id="postListBadge" class="badge" data-i18n="posts.latestPosts">Latest posts</div>
         <div id="postList" class="post-list"></div>
-        <button id="postLoadMoreBtn" class="btn-inline btn-secondary" type="button">加载更多</button>
+        <button id="postLoadMoreBtn" class="btn-inline btn-secondary" type="button" data-i18n="posts.loadMore">Load more</button>
       </div>
       </div>
     </div>

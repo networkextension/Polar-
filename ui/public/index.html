@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,19 +11,19 @@
   <body class="site-shell">
     <div class="page-shell-narrow">
       <a class="site-brand-banner" href="/" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="card">
         <h1>Gin Auth UI</h1>
-        <p id="statusText">正在检查登录状态...</p>
-        <a class="link" href="/login.html">登录</a>
-        <a class="link" href="/register.html">注册</a>
-        <a class="link" href="/editor.html">新建 Markdown</a>
+        <p id="statusText" data-i18n="index.status">Checking login status...</p>
+        <a class="link" href="/login.html" data-i18n="index.login">Log in</a>
+        <a class="link" href="/register.html" data-i18n="index.register">Register</a>
+        <a class="link" href="/editor.html" data-i18n="index.newMarkdown">New Markdown</a>
       </div>
     </div>
 

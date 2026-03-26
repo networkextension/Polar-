@@ -2,6 +2,7 @@ import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
+import { t } from "./lib/i18n.js";
 
 const titleEl = byId<HTMLElement>("markdownTitle");
 const metaEl = byId<HTMLElement>("markdownMeta");
@@ -13,8 +14,8 @@ initStoredTheme();
 bindThemeSync();
 
 function applyMarkdownPayload(data: { entry?: { title?: string; is_public?: boolean }; content?: string }): void {
-  titleEl.textContent = data.entry?.title || "公开 Markdown";
-  metaEl.textContent = data.entry?.is_public ? "公开只读文档" : "只读预览";
+  titleEl.textContent = data.entry?.title || t("markdown.title");
+  metaEl.textContent = data.entry?.is_public ? t("markdown.publicReadOnly") : t("markdown.readOnlyPreview");
   contentEl.innerHTML = renderMarkdown(data.content || "");
 }
 
@@ -36,8 +37,8 @@ async function requestMarkdown(path: string): Promise<{ ok: boolean; status: num
 async function loadPublicMarkdown(): Promise<void> {
   if (!entryId) {
     alertBox.className = "alert error";
-    alertBox.textContent = "缺少文档 ID";
-    contentEl.textContent = "无法加载内容";
+    alertBox.textContent = t("markdown.missingId");
+    contentEl.textContent = t("markdown.loadContentFailed");
     return;
   }
 
@@ -52,18 +53,18 @@ async function loadPublicMarkdown(): Promise<void> {
       const authResult = await requestMarkdown(`/api/markdown/${encodeURIComponent(entryId)}`);
       if (authResult.ok) {
         applyMarkdownPayload(authResult.data);
-        metaEl.textContent = "登录态只读预览";
+        metaEl.textContent = t("markdown.authReadOnlyPreview");
         return;
       }
     }
 
     alertBox.className = "alert error";
-    alertBox.textContent = publicResult.data.error || "无法加载文档";
-    contentEl.textContent = "未找到公开文档";
+    alertBox.textContent = publicResult.data.error || t("markdown.loadFailed");
+    contentEl.textContent = t("markdown.notFound");
   } catch {
     alertBox.className = "alert error";
-    alertBox.textContent = "网络错误，请稍后重试";
-    contentEl.textContent = "加载失败";
+    alertBox.textContent = t("common.networkError");
+    contentEl.textContent = t("markdown.loadError");
   }
 }
 
