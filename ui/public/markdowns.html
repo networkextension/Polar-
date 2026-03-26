@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>公开 Markdown</title>
+    <title data-i18n-title="markdowns.title">Public Markdowns</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,28 +11,28 @@
   <body class="site-shell">
     <div class="page-shell-wide">
       <a class="site-brand-banner" href="/" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="posts-page">
         <div class="dashboard-header">
           <div>
-            <h1>公开 Markdown</h1>
-            <p id="markdownsWelcome">浏览所有公开发布的文档</p>
+            <h1 data-i18n="markdowns.title">Public Markdowns</h1>
+            <p id="markdownsWelcome" data-i18n="markdowns.browse">Browse all publicly published documents</p>
           </div>
           <div class="header-actions">
-            <a class="btn-inline btn-secondary" href="/dashboard.html">返回控制台</a>
+            <a class="btn-inline btn-secondary" href="/dashboard.html" data-i18n="markdowns.backToDashboard">Back to Dashboard</a>
           </div>
         </div>
 
         <div class="posts-list">
-          <div class="badge">最新公开文档</div>
+          <div class="badge" data-i18n="markdowns.latestBadge">Latest public documents</div>
           <div id="markdownList" class="markdown-list"></div>
-          <button id="markdownLoadMoreBtn" class="btn-inline btn-secondary" type="button">加载更多</button>
+          <button id="markdownLoadMoreBtn" class="btn-inline btn-secondary" type="button" data-i18n="markdowns.loadMore">Load more</button>
         </div>
       </div>
     </div>

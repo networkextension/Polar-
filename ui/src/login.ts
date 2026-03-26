@@ -2,6 +2,7 @@ import { byId } from "./lib/dom.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
 import { buildClientHeaders } from "./lib/client.js";
 import { hydrateSiteBrand } from "./lib/site.js";
+import { t } from "./lib/i18n.js";
 
 const API_BASE = "";
 const form = byId<HTMLFormElement>("loginForm");
@@ -36,18 +37,18 @@ form.addEventListener("submit", async (event) => {
 
     if (!res.ok) {
       alertBox.className = "alert error";
-      alertBox.textContent = data.error || "登录失败";
+      alertBox.textContent = data.error || t("login.failed");
       return;
     }
 
     alertBox.className = "alert success";
-    alertBox.textContent = "登录成功，正在跳转...";
+    alertBox.textContent = t("login.success");
     window.setTimeout(() => {
       window.location.href = "/dashboard.html";
     }, 600);
   } catch {
     alertBox.className = "alert error";
-    alertBox.textContent = "网络错误，请稍后重试";
+    alertBox.textContent = t("common.networkError");
   }
 });
 
@@ -56,18 +57,18 @@ passkeyLoginBtn.addEventListener("click", async () => {
   alertBox.textContent = "";
 
   if (!window.PublicKeyCredential) {
-    passkeyStatus.textContent = "当前浏览器不支持 Passkey。";
+    passkeyStatus.textContent = t("login.passkeyNotSupported");
     return;
   }
 
   const elements = form.elements as LoginFormElements;
   const email = elements.email.value.trim();
   if (!email) {
-    passkeyStatus.textContent = "请先输入邮箱地址。";
+    passkeyStatus.textContent = t("login.passkeyEnterEmail");
     return;
   }
 
-  passkeyStatus.textContent = "正在启动 Passkey...";
+  passkeyStatus.textContent = t("login.passkeyStarting");
 
   try {
     const beginRes = await fetch(`${API_BASE}/api/passkey/login/begin`, {
@@ -79,7 +80,7 @@ passkeyLoginBtn.addEventListener("click", async () => {
     const beginResult = await beginRes.json();
 
     if (!beginRes.ok) {
-      passkeyStatus.textContent = beginResult.error || "无法发起 Passkey 登录";
+      passkeyStatus.textContent = beginResult.error || t("login.passkeyBeginFailed");
       return;
     }
 
@@ -107,16 +108,16 @@ passkeyLoginBtn.addEventListener("click", async () => {
     const finishResult = await finishRes.json();
 
     if (finishRes.ok) {
-      passkeyStatus.textContent = "Passkey 登录成功，正在跳转...";
+      passkeyStatus.textContent = t("login.passkeySuccess");
       window.setTimeout(() => {
         window.location.href = "/dashboard.html";
       }, 600);
       return;
     }
 
-    passkeyStatus.textContent = finishResult.error || "Passkey 登录失败";
+    passkeyStatus.textContent = finishResult.error || t("login.passkeyFailed");
   } catch {
-    passkeyStatus.textContent = "网络错误，请稍后重试";
+    passkeyStatus.textContent = t("common.networkError");
   }
 });
 

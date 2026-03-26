@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>帖子详情</title>
+    <title data-i18n-title="post.title">Post Detail</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,74 +11,74 @@
   <body class="site-shell">
     <div class="page-shell-wide">
       <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="posts-page">
       <div class="dashboard-header">
         <div>
-          <h1>帖子详情</h1>
-          <p id="postWelcome">正在加载...</p>
+          <h1 data-i18n="post.title">Post Detail</h1>
+          <p id="postWelcome" data-i18n="post.loading">Loading...</p>
         </div>
         <div class="header-actions">
-          <a class="btn-inline btn-secondary" href="/posts.html">返回帖子广场</a>
+          <a class="btn-inline btn-secondary" href="/posts.html" data-i18n="post.backToPosts">Back to Posts Square</a>
         </div>
       </div>
 
       <div id="postDetail" class="post-detail panel"></div>
 
       <div class="panel post-form-panel">
-        <div class="badge">发布新帖</div>
+        <div class="badge" data-i18n="post.newPostBadge">New Post</div>
         <form id="postForm" class="post-form">
-          <label class="form-label" for="postType">类型</label>
+          <label class="form-label" for="postType" data-i18n="post.postTypeStan">Type</label>
           <select id="postType" class="input">
-            <option value="standard">普通帖子</option>
-            <option value="task">零工任务</option>
+            <option value="standard" data-i18n="post.postTypeStan">Regular post</option>
+            <option value="task" data-i18n="post.postTypeTask">Gig task</option>
           </select>
 
-          <label class="form-label" for="postTag">板块 / Tag</label>
+          <label class="form-label" for="postTag" data-i18n="post.tagSection">Section / Tag</label>
           <select id="postTag" class="input">
-            <option value="">不选择板块</option>
+            <option value="" data-i18n="post.noSection">No section</option>
           </select>
 
-          <label class="form-label" for="postContent">内容</label>
-          <textarea id="postContent" class="input textarea" rows="4" placeholder="分享你的想法..." required></textarea>
+          <label class="form-label" for="postContent" data-i18n="post.contentLabel">Content</label>
+          <textarea id="postContent" class="input textarea" rows="4" data-i18n-placeholder="post.contentPlaceholder" placeholder="Share your thoughts..." required></textarea>
 
           <div id="taskFields" class="task-form-fields" hidden>
-            <label class="form-label" for="taskLocation">地理位置（可选）</label>
-            <input id="taskLocation" class="input" type="text" placeholder="如：上海徐汇 / 远程" />
+            <label class="form-label" for="taskLocation" data-i18n="post.taskLocationLabel">Location (optional)</label>
+            <input id="taskLocation" class="input" type="text" data-i18n-placeholder="post.taskLocationPlaceholder" placeholder="e.g. Remote / Shanghai" />
 
             <div class="task-form-grid">
               <div>
-                <label class="form-label" for="taskStartAt">开始时间</label>
+                <label class="form-label" for="taskStartAt" data-i18n="post.taskStartLabel">Start time</label>
                 <input id="taskStartAt" class="input" type="datetime-local" />
               </div>
               <div>
-                <label class="form-label" for="taskEndAt">结束时间</label>
+                <label class="form-label" for="taskEndAt" data-i18n="post.taskEndLabel">End time</label>
                 <input id="taskEndAt" class="input" type="datetime-local" />
               </div>
             </div>
 
-            <label class="form-label" for="workingHours">Working hours</label>
-            <input id="workingHours" class="input" type="text" placeholder="如：4h / 9:00-13:00 / 周末两天" />
+            <label class="form-label" for="workingHours" data-i18n="post.workingHoursLabel">Working hours</label>
+            <input id="workingHours" class="input" type="text" data-i18n-placeholder="post.workingHoursPlaceholder" placeholder="e.g. 4h / 9:00-13:00 / two weekends" />
 
-            <label class="form-label" for="applyDeadline">申请截止时间</label>
+            <label class="form-label" for="applyDeadline" data-i18n="post.applyDeadlineLabel">Application deadline</label>
             <input id="applyDeadline" class="input" type="datetime-local" />
           </div>
 
-          <label class="form-label" for="postImages">图片（可选，支持多选）</label>
+          <label class="form-label" for="postImages" data-i18n="post.imagesLabel">Images (optional, multiple allowed)</label>
           <input id="postImages" class="input" type="file" accept="image/*" multiple />
 
-          <label class="form-label" for="postVideos">视频（可选，支持多选）</label>
+          <label class="form-label" for="postVideos" data-i18n="post.videosLabel">Videos (optional, multiple allowed)</label>
           <input id="postVideos" class="input" type="file" accept="video/*" multiple />
 
           <div id="postFormStatus" class="status-text"></div>
           <div class="post-form-actions">
-            <button id="postSubmitBtn" class="btn-secondary" type="submit">发布</button>
+            <button id="postSubmitBtn" class="btn-secondary" type="submit" data-i18n="post.publish">Publish</button>
           </div>
         </form>
       </div>

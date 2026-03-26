@@ -22,13 +22,13 @@ export function buildClientHeaders(headers: HeadersInit = {}): Headers {
   return merged;
 }
 
-export function formatDeviceType(deviceType?: string): string {
+export function formatDeviceType(deviceType?: string, tFn?: (key: string) => string): string {
   switch (deviceType) {
     case "ios":
       return "iOS";
     case "android":
       return "Android";
     default:
-      return "浏览器";
+      return tFn ? tFn("device.browser") : "Browser";
   }
 }

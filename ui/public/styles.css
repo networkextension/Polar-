@@ -2083,3 +2083,28 @@ textarea {
     max-height: none;
   }
 }
+
+/* Language toggle button */
+.lang-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 10px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lang-toggle-btn:hover {
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--accent);
+}

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>登录</title>
+    <title data-i18n-title="login.title">Login</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,27 +11,27 @@
   <body class="site-shell">
     <div class="page-shell-narrow">
       <a class="site-brand-banner" href="/" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="card">
-        <h1>欢迎回来</h1>
-        <p>使用邮箱和密码登录</p>
+        <h1 data-i18n="login.welcome">Welcome back</h1>
+        <p data-i18n="login.subtitle">Sign in with email and password</p>
         <div id="alert" class="alert"></div>
         <form id="loginForm">
-          <label for="email">邮箱</label>
+          <label for="email" data-i18n="login.email">Email</label>
           <input id="email" name="email" type="email" required placeholder="you@example.com" />
-          <label for="password">密码</label>
+          <label for="password" data-i18n="login.password">Password</label>
           <input id="password" name="password" type="password" required placeholder="••••••••" />
-          <button type="submit">登录</button>
+          <button type="submit" data-i18n="login.submit">Log in</button>
         </form>
-        <button type="button" id="passkeyLoginBtn" class="btn-secondary">使用 Passkey 登录</button>
-        <div id="passkeyStatus" class="status-text">需要先在账户内绑定 Passkey</div>
-        <a class="link" href="/register.html">没有账户？去注册</a>
+        <button type="button" id="passkeyLoginBtn" class="btn-secondary" data-i18n="login.passkey">Log in with Passkey</button>
+        <div id="passkeyStatus" class="status-text" data-i18n="login.passkeyHint">You need to bind a Passkey first</div>
+        <a class="link" href="/register.html" data-i18n="login.noAccount">No account? Register</a>
       </div>
     </div>
 

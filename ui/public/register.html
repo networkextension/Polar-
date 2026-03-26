@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>注册</title>
+    <title data-i18n-title="register.title">Register</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -11,27 +11,27 @@
   <body class="site-shell">
     <div class="page-shell-narrow">
       <a class="site-brand-banner" href="/" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="站点图标" />
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
         <div class="site-brand-copy">
           <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description>正在加载站点信息...</div>
+          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
         </div>
       </a>
 
       <div class="card">
-        <h1>创建账户</h1>
-        <p>快速注册并开始体验</p>
+        <h1 data-i18n="register.heading">Create account</h1>
+        <p data-i18n="register.subtitle">Sign up to get started</p>
         <div id="alert" class="alert"></div>
         <form id="registerForm">
-          <label for="username">用户名</label>
+          <label for="username" data-i18n="register.username">Username</label>
           <input id="username" name="username" type="text" required minlength="3" placeholder="johndoe" />
-          <label for="email">邮箱</label>
+          <label for="email" data-i18n="register.email">Email</label>
           <input id="email" name="email" type="email" required placeholder="you@example.com" />
-          <label for="password">密码</label>
-          <input id="password" name="password" type="password" required minlength="6" placeholder="至少6位" />
-          <button type="submit">注册</button>
+          <label for="password" data-i18n="register.password">Password</label>
+          <input id="password" name="password" type="password" required minlength="6" data-i18n-placeholder="register.passwordPlaceholder" placeholder="At least 6 characters" />
+          <button type="submit" data-i18n="register.submit">Register</button>
         </form>
-        <a class="link" href="/login.html">已有账户？去登录</a>
+        <a class="link" href="/login.html" data-i18n="register.hasAccount">Already have an account? Log in</a>
       </div>
     </div>
 
