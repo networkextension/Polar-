@@ -620,14 +620,11 @@ async function loadSiteAdminData(): Promise<void> {
 
         if (tagResult.response.ok) {
           currentTags = tagResult.data.tags || [];
-        const { response, data } = await fetchTags();
-        if (response.ok) {
-          currentTags = data.tags || [];
           renderTagList(currentTags);
         } else {
           tagList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.tagListLoadFailed")}</li>`;
         }
-      })()
+      })(),
     );
   }
 
@@ -1395,15 +1392,6 @@ themeToggleBtn.addEventListener("click", () => {
 
 passkeyRegisterBtn.addEventListener("click", async () => {
   if (!window.PublicKeyCredential) {
-    passkeyStatus.textContent = t("dashboard.passkeyNotSupported");
-    return;
-  }
-
-  passkeyStatus.textContent = t("dashboard.passkeyStarting");
-  try {
-    const { response: beginResponse, data: beginResult } = await beginPasskeyRegistration();
-    if (!beginResponse.ok) {
-      passkeyStatus.textContent = beginResult.error || t("dashboard.passkeyBeginFailed");
     setStatusMessage(passkeyStatus, "当前浏览器不支持 Passkey。", "error");
     return;
   }
@@ -1440,11 +1428,6 @@ passkeyRegisterBtn.addEventListener("click", async () => {
       payload
     );
 
-    passkeyStatus.textContent = finishResponse.ok
-      ? t("dashboard.passkeySuccess")
-      : finishResult.error || t("dashboard.passkeyFailed");
-  } catch {
-    passkeyStatus.textContent = t("common.networkErrorRetry");
     if (!finishResponse.ok) {
       setStatusMessage(passkeyStatus, finishResult.error || "Passkey 绑定失败", "error");
       return;
