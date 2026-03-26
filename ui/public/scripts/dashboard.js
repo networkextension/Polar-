@@ -34,6 +34,10 @@ const iconStatus = byId("iconStatus");
 const settingsCardAvatar = byId("settingsCardAvatar");
 const settingsCardName = byId("settingsCardName");
 const settingsCardMeta = byId("settingsCardMeta");
+const siteManageCard = byId("siteManageCard");
+const siteManageCardIcon = byId("siteManageCardIcon");
+const siteManageCardName = byId("siteManageCardName");
+const siteManageCardMeta = byId("siteManageCardMeta");
 const settingsProfileName = byId("settingsProfileName");
 const settingsProfileMeta = byId("settingsProfileMeta");
 const addTagBtn = byId("addTagBtn");
@@ -66,6 +70,11 @@ const llmConfigTestBtn = byId("llmConfigTestBtn");
 const llmConfigSubmitBtn = byId("llmConfigSubmitBtn");
 const llmConfigStatus = byId("llmConfigStatus");
 const llmConfigList = byId("llmConfigList");
+const settingsGitTagVersion = byId("settingsGitTagVersion");
+const settingsOS = byId("settingsOS");
+const settingsCPUArch = byId("settingsCPUArch");
+const settingsPartitionCapacity = byId("settingsPartitionCapacity");
+const settingsPartitionPath = byId("settingsPartitionPath");
 const botUserForm = byId("botUserForm");
 const botUserNameInput = byId("botUserNameInput");
 const botUserConfigSelect = byId("botUserConfigSelect");
@@ -126,6 +135,9 @@ function setStatusMessage(element, message, tone = "default") {
 function setModalOpen(modal, open) {
     modal.classList.toggle("open", open);
     modal.setAttribute("aria-hidden", open ? "false" : "true");
+    if (modal === siteAdminModal || modal === tagModal) {
+        document.body.classList.toggle("modal-open", open);
+    }
 }
 function isMobileLayout() {
     return window.innerWidth <= 860;
@@ -162,6 +174,10 @@ function switchSettingsSection(section) {
         settings: {
             title: "设置",
             lead: "",
+        },
+        system: {
+            title: "系统信息",
+            lead: "查看当前实例的版本、系统环境与程序所在分区的剩余容量。",
         },
         bots: {
             title: "Bot 管理",
@@ -206,15 +222,28 @@ function formatCertificateMeta(cert) {
     const uploadedAt = cert.uploaded_at ? new Date(cert.uploaded_at).toLocaleString() : "未知时间";
     return `当前文件：${cert.file_name} · 上传时间：${uploadedAt}`;
 }
+function renderSystemInfo(systemInfo) {
+    settingsGitTagVersion.textContent = systemInfo?.git_tag_version || "未知";
+    settingsOS.textContent = systemInfo?.os || "未知";
+    settingsCPUArch.textContent = systemInfo?.cpu_arch || "未知";
+    settingsPartitionCapacity.textContent = systemInfo?.partition_capacity || "未知";
+    settingsPartitionPath.textContent = systemInfo?.partition_path
+        ? `路径：${systemInfo.partition_path}`
+        : "";
+}
 function renderSiteSettings(site) {
     const safeSite = site || { name: "Polar-", description: "", icon_url: "" };
     siteNameInput.value = safeSite.name || "Polar-";
     siteDescriptionInput.value = safeSite.description || "";
     siteIconPreview.src = safeSite.icon_url || defaultSiteIcon(safeSite.name || "Polar-");
+    siteManageCardIcon.src = safeSite.icon_url || defaultSiteIcon(safeSite.name || "站");
+    siteManageCardName.textContent = safeSite.name || "站点管理";
+    siteManageCardMeta.textContent = safeSite.description || "维护站点信息、证书与 Tag";
     applePushDevMeta.textContent = formatCertificateMeta(safeSite.apple_push_dev_cert);
     applePushProdMeta.textContent = formatCertificateMeta(safeSite.apple_push_prod_cert);
     applePushDevDeleteBtn.disabled = !safeSite.apple_push_dev_cert?.file_url;
     applePushProdDeleteBtn.disabled = !safeSite.apple_push_prod_cert?.file_url;
+    renderSystemInfo(safeSite.system_info);
     renderSiteBrand(safeSite);
 }
 function renderTagList(tags) {
@@ -362,6 +391,7 @@ async function loadProfile() {
     addTagBtn.disabled = !isAdmin;
     addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
     addTagBtn.hidden = !isAdmin;
+    siteManageCard.hidden = !isAdmin;
     siteAdminPanel.hidden = !isAdmin;
     settingsNavButtons.forEach((button) => {
         if (button.dataset.settingsNav === "site") {
@@ -377,6 +407,17 @@ async function loadProfile() {
 }
 async function loadSiteAdminData() {
     const tasks = [
+        (async () => {
+            const { response, data } = await fetchSiteSettings();
+            if (response.ok) {
+                renderSiteSettings(data.site);
+                return;
+            }
+            renderSystemInfo();
+            if (isAdmin) {
+                siteStatus.textContent = data.error || "无法加载站点信息";
+            }
+        })(),
         (async () => {
             const [ownResult, availableResult] = await Promise.all([fetchLLMConfigs(), fetchAvailableLLMConfigs()]);
             if (ownResult.response.ok) {
@@ -411,15 +452,9 @@ async function loadSiteAdminData() {
     ];
     if (isAdmin) {
         tasks.push((async () => {
-            const [siteResult, tagResult] = await Promise.all([fetchSiteSettings(), fetchTags()]);
-            if (siteResult.response.ok) {
-                renderSiteSettings(siteResult.data.site);
-            }
-            else {
-                siteStatus.textContent = siteResult.data.error || "无法加载站点信息";
-            }
-            if (tagResult.response.ok) {
-                currentTags = tagResult.data.tags || [];
+            const { response, data } = await fetchTags();
+            if (response.ok) {
+                currentTags = data.tags || [];
                 renderTagList(currentTags);
             }
             else {
@@ -451,6 +486,10 @@ function openSiteAdminModal(section = "personalization") {
     setModalOpen(siteAdminModal, true);
     if (section === "settings") {
         llmConfigNameInput.focus();
+        return;
+    }
+    if (section === "system") {
+        settingsSectionLead.focus?.();
         return;
     }
     if (section === "profile") {

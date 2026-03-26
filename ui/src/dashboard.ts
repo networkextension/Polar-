@@ -43,6 +43,7 @@ import type {
   LLMConfigPayload,
   LoginRecord,
   SiteSettings,
+  SystemInfo,
   Tag,
   TagPayload,
 } from "./types/dashboard.js";
@@ -74,6 +75,10 @@ const iconStatus = byId<HTMLElement>("iconStatus");
 const settingsCardAvatar = byId<HTMLImageElement>("settingsCardAvatar");
 const settingsCardName = byId<HTMLElement>("settingsCardName");
 const settingsCardMeta = byId<HTMLElement>("settingsCardMeta");
+const siteManageCard = byId<HTMLElement>("siteManageCard");
+const siteManageCardIcon = byId<HTMLImageElement>("siteManageCardIcon");
+const siteManageCardName = byId<HTMLElement>("siteManageCardName");
+const siteManageCardMeta = byId<HTMLElement>("siteManageCardMeta");
 const settingsProfileName = byId<HTMLElement>("settingsProfileName");
 const settingsProfileMeta = byId<HTMLElement>("settingsProfileMeta");
 const addTagBtn = byId<HTMLButtonElement>("addTagBtn");
@@ -106,6 +111,11 @@ const llmConfigTestBtn = byId<HTMLButtonElement>("llmConfigTestBtn");
 const llmConfigSubmitBtn = byId<HTMLButtonElement>("llmConfigSubmitBtn");
 const llmConfigStatus = byId<HTMLElement>("llmConfigStatus");
 const llmConfigList = byId<HTMLUListElement>("llmConfigList");
+const settingsGitTagVersion = byId<HTMLElement>("settingsGitTagVersion");
+const settingsOS = byId<HTMLElement>("settingsOS");
+const settingsCPUArch = byId<HTMLElement>("settingsCPUArch");
+const settingsPartitionCapacity = byId<HTMLElement>("settingsPartitionCapacity");
+const settingsPartitionPath = byId<HTMLElement>("settingsPartitionPath");
 const botUserForm = byId<HTMLFormElement>("botUserForm");
 const botUserNameInput = byId<HTMLInputElement>("botUserNameInput");
 const botUserConfigSelect = byId<HTMLSelectElement>("botUserConfigSelect");
@@ -154,7 +164,7 @@ let editingBotUserId: number | null = null;
 let currentLLMConfigs: LLMConfig[] = [];
 let currentAvailableLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
-let activeSettingsSection: "profile" | "personalization" | "settings" | "bots" | "site" = "personalization";
+let activeSettingsSection: "profile" | "personalization" | "settings" | "system" | "bots" | "site" = "personalization";
 
 function setStatusMessage(element: HTMLElement, message: string, tone: "default" | "success" | "error" = "default"): void {
   element.textContent = message;
@@ -169,6 +179,9 @@ function setStatusMessage(element: HTMLElement, message: string, tone: "default"
 function setModalOpen(modal: HTMLElement, open: boolean): void {
   modal.classList.toggle("open", open);
   modal.setAttribute("aria-hidden", open ? "false" : "true");
+  if (modal === siteAdminModal || modal === tagModal) {
+    document.body.classList.toggle("modal-open", open);
+  }
 }
 
 function isMobileLayout(): boolean {
@@ -196,7 +209,7 @@ function syncThemeButton(theme: ThemeName): void {
   themeCurrentValue.textContent = theme === "mono" ? "黑白" : "默认";
 }
 
-function switchSettingsSection(section: "profile" | "personalization" | "settings" | "bots" | "site"): void {
+function switchSettingsSection(section: "profile" | "personalization" | "settings" | "system" | "bots" | "site"): void {
   activeSettingsSection = section;
   const titles: Record<typeof activeSettingsSection, { title: string; lead: string }> = {
     profile: {
@@ -210,6 +223,10 @@ function switchSettingsSection(section: "profile" | "personalization" | "setting
     settings: {
       title: "设置",
       lead: "",
+    },
+    system: {
+      title: "系统信息",
+      lead: "查看当前实例的版本、系统环境与程序所在分区的剩余容量。",
     },
     bots: {
       title: "Bot 管理",
@@ -259,15 +276,29 @@ function formatCertificateMeta(cert?: ApplePushCertificate): string {
   return `当前文件：${cert.file_name} · 上传时间：${uploadedAt}`;
 }
 
+function renderSystemInfo(systemInfo?: SystemInfo): void {
+  settingsGitTagVersion.textContent = systemInfo?.git_tag_version || "未知";
+  settingsOS.textContent = systemInfo?.os || "未知";
+  settingsCPUArch.textContent = systemInfo?.cpu_arch || "未知";
+  settingsPartitionCapacity.textContent = systemInfo?.partition_capacity || "未知";
+  settingsPartitionPath.textContent = systemInfo?.partition_path
+    ? `路径：${systemInfo.partition_path}`
+    : "";
+}
+
 function renderSiteSettings(site?: SiteSettings): void {
-  const safeSite = site || { name: "Polar-", description: "", icon_url: "" };
+  const safeSite: SiteSettings = site || { name: "Polar-", description: "", icon_url: "" };
   siteNameInput.value = safeSite.name || "Polar-";
   siteDescriptionInput.value = safeSite.description || "";
   siteIconPreview.src = safeSite.icon_url || defaultSiteIcon(safeSite.name || "Polar-");
+  siteManageCardIcon.src = safeSite.icon_url || defaultSiteIcon(safeSite.name || "站");
+  siteManageCardName.textContent = safeSite.name || "站点管理";
+  siteManageCardMeta.textContent = safeSite.description || "维护站点信息、证书与 Tag";
   applePushDevMeta.textContent = formatCertificateMeta(safeSite.apple_push_dev_cert);
   applePushProdMeta.textContent = formatCertificateMeta(safeSite.apple_push_prod_cert);
   applePushDevDeleteBtn.disabled = !safeSite.apple_push_dev_cert?.file_url;
   applePushProdDeleteBtn.disabled = !safeSite.apple_push_prod_cert?.file_url;
+  renderSystemInfo(safeSite.system_info);
   renderSiteBrand(safeSite);
 }
 
@@ -436,6 +467,7 @@ async function loadProfile(): Promise<void> {
   addTagBtn.disabled = !isAdmin;
   addTagBtn.textContent = isAdmin ? "新建 Tag" : "仅管理员可新建 Tag";
   addTagBtn.hidden = !isAdmin;
+  siteManageCard.hidden = !isAdmin;
   siteAdminPanel.hidden = !isAdmin;
   settingsNavButtons.forEach((button) => {
     if (button.dataset.settingsNav === "site") {
@@ -453,6 +485,17 @@ async function loadProfile(): Promise<void> {
 
 async function loadSiteAdminData(): Promise<void> {
   const tasks: Array<Promise<unknown>> = [
+    (async () => {
+      const { response, data } = await fetchSiteSettings();
+      if (response.ok) {
+        renderSiteSettings(data.site);
+        return;
+      }
+      renderSystemInfo();
+      if (isAdmin) {
+        siteStatus.textContent = data.error || "无法加载站点信息";
+      }
+    })(),
     (async () => {
       const [ownResult, availableResult] = await Promise.all([fetchLLMConfigs(), fetchAvailableLLMConfigs()]);
       if (ownResult.response.ok) {
@@ -487,15 +530,9 @@ async function loadSiteAdminData(): Promise<void> {
   if (isAdmin) {
     tasks.push(
       (async () => {
-        const [siteResult, tagResult] = await Promise.all([fetchSiteSettings(), fetchTags()]);
-        if (siteResult.response.ok) {
-          renderSiteSettings(siteResult.data.site);
-        } else {
-          siteStatus.textContent = siteResult.data.error || "无法加载站点信息";
-        }
-
-        if (tagResult.response.ok) {
-          currentTags = tagResult.data.tags || [];
+        const { response, data } = await fetchTags();
+        if (response.ok) {
+          currentTags = data.tags || [];
           renderTagList(currentTags);
         } else {
           tagList.innerHTML = `<li class="tag-item tag-item-empty">无法加载 Tag 列表</li>`;
@@ -526,11 +563,15 @@ function closeTagModal(): void {
   setModalOpen(tagModal, false);
 }
 
-function openSiteAdminModal(section: "profile" | "personalization" | "settings" = "personalization"): void {
+function openSiteAdminModal(section: "profile" | "personalization" | "settings" | "system" = "personalization"): void {
   switchSettingsSection(section);
   setModalOpen(siteAdminModal, true);
   if (section === "settings") {
     llmConfigNameInput.focus();
+    return;
+  }
+  if (section === "system") {
+    settingsSectionLead.focus?.();
     return;
   }
   if (section === "profile") {
@@ -656,7 +697,7 @@ addTagBtn.addEventListener("click", () => {
 
 settingsOpenButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    const target = (button.dataset.settingsTarget as "profile" | "personalization" | "settings" | undefined) || "personalization";
+    const target = (button.dataset.settingsTarget as "profile" | "personalization" | "settings" | "system" | undefined) || "personalization";
     openSiteAdminModal(target);
   });
 });
@@ -664,7 +705,14 @@ siteAdminModalCloseBtn.addEventListener("click", closeSiteAdminModal);
 query<HTMLElement>(siteAdminModal, ".modal-backdrop").addEventListener("click", closeSiteAdminModal);
 settingsNavButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    const target = button.dataset.settingsNav as "profile" | "personalization" | "settings" | undefined;
+    const target = button.dataset.settingsNav as
+      | "profile"
+      | "personalization"
+      | "settings"
+      | "system"
+      | "bots"
+      | "site"
+      | undefined;
     if (!target) {
       return;
     }

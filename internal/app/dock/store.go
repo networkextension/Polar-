@@ -94,7 +94,16 @@ type SiteSettings struct {
 	IconURL           string                `json:"icon_url"`
 	ApplePushDevCert  *ApplePushCertificate `json:"apple_push_dev_cert,omitempty"`
 	ApplePushProdCert *ApplePushCertificate `json:"apple_push_prod_cert,omitempty"`
+	SystemInfo        *SystemInfo           `json:"system_info,omitempty"`
 	UpdatedAt         time.Time             `json:"updated_at"`
+}
+
+type SystemInfo struct {
+	GitTagVersion     string `json:"git_tag_version"`
+	OS                string `json:"os"`
+	CPUArch           string `json:"cpu_arch"`
+	PartitionPath     string `json:"partition_path"`
+	PartitionCapacity string `json:"partition_capacity"`
 }
 
 type LLMConfig struct {

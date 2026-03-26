@@ -55,7 +55,16 @@ export type SiteSettings = {
   icon_url?: string;
   apple_push_dev_cert?: ApplePushCertificate;
   apple_push_prod_cert?: ApplePushCertificate;
+  system_info?: SystemInfo;
   updated_at?: string;
+};
+
+export type SystemInfo = {
+  git_tag_version?: string;
+  os?: string;
+  cpu_arch?: string;
+  partition_path?: string;
+  partition_capacity?: string;
 };
 
 export type ApplePushCertificate = {
