@@ -1,5 +1,6 @@
 import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
+import { t } from "./lib/i18n.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
@@ -315,7 +316,7 @@ function renderPost(post) {
         .map((item) => `
         <video controls preload="metadata" ${item.posterUrl ? `poster="${item.posterUrl}"` : ""}>
           <source src="${item.url}" />
-          你的浏览器不支持 video 标签
+          ${t("post.videoNotSupported")}
         </video>
       `)
         .join("");
@@ -328,16 +329,16 @@ function renderPost(post) {
     const taskInfo = isTask
         ? `
       <div class="task-meta-card">
-        <div class="badge">零工任务</div>
+        <div class="badge">${t("post.gigTaskBadge")}</div>
         <div class="task-meta-grid">
-          <div><strong>时间范围：</strong>${formatTime(post.task.start_at)} - ${formatTime(post.task.end_at)}</div>
-          <div><strong>Working hours：</strong>${escapeHtml(post.task.working_hours)}</div>
-          <div><strong>申请截止：</strong>${formatTime(post.task.apply_deadline)}</div>
-          <div><strong>地理位置：</strong>${escapeHtml(post.task.location || "未限制")}</div>
-          <div><strong>申请状态：</strong>${post.task.application_status === "open" ? "开放中" : "已关闭"}</div>
-          <div><strong>当前申请数：</strong>${post.task.applicant_count || 0}</div>
+          <div><strong>${t("post.timeRange")}</strong>${formatTime(post.task.start_at)} - ${formatTime(post.task.end_at)}</div>
+          <div><strong>${t("post.workingHours")}</strong>${escapeHtml(post.task.working_hours)}</div>
+          <div><strong>${t("post.applyDeadline")}</strong>${formatTime(post.task.apply_deadline)}</div>
+          <div><strong>${t("post.location")}</strong>${escapeHtml(post.task.location || t("post.noLocation"))}</div>
+          <div><strong>${t("post.status")}</strong>${post.task.application_status === "open" ? t("post.statusOpen") : t("post.statusClosed")}</div>
+          <div><strong>${t("post.applicantCount")}</strong>${post.task.applicant_count || 0}</div>
           ${post.task.selected_applicant_name
-            ? `<div><strong>已选候选人：</strong>${escapeHtml(post.task.selected_applicant_name)}</div>`
+            ? `<div><strong>${t("post.selectedApplicant")}</strong>${escapeHtml(post.task.selected_applicant_name)}</div>`
             : ""}
         </div>
       </div>
@@ -349,11 +350,11 @@ function renderPost(post) {
         ? `
       <div class="task-actions">
         ${post.task.can_apply
-            ? `<button id="taskApplyBtn" class="btn-inline btn-secondary" type="button">${post.task.applied_by_me ? "撤销申请" : "申请任务"}</button>`
+            ? `<button id="taskApplyBtn" class="btn-inline btn-secondary" type="button">${post.task.applied_by_me ? t("post.withdrawApplication") : t("post.applyTask")}</button>`
             : ""}
         ${post.task.can_manage && post.task.application_status === "open"
-            ? `<button id="taskCloseBtn" class="btn-inline btn-secondary" type="button">关闭申请</button>
-               <button id="taskLoadApplicantsBtn" class="btn-inline btn-secondary" type="button">查看申请者</button>`
+            ? `<button id="taskCloseBtn" class="btn-inline btn-secondary" type="button">${t("post.closeApplications")}</button>
+               <button id="taskLoadApplicantsBtn" class="btn-inline btn-secondary" type="button">${t("post.viewApplicants")}</button>`
             : ""}
       </div>
       <div id="taskApplicantsPanel" class="task-applicants-panel"></div>
@@ -362,19 +363,19 @@ function renderPost(post) {
     const taskResultSection = isTask && post.task.can_view_results
         ? `
       <div class="task-results-card">
-        <div class="badge">任务成果</div>
+        <div class="badge">${t("post.taskResults")}</div>
         ${post.task.can_submit_result
             ? `
               <form id="taskResultForm" class="task-result-form">
-                <label class="form-label" for="taskResultNote">成果说明</label>
-                <textarea id="taskResultNote" class="input textarea" rows="3" placeholder="补充说明本次完成内容..."></textarea>
-                <label class="form-label" for="taskResultImages">成果图片</label>
+                <label class="form-label" for="taskResultNote">${t("post.resultDescription")}</label>
+                <textarea id="taskResultNote" class="input textarea" rows="3" placeholder="${t("post.resultDescriptionPlaceholder")}"></textarea>
+                <label class="form-label" for="taskResultImages">${t("post.resultImages")}</label>
                 <input id="taskResultImages" class="input" type="file" accept="image/*" multiple />
-                <label class="form-label" for="taskResultVideos">成果视频</label>
+                <label class="form-label" for="taskResultVideos">${t("post.resultVideos")}</label>
                 <input id="taskResultVideos" class="input" type="file" accept="video/*" multiple />
                 <div id="taskResultStatus" class="status-text"></div>
                 <div class="task-form-actions">
-                  <button id="taskResultSubmitBtn" class="btn-inline btn-secondary" type="submit">提交任务成果</button>
+                  <button id="taskResultSubmitBtn" class="btn-inline btn-secondary" type="submit">${t("post.submitResult")}</button>
                 </div>
               </form>
             `
@@ -398,17 +399,17 @@ function renderPost(post) {
     ${videoSection}
     <div class="post-actions">
       <button id="detailLikeBtn" class="btn-inline btn-secondary" type="button">
-        ${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}
+        ${post.liked_by_me ? t("post.liked") : t("post.like")} · ${post.like_count}
       </button>
-      ${canDelete ? '<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">删除帖子</button>' : ""}
+      ${canDelete ? `<button id="detailDeleteBtn" class="btn-inline btn-secondary" type="button">${t("post.deletePost")}</button>` : ""}
     </div>
     ${taskActions}
     ${taskResultSection}
     <div class="reply-box open">
       <div class="reply-list" id="replyList"></div>
       <form id="replyForm" class="reply-form">
-        <input id="replyInput" class="input reply-input" type="text" placeholder="写下你的回复..." required />
-        <button class="btn-inline btn-secondary" type="submit">发送</button>
+        <input id="replyInput" class="input reply-input" type="text" placeholder="${t("post.replyPlaceholder")}" required />
+        <button class="btn-inline btn-secondary" type="submit">${t("post.sendReply")}</button>
       </form>
     </div>
   `;
@@ -427,10 +428,10 @@ function renderPost(post) {
         }
         post.liked_by_me = !post.liked_by_me;
         post.like_count += post.liked_by_me ? 1 : -1;
-        likeBtn.textContent = `${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}`;
+        likeBtn.textContent = `${post.liked_by_me ? t("post.liked") : t("post.like")} · ${post.like_count}`;
     });
     deleteBtn?.addEventListener("click", async () => {
-        if (!window.confirm("确认删除这条帖子吗？此操作不可恢复。")) {
+        if (!window.confirm(t("post.confirmDelete"))) {
             return;
         }
         deleteBtn.disabled = true;
@@ -499,25 +500,25 @@ function renderPost(post) {
         if (!taskApplicantsPanel) {
             return;
         }
-        taskApplicantsPanel.innerHTML = "<div class='reply-empty'>加载申请者中...</div>";
+        taskApplicantsPanel.innerHTML = `<div class='reply-empty'>${t("post.loadingApplicants")}</div>`;
         const res = await fetch(`${API_BASE}/api/tasks/${post.id}/applications`, {
             credentials: "include",
         });
         if (!res.ok) {
-            taskApplicantsPanel.innerHTML = "<div class='reply-empty'>无法加载申请者</div>";
+            taskApplicantsPanel.innerHTML = `<div class='reply-empty'>${t("post.applicantsLoadFailed")}</div>`;
             return;
         }
         const data = await res.json();
         const applications = data.applications || [];
         if (!applications.length) {
-            taskApplicantsPanel.innerHTML = "<div class='reply-empty'>暂无申请者</div>";
+            taskApplicantsPanel.innerHTML = `<div class='reply-empty'>${t("post.noApplicants")}</div>`;
             return;
         }
         taskApplicantsPanel.innerHTML = applications
             .map((item) => {
             const avatarUrl = resolveAvatar(item.username, item.user_icon, 40);
             const defaultTemplate = post.task?.invitation_template
-                || `你好，你已被选为该零工任务的候选人。\n\n任务内容：${post.content}\n如果你确认参与，请直接回复。`;
+                || t("post.invitationDefault", { content: post.content });
             return `
           <div class="task-applicant-item">
             <div class="task-applicant-head">
@@ -528,7 +529,7 @@ function renderPost(post) {
               </div>
             </div>
             <textarea class="input textarea task-template-input" data-user-id="${item.user_id}" rows="4">${escapeHtml(defaultTemplate)}</textarea>
-            <button class="btn-inline btn-secondary task-select-btn" data-user-id="${item.user_id}" type="button">确认并发送私信</button>
+            <button class="btn-inline btn-secondary task-select-btn" data-user-id="${item.user_id}" type="button">${t("post.confirmAndMessage")}</button>
           </div>
         `;
         })

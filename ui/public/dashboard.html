@@ -26,7 +26,7 @@
           </div>
           <div class="header-actions">
             <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button" data-i18n="dashboard.drawerToggle">Entry list</button>
-            <button class="btn-inline btn-secondary header-nav-link" type="button" data-open-settings-center data-settings-target="profile" data-i18n="dashboard.profileSettings">Profile / Settings</button>
+            <button class="btn-inline btn-secondary header-nav-link" type="button" data-open-settings-center data-settings-target="personalization" data-i18n="dashboard.profileSettings">Profile / Settings</button>
             <button id="newEntryBtn" class="btn-inline btn-secondary header-nav-link" type="button" data-i18n="dashboard.newMarkdown">New Markdown</button>
             <a class="btn-inline btn-secondary header-nav-link" href="/markdowns.html" data-i18n="dashboard.publicMarkdowns">Public Markdowns</a>
             <a class="btn-inline btn-secondary header-nav-link" href="/posts.html" data-i18n="dashboard.posts">Posts</a>
@@ -63,7 +63,7 @@
                   </div>
                 </div>
                 <div class="settings-entry-actions">
-                  <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="profile" data-i18n="dashboard.profile">Profile</button>
+                  <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="personalization" data-i18n="dashboard.profile">Profile</button>
                   <button id="openSiteAdminBtn" class="btn-secondary group-action-btn" type="button" data-settings-target="site" data-i18n="dashboard.settingsCenter">Settings Center</button>
                 </div>
                 <button id="logoutBtn" class="btn-secondary group-action-btn" type="button" data-i18n="dashboard.logout">Log out</button>
@@ -119,11 +119,11 @@
             <button id="siteAdminModalCloseBtn" class="settings-center-close" type="button" aria-label="Close">×</button>
             <div class="settings-center-nav-title" data-i18n="dashboard.settingsCenterTitle">Settings Center</div>
             <div class="settings-center-nav-list">
-              <button class="settings-center-nav-btn active" type="button" data-settings-nav="profile">
+              <button class="settings-center-nav-btn" type="button" data-settings-nav="profile">
                 <span class="settings-center-nav-icon">◎</span>
                 <span data-i18n="dashboard.navProfile">Profile</span>
               </button>
-              <button class="settings-center-nav-btn" type="button" data-settings-nav="personalization">
+              <button class="settings-center-nav-btn active" type="button" data-settings-nav="personalization">
                 <span class="settings-center-nav-icon">◌</span>
                 <span data-i18n="dashboard.navPersonalization">Personalization</span>
               </button>
@@ -146,12 +146,12 @@
             <div class="settings-center-header">
               <div>
                 <div class="badge" data-i18n="dashboard.preferencesBadge">Preferences &amp; Management</div>
-                <h3 id="siteAdminModalTitle" class="modal-title" data-i18n="dashboard.personalCenter">Personal Center</h3>
-                <p id="settingsSectionLead" class="settings-center-lead" data-i18n="dashboard.profileLead">Manage your avatar, login methods, and recent login history.</p>
+                <h3 id="siteAdminModalTitle" class="modal-title" data-i18n="dashboard.personalizationTitle">Personalization</h3>
+                <p id="settingsSectionLead" class="settings-center-lead" data-i18n="dashboard.personalizationLead">Manage the interface style and personal preferences so the workspace feels tailored to how you work.</p>
               </div>
             </div>
 
-            <section class="settings-panel active" data-settings-panel="profile">
+            <section class="settings-panel" data-settings-panel="profile" hidden>
               <div class="settings-section-card">
                 <div class="settings-profile-hero">
                   <img id="userIcon" class="avatar settings-avatar-lg" alt="User avatar" />
@@ -201,7 +201,7 @@
               </div>
             </section>
 
-            <section class="settings-panel" data-settings-panel="personalization" hidden>
+            <section class="settings-panel active" data-settings-panel="personalization">
               <div class="settings-section-card">
                 <div class="settings-row">
                   <div>
@@ -211,6 +211,19 @@
                   <div class="settings-row-action">
                     <span id="themeCurrentValue" class="settings-value-pill" data-i18n="dashboard.themeDefault">Default</span>
                     <button id="themeToggleBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.switchToMonochrome">Switch to monochrome</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-section-card">
+                <div class="settings-row">
+                  <div>
+                    <div class="settings-row-title" data-i18n="dashboard.languageTitle">Language</div>
+                    <div class="settings-row-text" data-i18n="dashboard.languageText">Choose the interface language for this browser.</div>
+                  </div>
+                  <div class="settings-row-action">
+                    <span id="languageCurrentValue" class="settings-value-pill" data-i18n="dashboard.languageEnglish">English</span>
+                    <button id="languageToggleBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.switchToChinese">Switch to Chinese</button>
                   </div>
                 </div>
               </div>
@@ -233,7 +246,7 @@
                 <div class="site-tags-section">
                   <div class="site-tags-header">
                     <div>
-                      <div class="badge">LLM Config</div>
+                      <div class="badge" data-i18n="dashboard.llmConfigBadge">LLM Config</div>
                     </div>
                     <div id="llmConfigStatus" class="status-text"></div>
                   </div>
@@ -277,7 +290,7 @@
                 <div class="site-tags-section">
                   <div class="site-tags-header">
                     <div>
-                      <div class="badge">Bot User</div>
+                      <div class="badge" data-i18n="dashboard.botUserBadge">Bot User</div>
                       <p class="drawer-help" data-i18n="dashboard.botHelp">Each Bot is a user you can chat with directly. Manage Bot model configs and prompts here.</p>
                     </div>
                   </div>

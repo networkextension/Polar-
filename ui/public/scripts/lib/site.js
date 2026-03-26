@@ -1,4 +1,5 @@
 import { makeDefaultAvatar } from "./avatar.js";
+import { applyI18n, injectLangToggle, t } from "./i18n.js";
 const fallbackSite = {
     name: "Polar-",
     description: "AI-assisted product prototyping workspace",
@@ -26,11 +27,13 @@ export function renderSiteBrand(site) {
         }
         if (iconEl) {
             iconEl.src = iconSrc;
-            iconEl.alt = `${safeSite.name} 图标`;
+            iconEl.alt = `${safeSite.name} ${t("brand.icon")}`;
         }
     });
 }
 export async function hydrateSiteBrand() {
+    applyI18n();
+    injectLangToggle();
     if (!document.querySelector("[data-site-brand]")) {
         return;
     }

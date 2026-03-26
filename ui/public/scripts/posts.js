@@ -1,5 +1,6 @@
 import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
+import { t } from "./lib/i18n.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
@@ -35,17 +36,17 @@ function getTagName(tagId) {
 }
 function updateListBadge() {
     if (currentTagFilter) {
-        postListBadge.textContent = getTagName(currentTagFilter) || "板块帖子";
+        postListBadge.textContent = getTagName(currentTagFilter) || t("posts.sectionPosts");
         return;
     }
     postListBadge.textContent =
-        currentPostTypeFilter === "task" ? "零工任务" : currentPostTypeFilter === "standard" ? "普通帖子" : "最新帖子";
+        currentPostTypeFilter === "task" ? t("posts.gigTasks") : currentPostTypeFilter === "standard" ? t("posts.regularPosts") : t("posts.latestPosts");
 }
 function renderTypeFilters() {
     const items = [
-        { label: "最新帖子", value: "all" },
-        { label: "普通帖子", value: "standard" },
-        { label: "零工", value: "task" },
+        { label: t("posts.filterLatest"), value: "all" },
+        { label: t("posts.filterRegular"), value: "standard" },
+        { label: t("posts.filterGigs"), value: "task" },
     ];
     postTypeFilters.innerHTML = items
         .map((item) => `<button class="btn-inline btn-secondary post-filter-btn ${currentPostTypeFilter === item.value && !currentTagFilter ? "active" : ""}" data-post-type="${item.value}" type="button">${item.label}</button>`)
@@ -97,7 +98,7 @@ function ensureVideoModal() {
     modal.innerHTML = `
     <div class="video-modal-backdrop"></div>
     <div class="video-modal-content panel">
-      <button class="video-modal-close btn-inline btn-secondary" type="button">关闭</button>
+      <button class="video-modal-close btn-inline btn-secondary" type="button">${t("common.close")}</button>
       <video class="video-modal-player" controls autoplay preload="metadata"></video>
     </div>
   `;
@@ -186,7 +187,7 @@ async function loadProfile() {
     const data = await res.json();
     currentUserId = data.user_id;
     currentUserRole = data.role || "user";
-    postWelcome.textContent = `你好，${data.username}，发布你的第一篇帖子吧。`;
+    postWelcome.textContent = t("posts.welcome", { username: data.username });
 }
 function createPostCard(post) {
     const card = document.createElement("div");
@@ -198,7 +199,7 @@ function createPostCard(post) {
         .map((item) => `
         <video controls preload="metadata" ${item.posterUrl ? `poster="${item.posterUrl}"` : ""}>
           <source src="${item.url}" />
-          你的浏览器不支持 video 标签
+          ${t("posts.videoNotSupported")}
         </video>
       `)
         .join("");
@@ -210,11 +211,11 @@ function createPostCard(post) {
     const taskSummary = post.post_type === "task" && post.task
         ? `
         <div class="task-summary-strip">
-          <span class="badge">零工任务</span>
-          <span>时间：${formatTime(post.task.start_at)} - ${formatTime(post.task.end_at)}</span>
-          <span>Working hours：${post.task.working_hours}</span>
-          <span>申请截止：${formatTime(post.task.apply_deadline)}</span>
-          <span>申请数：${post.task.applicant_count || 0}</span>
+          <span class="badge">${t("posts.gigTaskBadge")}</span>
+          <span>${t("posts.taskTime", { start: formatTime(post.task.start_at), end: formatTime(post.task.end_at) })}</span>
+          <span>${t("posts.workingHours", { hours: post.task.working_hours })}</span>
+          <span>${t("posts.applyDeadline", { deadline: formatTime(post.task.apply_deadline) })}</span>
+          <span>${t("posts.applicantCount", { count: String(post.task.applicant_count || 0) })}</span>
         </div>
       `
         : "";
@@ -234,10 +235,10 @@ function createPostCard(post) {
     ${videoSection}
     <div class="post-actions">
       <button class="btn-inline btn-secondary like-btn" type="button">
-        ${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}
+        ${post.liked_by_me ? t("posts.liked") : t("posts.like")} · ${post.like_count}
       </button>
-      <a class="btn-inline btn-secondary" href="/post.html?id=${post.id}">查看详情</a>
-      ${canDelete ? '<button class="btn-inline btn-secondary delete-post-btn" type="button">删除帖子</button>' : ""}
+      <a class="btn-inline btn-secondary" href="/post.html?id=${post.id}">${t("posts.viewDetails")}</a>
+      ${canDelete ? `<button class="btn-inline btn-secondary delete-post-btn" type="button">${t("posts.deletePost")}</button>` : ""}
     </div>
   `;
     const likeBtn = query(card, ".like-btn");
@@ -254,10 +255,10 @@ function createPostCard(post) {
         }
         post.liked_by_me = !post.liked_by_me;
         post.like_count += post.liked_by_me ? 1 : -1;
-        likeBtn.textContent = `${post.liked_by_me ? "已点赞" : "点赞"} · ${post.like_count}`;
+        likeBtn.textContent = `${post.liked_by_me ? t("posts.liked") : t("posts.like")} · ${post.like_count}`;
     });
     deleteBtn?.addEventListener("click", async () => {
-        if (!window.confirm("确认删除这条帖子吗？此操作不可恢复。")) {
+        if (!window.confirm(t("posts.confirmDelete"))) {
             return;
         }
         deleteBtn.disabled = true;
@@ -271,7 +272,7 @@ function createPostCard(post) {
         }
         card.remove();
         if (!postList.querySelector(".post-card")) {
-            postList.innerHTML = "<div class='post-empty'>暂无帖子</div>";
+            postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
         }
     });
     return card;
@@ -297,13 +298,13 @@ async function loadPosts(reset = false) {
         credentials: "include",
     });
     if (!res.ok) {
-        postList.innerHTML = "<div class='post-empty'>无法加载帖子</div>";
+        postList.innerHTML = `<div class='post-empty'>${t("posts.loadFailed")}</div>`;
         return;
     }
     const data = await res.json();
     const posts = data.posts || [];
     if (reset && posts.length === 0) {
-        postList.innerHTML = "<div class='post-empty'>暂无帖子</div>";
+        postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
         hasMore = false;
         postLoadMoreBtn.style.display = "none";
         return;
