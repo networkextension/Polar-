@@ -39,6 +39,8 @@ export type ChatMessagesResponse = {
   messages?: ChatMessage[];
   active_thread?: LLMThread;
   active_thread_id?: number;
+  blocked?: boolean;
+  block_message?: string;
 };
 
 export type LLMThread = {
@@ -74,6 +76,14 @@ export type LLMThreadListResponse = {
 export type ChatLLMConfigListResponse = {
   configs?: ChatLLMConfig[];
   error?: string;
+};
+
+export type SendMessageResponse = {
+  message?: string;
+  id?: string;
+  error?: string;
+  code?: string;
+  active_thread?: LLMThread;
 };
 
 export type SharedMarkdownResponse = {

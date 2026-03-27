@@ -116,6 +116,19 @@ func (s *Server) handleProfileRecommendationUpsert(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
 		return
 	}
+	iBlockedUser, blockedMe, err := s.getUserBlockState(authorIDStr, targetUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if iBlockedUser {
+		c.JSON(http.StatusForbidden, gin.H{"error": "你已拉黑对方，不能继续提交 Recommendation"})
+		return
+	}
+	if blockedMe {
+		c.JSON(http.StatusForbidden, gin.H{"error": "对方已拉黑你，不能继续提交 Recommendation"})
+		return
+	}
 
 	if err := s.upsertProfileRecommendation(targetUserID, authorIDStr, content, time.Now()); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
@@ -130,6 +143,86 @@ func (s *Server) handleProfileRecommendationUpsert(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Recommendation 已保存",
+		"profile": profile,
+	})
+}
+
+func (s *Server) handleUserBlockCreate(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	targetUserID := strings.TrimSpace(c.Param("id"))
+	if targetUserID == "" || targetUserID == userIDStr {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户"})
+		return
+	}
+
+	targetUser, err := s.getUserByID(targetUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if targetUser == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if err := s.blockUser(userIDStr, targetUserID, time.Now()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	profile, err := s.getUserProfileDetail(targetUserID, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "已拉黑该用户",
+		"profile": profile,
+	})
+}
+
+func (s *Server) handleUserBlockDelete(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	targetUserID := strings.TrimSpace(c.Param("id"))
+	if targetUserID == "" || targetUserID == userIDStr {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户"})
+		return
+	}
+
+	targetUser, err := s.getUserByID(targetUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if targetUser == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+
+	if _, err := s.unblockUser(userIDStr, targetUserID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	profile, err := s.getUserProfileDetail(targetUserID, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "已取消拉黑",
 		"profile": profile,
 	})
 }

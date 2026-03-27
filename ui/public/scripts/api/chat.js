@@ -63,11 +63,8 @@ export async function retryMessage(threadId, messageId) {
     });
 }
 export async function sendMessage(threadId, content, llmThreadId) {
-    return request(`/api/chats/${threadId}/messages`, {
+    return requestJson(`/api/chats/${threadId}/messages`, {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content, llm_thread_id: llmThreadId || undefined }),
+        body: { content, llm_thread_id: llmThreadId || undefined },
     });
 }

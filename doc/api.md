@@ -341,6 +341,7 @@
   - 帖子作者头像/用户名
   - 任务申请者头像/用户名
   - 任务成果提交者头像/用户名
+- Profile 页可直接发起私聊，也可执行拉黑 / 取消拉黑操作
 
 ### 获取用户 Profile
 
@@ -359,6 +360,8 @@
     "created_at": "2026-03-21T09:00:00+08:00",
     "is_me": false,
     "can_recommend": true,
+    "i_blocked_user": false,
+    "blocked_me": false,
     "recommendations": [
       {
         "id": 1,
@@ -374,6 +377,10 @@
   }
 }
 ```
+
+字段补充：
+- `i_blocked_user`：当前登录用户是否已拉黑这个 profile 用户
+- `blocked_me`：这个 profile 用户是否已拉黑当前登录用户
 
 ### 更新自己的 Profile
 
@@ -405,6 +412,8 @@
     "created_at": "2026-03-21T09:00:00+08:00",
     "is_me": true,
     "can_recommend": false,
+    "i_blocked_user": false,
+    "blocked_me": false,
     "recommendations": []
   }
 }
@@ -429,6 +438,7 @@
 - 不允许给自己写 Recommendation
 - 同一作者再次提交时会覆盖之前的 Recommendation 内容
 - 前端当前使用“覆盖式提交”，不是多条追加评论
+- 若双方存在拉黑关系，接口会拒绝写入
 
 成功响应：
 ```json
@@ -442,6 +452,8 @@
     "created_at": "2026-03-21T09:00:00+08:00",
     "is_me": false,
     "can_recommend": true,
+    "i_blocked_user": false,
+    "blocked_me": false,
     "recommendations": [
       {
         "id": 1,
@@ -454,6 +466,76 @@
         "updated_at": "2026-03-23T12:00:00+08:00"
       }
     ]
+  }
+}
+```
+
+若因拉黑被拒绝，返回 `403 Forbidden`：
+```json
+{
+  "error": "你已拉黑对方，不能继续提交 Recommendation"
+}
+```
+
+或：
+```json
+{
+  "error": "对方已拉黑你，不能继续提交 Recommendation"
+}
+```
+
+### 拉黑用户
+
+**POST** `/api/users/:id/block`
+
+权限要求：已登录用户
+
+说明：
+
+- `:id` 为目标用户 ID
+- 不允许拉黑自己
+- 拉黑后历史私聊消息仍可查看
+- 拉黑后双方都不能继续创建新私聊，也不能在已有私聊里发送新消息
+
+成功响应：
+```json
+{
+  "message": "已拉黑该用户",
+  "profile": {
+    "user_id": "u_018",
+    "username": "Bob",
+    "is_me": false,
+    "can_recommend": true,
+    "i_blocked_user": true,
+    "blocked_me": false,
+    "recommendations": []
+  }
+}
+```
+
+### 取消拉黑用户
+
+**DELETE** `/api/users/:id/block`
+
+权限要求：已登录用户
+
+说明：
+
+- `:id` 为目标用户 ID
+- 取消拉黑后，若不存在其他限制，双方可重新创建私聊或继续发送消息
+
+成功响应：
+```json
+{
+  "message": "已取消拉黑",
+  "profile": {
+    "user_id": "u_018",
+    "username": "Bob",
+    "is_me": false,
+    "can_recommend": true,
+    "i_blocked_user": false,
+    "blocked_me": false,
+    "recommendations": []
   }
 }
 ```
@@ -1417,6 +1499,7 @@ curl -X POST http://localhost:3000/api/posts \
 - Bot 会话支持 `llm_thread`，用于在同一个私聊里拆分多个话题
 - AI agent 的长回复会先写入 `markdown_entries`，再作为 `shared_markdown` 消息返回聊天线程
 - AI 调用失败时，会写入一条 `failed = true` 的失败消息；客户端可调用重试接口重新投递上一条用户消息
+- 用户拉黑只影响普通用户私聊；历史消息仍可见，但不能继续发新消息
 
 ### AI 助理状态
 
@@ -1463,6 +1546,20 @@ curl -X POST http://localhost:3000/api/posts \
     "created_at": "2026-03-24T09:00:00+08:00",
     "unread_count": 0
   }
+}
+```
+
+若因拉黑被拒绝，返回 `403 Forbidden`：
+```json
+{
+  "error": "你已拉黑对方，无法创建私聊"
+}
+```
+
+或：
+```json
+{
+  "error": "对方已拉黑你，无法创建私聊"
 }
 ```
 
@@ -1716,6 +1813,8 @@ curl -X POST http://localhost:3000/api/posts \
     "last_message_at": "2026-03-24T10:20:30+08:00"
   },
   "active_thread_id": 21,
+  "blocked": false,
+  "block_message": "",
   "has_more": false,
   "next_offset": 1
 }
@@ -1730,6 +1829,8 @@ curl -X POST http://localhost:3000/api/posts \
 
 - `llm_thread_id`：消息所属话题，普通私聊可能为空
 - `failed`：是否为失败态 AI 消息；通常只会出现在 `system` 或 `bot user` 回复失败时
+- `blocked`：当前会话是否已因拉黑而禁止继续发送
+- `block_message`：当前会话不可发送时的提示文案
 
 当 `message_type = "shared_markdown"` 时：
 
@@ -1794,6 +1895,8 @@ curl -X POST http://localhost:3000/api/posts \
 - 普通私聊不需要传 `llm_thread_id`
 - AI 会话传入 `llm_thread_id` 后，消息会进入指定话题
 - 若 `llm_thread_id` 对应话题标题仍是默认值“新话题”，服务端会在首轮消息后自动生成摘要标题
+- 若当前会话存在拉黑关系，历史消息仍可读取，但发送会被拒绝
+- 普通用户之间还受“一问一答”限制：对方未回复前不能连续发送多条
 
 成功响应：
 ```json
@@ -1810,6 +1913,30 @@ curl -X POST http://localhost:3000/api/posts \
     "updated_at": "2026-03-24T10:20:30+08:00",
     "last_message_at": "2026-03-24T10:20:30+08:00"
   }
+}
+```
+
+若因“一问一答”限制被拒绝，返回 `403 Forbidden`：
+```json
+{
+  "error": "请等待对方回复后再发送消息",
+  "code": "chat reply required"
+}
+```
+
+若因拉黑被拒绝，返回 `403 Forbidden`：
+```json
+{
+  "error": "你已拉黑对方，无法继续发送消息",
+  "code": "chat blocked"
+}
+```
+
+或：
+```json
+{
+  "error": "对方已拉黑你，无法继续发送消息",
+  "code": "chat blocked"
 }
 ```
 

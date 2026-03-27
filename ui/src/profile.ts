@@ -1,4 +1,4 @@
-import { upsertRecommendation, updateMyProfile, fetchUserProfile, type UserProfileDetail } from "./api/profile.js";
+import { blockUser, unblockUser, upsertRecommendation, updateMyProfile, fetchUserProfile, type UserProfileDetail } from "./api/profile.js";
 import { uploadUserIcon } from "./api/dashboard.js";
 import { fetchCurrentUser } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
@@ -49,6 +49,21 @@ function renderProfileCard(profile: UserProfileDetail): void {
   const emailLine = profile.is_me && profile.email
     ? `<div class="profile-meta-line profile-email-line"><span class="profile-meta-label">${t("profile.email")}</span><a class="profile-email-link" href="mailto:${escapeHtml(profile.email)}">${escapeHtml(profile.email)}</a></div>`
     : "";
+  const canMessage = !profile.is_me && !profile.i_blocked_user && !profile.blocked_me;
+  const blockMessage = profile.i_blocked_user
+    ? t("profile.youBlockedUser")
+    : profile.blocked_me
+      ? t("profile.userBlockedYou")
+      : "";
+  const messageAction = canMessage
+    ? `<a class="btn-inline btn-secondary" href="/chat.html?user_id=${encodeURIComponent(profile.user_id)}&username=${encodeURIComponent(profile.username)}">${t("profile.sendMessage")}</a>`
+    : "";
+  const blockAction = !profile.is_me
+    ? `<button id="profileBlockBtn" class="btn-inline btn-secondary" type="button">${profile.i_blocked_user ? t("profile.unblockUser") : t("profile.blockUser")}</button>`
+    : "";
+  const statusLine = blockMessage
+    ? `<div class="status-text">${escapeHtml(blockMessage)}</div>`
+    : "";
   profileCard.innerHTML = `
     <div class="profile-hero">
       <img class="profile-hero-avatar" src="${avatar}" alt="${profile.username}" />
@@ -58,9 +73,29 @@ function renderProfileCard(profile: UserProfileDetail): void {
         ${emailLine}
         <div class="profile-meta-line">${t("profile.userId", { id: profile.user_id })}</div>
         <div class="profile-meta-line">${t("profile.joinedAt", { time: formatTime(profile.created_at) })}</div>
+        <div class="task-form-actions">${messageAction}${blockAction}</div>
+        ${statusLine}
       </div>
     </div>
   `;
+
+  if (profile.is_me) {
+    return;
+  }
+  const blockBtn = byId<HTMLButtonElement>("profileBlockBtn");
+  blockBtn.addEventListener("click", async () => {
+    blockBtn.disabled = true;
+    const result = profile.i_blocked_user ? await unblockUser(profile.user_id) : await blockUser(profile.user_id);
+    if (!result.response.ok || !result.data.profile) {
+      profileWelcome.textContent = result.data.error || t("profile.blockActionFailed");
+      blockBtn.disabled = false;
+      return;
+    }
+    profileWelcome.textContent = result.data.message || "";
+    renderProfileCard(result.data.profile);
+    renderBioPanel(result.data.profile);
+    renderRecommendationPanel(result.data.profile);
+  });
 }
 
 function renderBioPanel(profile: UserProfileDetail): void {
@@ -118,6 +153,8 @@ function renderBioPanel(profile: UserProfileDetail): void {
 function renderRecommendationPanel(profile: UserProfileDetail): void {
   const recommendations = profile.recommendations || [];
   const formHtml = profile.can_recommend
+    && !profile.i_blocked_user
+    && !profile.blocked_me
     ? `
       <form id="recommendationForm" class="task-result-form">
         <label class="form-label" for="recommendationInput">${t("profile.writeRecommendation")}</label>
@@ -154,11 +191,12 @@ function renderRecommendationPanel(profile: UserProfileDetail): void {
 
   profileRecommendationPanel.innerHTML = `
     <div class="badge">${t("profile.recommendation")}</div>
+    ${profile.i_blocked_user || profile.blocked_me ? `<div class="status-text">${profile.i_blocked_user ? t("profile.recommendationBlockedByYou") : t("profile.recommendationBlockedByOther")}</div>` : ""}
     ${formHtml}
     <div class="task-result-list">${listHtml}</div>
   `;
 
-  if (!profile.can_recommend) {
+  if (!profile.can_recommend || profile.i_blocked_user || profile.blocked_me) {
     return;
   }
 

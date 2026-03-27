@@ -20,6 +20,8 @@ export type UserProfileDetail = {
   created_at: string;
   is_me: boolean;
   can_recommend: boolean;
+  i_blocked_user?: boolean;
+  blocked_me?: boolean;
   recommendations?: ProfileRecommendation[];
 };
 
@@ -44,5 +46,17 @@ export async function upsertRecommendation(userId: string, content: string) {
   return requestJson<UserProfileResponse>(`/api/users/${encodeURIComponent(userId)}/recommendations`, {
     method: "POST",
     body: { content },
+  });
+}
+
+export async function blockUser(userId: string) {
+  return requestJson<UserProfileResponse>(`/api/users/${encodeURIComponent(userId)}/block`, {
+    method: "POST",
+  });
+}
+
+export async function unblockUser(userId: string) {
+  return requestJson<UserProfileResponse>(`/api/users/${encodeURIComponent(userId)}/block`, {
+    method: "DELETE",
   });
 }

@@ -15,13 +15,14 @@ import (
 )
 
 var (
-	errEmailExists     = errors.New("email already exists")
-	errNotMessageOwner = errors.New("not message owner")
-	errTaskNotFound    = errors.New("task not found")
-	errTaskClosed      = errors.New("task application closed")
-	errTaskApplyEnded  = errors.New("task application deadline passed")
-	errTaskSelfApply   = errors.New("task owner cannot apply")
-	errTaskForbidden   = errors.New("task forbidden")
+	errEmailExists       = errors.New("email already exists")
+	errNotMessageOwner   = errors.New("not message owner")
+	errChatReplyRequired = errors.New("chat reply required")
+	errTaskNotFound      = errors.New("task not found")
+	errTaskClosed        = errors.New("task application closed")
+	errTaskApplyEnded    = errors.New("task application deadline passed")
+	errTaskSelfApply     = errors.New("task owner cannot apply")
+	errTaskForbidden     = errors.New("task forbidden")
 )
 
 type User struct {
@@ -337,6 +338,8 @@ type UserProfileDetail struct {
 	CreatedAt       time.Time               `json:"created_at"`
 	IsMe            bool                    `json:"is_me"`
 	CanRecommend    bool                    `json:"can_recommend"`
+	IBlockedUser    bool                    `json:"i_blocked_user"`
+	BlockedMe       bool                    `json:"blocked_me"`
 	Recommendations []ProfileRecommendation `json:"recommendations"`
 }
 
@@ -385,6 +388,13 @@ CREATE TABLE IF NOT EXISTS profile_recommendations (
 	content TEXT NOT NULL,
 	created_at TIMESTAMPTZ NOT NULL,
 	updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_blocks (
+	blocker_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	blocked_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (blocker_user_id, blocked_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS markdown_entries (
@@ -747,6 +757,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_configs_share_id ON llm_configs(share_
 CREATE INDEX IF NOT EXISTS idx_bot_users_owner_user_id ON bot_users(owner_user_id, updated_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_recommendations_target_author ON profile_recommendations(target_user_id, author_user_id);
 CREATE INDEX IF NOT EXISTS idx_profile_recommendations_target_updated_at ON profile_recommendations(target_user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked_user_id ON user_blocks(blocked_user_id, blocker_user_id);
 CREATE INDEX IF NOT EXISTS idx_tags_sort_order_created_at ON tags(sort_order DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_images_post_id ON post_images(post_id);
@@ -1706,6 +1717,62 @@ func (s *Server) upsertProfileRecommendation(targetUserID, authorUserID, content
 	return err
 }
 
+func (s *Server) blockUser(blockerUserID, blockedUserID string, now time.Time) error {
+	if blockerUserID == blockedUserID {
+		return nil
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO user_blocks (blocker_user_id, blocked_user_id, created_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (blocker_user_id, blocked_user_id) DO NOTHING`,
+		blockerUserID,
+		blockedUserID,
+		now,
+	)
+	return err
+}
+
+func (s *Server) unblockUser(blockerUserID, blockedUserID string) (bool, error) {
+	result, err := s.db.Exec(
+		`DELETE FROM user_blocks
+		  WHERE blocker_user_id = $1 AND blocked_user_id = $2`,
+		blockerUserID,
+		blockedUserID,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func (s *Server) getUserBlockState(viewerUserID, targetUserID string) (bool, bool, error) {
+	if strings.TrimSpace(viewerUserID) == "" || strings.TrimSpace(targetUserID) == "" || viewerUserID == targetUserID {
+		return false, false, nil
+	}
+	var iBlockedUser bool
+	var blockedMe bool
+	err := s.db.QueryRow(
+		`SELECT EXISTS(
+		     SELECT 1 FROM user_blocks
+		      WHERE blocker_user_id = $1 AND blocked_user_id = $2
+		   ),
+		   EXISTS(
+		     SELECT 1 FROM user_blocks
+		      WHERE blocker_user_id = $2 AND blocked_user_id = $1
+		   )`,
+		viewerUserID,
+		targetUserID,
+	).Scan(&iBlockedUser, &blockedMe)
+	if err != nil {
+		return false, false, err
+	}
+	return iBlockedUser, blockedMe, nil
+}
+
 func (s *Server) listProfileRecommendations(targetUserID string) ([]ProfileRecommendation, error) {
 	rows, err := s.db.Query(
 		`SELECT pr.id, pr.target_user_id, pr.author_user_id, u.username, u.icon_url, pr.content, pr.created_at, pr.updated_at
@@ -1752,15 +1819,26 @@ func (s *Server) getUserProfileDetail(targetUserID, viewerUserID string) (*UserP
 	if err != nil {
 		return nil, err
 	}
+	iBlockedUser, blockedMe, err := s.getUserBlockState(viewerUserID, targetUserID)
+	if err != nil {
+		return nil, err
+	}
 	return &UserProfileDetail{
-		UserID:          user.ID,
-		Username:        user.Username,
-		Email:           func() string { if targetUserID == viewerUserID { return user.Email }; return "" }(),
+		UserID:   user.ID,
+		Username: user.Username,
+		Email: func() string {
+			if targetUserID == viewerUserID {
+				return user.Email
+			}
+			return ""
+		}(),
 		IconURL:         user.IconURL,
 		Bio:             user.Bio,
 		CreatedAt:       user.CreatedAt,
 		IsMe:            targetUserID == viewerUserID,
 		CanRecommend:    targetUserID != viewerUserID,
+		IBlockedUser:    iBlockedUser,
+		BlockedMe:       blockedMe,
 		Recommendations: recommendations,
 	}, nil
 }
@@ -3470,6 +3548,26 @@ func (s *Server) getChatCounterparty(threadID int64, userID string) (string, err
 	default:
 		return "", nil
 	}
+}
+
+func (s *Server) getLastUndeletedChatMessageSender(threadID int64) (string, error) {
+	var senderID string
+	err := s.db.QueryRow(
+		`SELECT sender_id
+		   FROM chat_messages
+		  WHERE thread_id = $1
+		    AND deleted_at IS NULL
+		  ORDER BY created_at DESC, id DESC
+		  LIMIT 1`,
+		threadID,
+	).Scan(&senderID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return senderID, nil
 }
 
 func (s *Server) listLLMThreads(chatThreadID int64, ownerUserID string) ([]LLMThread, error) {

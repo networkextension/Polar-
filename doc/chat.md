@@ -11,6 +11,7 @@
 - 会话通过两位用户 ID 生成唯一对话。
 - 未读数通过最后已读时间与消息时间计算。
 - WebSocket 负责实时推送，HTTP 作为兜底。
+- 支持用户级拉黑（block）；拉黑后历史消息仍可查看，但不能继续创建私聊或发送新消息。
 
 ## 数据模型（服务端）
 chat_threads 字段：
@@ -34,6 +35,21 @@ chat_reads 字段：
 - `thread_id` BIGINT
 - `user_id` TEXT
 - `last_read_at` TIMESTAMPTZ
+
+user_blocks 字段：
+- `blocker_user_id` TEXT
+- `blocked_user_id` TEXT
+- `created_at` TIMESTAMPTZ
+
+## 拉黑规则
+- 拉黑是用户与用户之间的单向关系，由 `user_blocks` 维护。
+- 如果 A 拉黑 B：
+  - A 与 B 之间已有的历史私聊消息仍然保留，可继续读取。
+  - A 不能再主动创建与 B 的新私聊入口。
+  - B 也不能再主动创建与 A 的新私聊入口。
+  - A 与 B 在已有私聊里都不能继续发送新消息。
+- `system` / bot 会话不受此规则影响。
+- 客户端进入历史会话后，应根据服务端返回的 `blocked` / `block_message` 禁用输入框，而不是只在发送时报错。
 
 ## 认证方式
 - 使用登录后 `SessionCookieName`（HTTP Cookie）认证。
@@ -90,6 +106,20 @@ chat_reads 字段：
 }
 ```
 
+如果双方存在拉黑关系，返回 `403 Forbidden`：
+```json
+{
+  "error": "你已拉黑对方，无法创建私聊"
+}
+```
+
+或：
+```json
+{
+  "error": "对方已拉黑你，无法创建私聊"
+}
+```
+
 ### 3. 获取消息列表（并自动标记已读）
 `GET /api/chats/:id/messages?limit=50&offset=0`
 
@@ -118,13 +148,25 @@ chat_reads 字段：
       "deleted_by": "abc123"
     }
   ],
+  "blocked": false,
+  "block_message": "",
   "has_more": false,
   "next_offset": 2
 }
 ```
 
+字段补充：
+- `blocked`：当前会话是否因拉黑而禁止继续发送
+- `block_message`：对应的提示文案；若为空，表示当前会话可正常发送
+
 ### 4. 发送消息
 `POST /api/chats/:id/messages`
+
+发送限制：
+- 普通用户与普通用户的私聊，遵循一问一答节奏。
+- 如果当前会话最后一条未撤回消息就是你发的，则下一条会被拒绝，需等待对方先回复。
+- 如果当前会话任一方存在拉黑关系，则历史仍可见，但发送会被拒绝。
+- 对 `system` 和 bot 会话不生效，它们仍可连续发送。
 
 请求
 ```json
@@ -134,6 +176,30 @@ chat_reads 字段：
 响应
 ```json
 { "message": "发送成功", "id": 88 }
+```
+
+当违反上述限制时，返回 `403 Forbidden`：
+```json
+{
+  "error": "请等待对方回复后再发送消息",
+  "code": "chat reply required"
+}
+```
+
+当会话因拉黑而不可发送时，返回 `403 Forbidden`：
+```json
+{
+  "error": "你已拉黑对方，无法继续发送消息",
+  "code": "chat blocked"
+}
+```
+
+或：
+```json
+{
+  "error": "对方已拉黑你，无法继续发送消息",
+  "code": "chat blocked"
+}
 ```
 
 ### 5. 撤回消息

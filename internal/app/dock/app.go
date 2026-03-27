@@ -280,6 +280,8 @@ func (s *Server) registerRoutes() {
 		api.PUT("/users/me/profile", s.AuthMiddleware(), s.handleMyProfileUpdate)
 		api.GET("/users/:id/profile", s.AuthMiddleware(), s.handleUserProfileGet)
 		api.POST("/users/:id/recommendations", s.AuthMiddleware(), s.handleProfileRecommendationUpsert)
+		api.POST("/users/:id/block", s.AuthMiddleware(), s.handleUserBlockCreate)
+		api.DELETE("/users/:id/block", s.AuthMiddleware(), s.handleUserBlockDelete)
 		api.GET("/site-settings", s.handleSiteSettingsGet)
 		api.PUT("/site-settings", s.AuthMiddleware(), s.AdminMiddleware(), s.handleSiteSettingsUpdate)
 		api.POST("/site-settings/icon", s.AuthMiddleware(), s.AdminMiddleware(), s.handleSiteIconUpload)

@@ -6,6 +6,7 @@ import type {
   StartChatResponse,
   LLMThreadListResponse,
   ChatLLMConfigListResponse,
+  SendMessageResponse,
 } from "../types/chat.js";
 
 export async function fetchChats(limit = 50) {
@@ -84,11 +85,8 @@ export async function retryMessage(threadId: string, messageId: string) {
 }
 
 export async function sendMessage(threadId: string, content: string, llmThreadId?: number | null) {
-  return request(`/api/chats/${threadId}/messages`, {
+  return requestJson<SendMessageResponse>(`/api/chats/${threadId}/messages`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ content, llm_thread_id: llmThreadId || undefined }),
+    body: { content, llm_thread_id: llmThreadId || undefined },
   });
 }

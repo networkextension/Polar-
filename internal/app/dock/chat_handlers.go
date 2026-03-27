@@ -14,6 +14,28 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (s *Server) getChatBlockStatus(threadID int64, userID string) (bool, string, error) {
+	otherUserID, err := s.getChatCounterparty(threadID, userID)
+	if err != nil {
+		return false, "", err
+	}
+	if otherUserID == "" {
+		return false, "", nil
+	}
+	iBlockedUser, blockedMe, err := s.getUserBlockState(userID, otherUserID)
+	if err != nil {
+		return false, "", err
+	}
+	switch {
+	case iBlockedUser:
+		return true, "你已拉黑对方，无法继续发送消息", nil
+	case blockedMe:
+		return true, "对方已拉黑你，无法继续发送消息", nil
+	default:
+		return false, "", nil
+	}
+}
+
 func (s *Server) handleChatList(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	userIDStr, ok := userID.(string)
@@ -88,6 +110,19 @@ func (s *Server) handleChatStart(c *gin.Context) {
 	}
 	if otherUser == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		return
+	}
+	iBlockedUser, blockedMe, err := s.getUserBlockState(userIDStr, targetID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if iBlockedUser {
+		c.JSON(http.StatusForbidden, gin.H{"error": "你已拉黑对方，无法创建私聊"})
+		return
+	}
+	if blockedMe {
+		c.JSON(http.StatusForbidden, gin.H{"error": "对方已拉黑你，无法创建私聊"})
 		return
 	}
 
@@ -167,6 +202,11 @@ func (s *Server) handleChatMessages(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
+	blocked, blockMessage, err := s.getChatBlockStatus(threadID, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
 
 	var lastReadMessageID *int64
 	if len(messages) > 0 {
@@ -193,6 +233,8 @@ func (s *Server) handleChatMessages(c *gin.Context) {
 		"messages":      messages,
 		"has_more":      hasMore,
 		"next_offset":   nextOffset,
+		"blocked":       blocked,
+		"block_message": blockMessage,
 		"active_thread": activeLLMThread,
 		"active_thread_id": func() any {
 			if llmThreadID == nil {
@@ -523,6 +565,35 @@ func (s *Server) handleChatSend(c *gin.Context) {
 	if content == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "内容不能为空"})
 		return
+	}
+	blocked, blockMessage, err := s.getChatBlockStatus(threadID, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if blocked {
+		c.JSON(http.StatusForbidden, gin.H{"error": blockMessage, "code": "chat blocked"})
+		return
+	}
+
+	responderUserID, err := s.getAIResponderForChat(threadID, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if responderUserID == "" {
+		lastSenderID, err := s.getLastUndeletedChatMessageSender(threadID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+			return
+		}
+		if lastSenderID == userIDStr {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "请等待对方回复后再发送消息",
+				"code":  errChatReplyRequired.Error(),
+			})
+			return
+		}
 	}
 
 	llmThreadID, activeLLMThread, err := s.resolveChatLLMThread(threadID, userIDStr, func() string {

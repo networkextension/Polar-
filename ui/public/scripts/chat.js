@@ -37,6 +37,9 @@ let activeLLMThreads = [];
 let activeIsAIChat = false;
 let activeIsBotChat = false;
 let currentLLMConfigs = [];
+let activeChatSummary = null;
+let activeChatBlocked = false;
+let activeChatBlockMessage = "";
 const expandedMarkdownMessages = new Set();
 const sharedMarkdownContentCache = new Map();
 const sharedMarkdownLoading = new Set();
@@ -107,15 +110,18 @@ function truncatePreview(input, maxLength = 20) {
     return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 function updateActiveChatHeader() {
-    if (!activeThreadId) {
+    if (!activeThreadId && !activeChatSummary) {
         return;
     }
-    const chat = chatCache.find((item) => item.id === activeThreadId);
+    const chat = chatCache.find((item) => item.id === activeThreadId) || activeChatSummary;
     if (!chat) {
         return;
     }
+    activeChatSummary = chat;
     chatTitle.textContent = chat.other_username;
-    chatSubtitle.textContent = formatPresence(chat);
+    chatSubtitle.textContent = activeChatBlocked && activeChatBlockMessage
+        ? activeChatBlockMessage
+        : formatPresence(chat);
 }
 function isAIChat(chat) {
     if (!chat) {
@@ -325,6 +331,7 @@ async function loadChats(focusThreadId = null) {
         const match = chatCache.find((item) => item.id === focusThreadId);
         if (match) {
             activeThreadId = match.id;
+            activeChatSummary = match;
         }
     }
     if (previousSignature !== nextSignature) {
@@ -623,6 +630,10 @@ async function loadMessages(threadId) {
         messageList.innerHTML = `<div class='chat-empty'>${t("chat.loadFailed")}</div>`;
         return;
     }
+    activeChatBlocked = Boolean(data.blocked);
+    activeChatBlockMessage = data.block_message || "";
+    messageInput.disabled = activeChatBlocked;
+    updateActiveChatHeader();
     if (data.active_thread?.id) {
         activeLLMThreadId = data.active_thread.id;
         if (!activeLLMThreads.some((thread) => thread.id === data.active_thread?.id) && data.active_thread) {
@@ -640,6 +651,9 @@ async function refreshActiveMessagesIfNeeded(threadId, force = false) {
 async function openChat(chat) {
     const previousThreadId = activeThreadId;
     activeThreadId = chat.id;
+    activeChatSummary = chat;
+    activeChatBlocked = false;
+    activeChatBlockMessage = "";
     activeMessageLoadedAt = "";
     activeLLMThreadId = null;
     updateActiveChatHeader();
@@ -794,11 +808,18 @@ messageForm.addEventListener("submit", async (event) => {
     if (!content) {
         return;
     }
-    const response = await sendMessage(activeThreadId, content, activeLLMThreadId);
+    const { response, data } = await sendMessage(activeThreadId, content, activeLLMThreadId);
     if (!response.ok) {
+        chatSubtitle.textContent = data.error || "发送失败";
+        if (data.code === "chat blocked") {
+            activeChatBlocked = true;
+            activeChatBlockMessage = data.error || "";
+            messageInput.disabled = true;
+        }
         return;
     }
     messageInput.value = "";
+    updateActiveChatHeader();
     if (!wsConnected) {
         await loadMessages(activeThreadId);
     }
@@ -898,6 +919,15 @@ async function init() {
             startPolling();
             return;
         }
+        activeChatSummary = {
+            id: "",
+            other_user_id: target.userId,
+            other_username: target.username || target.userId,
+            other_user_online: false,
+            other_user_device_type: "",
+        };
+        chatTitle.textContent = activeChatSummary.other_username;
+        chatSubtitle.textContent = t("chat.loading");
         const chat = await startChatWithUser(target.userId);
         await loadChats(chat ? chat.id : null);
         if (chat) {

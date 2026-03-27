@@ -14,3 +14,13 @@ export async function upsertRecommendation(userId, content) {
         body: { content },
     });
 }
+export async function blockUser(userId) {
+    return requestJson(`/api/users/${encodeURIComponent(userId)}/block`, {
+        method: "POST",
+    });
+}
+export async function unblockUser(userId) {
+    return requestJson(`/api/users/${encodeURIComponent(userId)}/block`, {
+        method: "DELETE",
+    });
+}
