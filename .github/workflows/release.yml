@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      BIN_PATH: cmd/dock
+      BINARY_NAME: dock_${{ matrix.arch }}_${{ matrix.os }}
     strategy:
       matrix:
         include:
@@ -28,9 +30,6 @@ jobs:
           - os: darwin
             arch: arm64
           - os: darwin
-    env:
-      BIN_PATH: cmd/dock
-      BINARY_NAME: dock_${{ matrix.arch }}_${{ matrix.os }}
 
     steps:
       - name: Checkout
