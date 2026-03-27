@@ -160,35 +160,56 @@ user_blocks 字段：
 响应
 ```json
 {
-  "messages": [
+  “messages”: [
     {
-      "id": 88,
-      "thread_id": 12,
-      "sender_id": "me123",
-      "sender_username": "Me",
-      "content": "你好",
-      "created_at": "2026-03-19T09:10:00+08:00",
-      "deleted": false
+      “id”: 88,
+      “thread_id”: 12,
+      “sender_id”: “me123”,
+      “sender_username”: “Me”,
+      “content”: “你好”,
+      “message_type”: “text”,
+      “created_at”: “2026-03-19T09:10:00+08:00”,
+      “deleted”: false
     },
     {
-      "id": 89,
-      "thread_id": 12,
-      "sender_id": "abc123",
-      "sender_username": "Alice",
-      "content": "消息已撤回",
-      "created_at": "2026-03-19T09:11:00+08:00",
-      "deleted": true,
-      "deleted_at": "2026-03-19T09:12:00+08:00",
-      "deleted_by": "abc123"
+      “id”: 90,
+      “thread_id”: 12,
+      “sender_id”: “me123”,
+      “sender_username”: “Me”,
+      “content”: “[图片]”,
+      “message_type”: “attachment”,
+      “attachment”: {
+        “url”: “/uploads/chat_abc123.jpg”,
+        “file_name”: “photo.jpg”,
+        “size”: 204800,
+        “mime_type”: “image/jpeg”,
+        “thumbnail_url”: “/uploads/chat_abc123_sm.jpg”,
+        “width”: 1280,
+        “height”: 960
+      },
+      “created_at”: “2026-03-19T09:13:00+08:00”,
+      “deleted”: false
+    },
+    {
+      “id”: 89,
+      “thread_id”: 12,
+      “sender_id”: “abc123”,
+      “sender_username”: “Alice”,
+      “content”: “消息已撤回”,
+      “message_type”: “text”,
+      “created_at”: “2026-03-19T09:11:00+08:00”,
+      “deleted”: true,
+      “deleted_at”: “2026-03-19T09:12:00+08:00”,
+      “deleted_by”: “abc123”
     }
   ],
-  "blocked": false,
-  "is_implicit_friend": false,
-  "reply_required": true,
-  "reply_required_message": "你已发送首条消息，请等待对方回复后再继续发送",
-  "block_message": "",
-  "has_more": false,
-  "next_offset": 2
+  “blocked”: false,
+  “is_implicit_friend”: false,
+  “reply_required”: true,
+  “reply_required_message”: “你已发送首条消息，请等待对方回复后再继续发送”,
+  “block_message”: “”,
+  “has_more”: false,
+  “next_offset”: 2
 }
 ```
 
@@ -196,8 +217,52 @@ user_blocks 字段：
 - `blocked`：当前会话是否因拉黑而禁止继续发送
 - `block_message`：对应的提示文案；若为空，表示当前会话可正常发送
 - `is_implicit_friend`：当前普通用户会话是否已建立隐式好友关系
-- `reply_required`：当前是否处于“等待对方回复”状态
+- `reply_required`：当前是否处于”等待对方回复”状态
 - `reply_required_message`：等待回复时的提示文案；为空表示当前无需等待
+- `message_type`：消息类型，见下文”消息类型说明”
+
+### 消息类型说明
+
+`message_type` 字段标识消息的渲染方式：
+
+| 值 | 含义 | 核心字段 |
+| :--- | :--- | :--- |
+| `text` | 普通文本消息 | `content` |
+| `attachment` | 附件消息（图片/视频/文件） | `content`（预览文本）、`attachment`（元数据） |
+| `shared_markdown` | 共享 Markdown 文档 | `content`（摘要）、`markdown_entry_id`、`markdown_title` |
+
+#### attachment 对象字段
+
+当 `message_type = “attachment”` 时，消息携带 `attachment` 字段：
+
+```json
+{
+  “url”: “/uploads/chat_abc123.jpg”,
+  “file_name”: “photo.jpg”,
+  “size”: 204800,
+  “mime_type”: “image/jpeg”,
+  “thumbnail_url”: “/uploads/chat_abc123_sm.jpg”,
+  “width”: 1280,
+  “height”: 960
+}
+```
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `url` | string | 文件完整访问路径（相对 URL，需拼接 host） |
+| `file_name` | string | 原始文件名 |
+| `size` | number | 文件字节数 |
+| `mime_type` | string | MIME 类型，如 `image/jpeg`、`video/mp4`、`application/pdf` |
+| `thumbnail_url` | string? | 缩略图路径，仅图片有值 |
+| `width` | number? | 图片/视频宽度（像素），仅图片有值 |
+| `height` | number? | 图片/视频高度（像素），仅图片有值 |
+
+客户端渲染建议：
+- `mime_type` 以 `image/` 开头 → 显示图片预览（优先用 `thumbnail_url`，点击查看 `url` 原图）
+- `mime_type` 以 `video/` 开头 → 显示视频播放器，`url` 为视频源
+- 其他 → 显示文件卡片（图标 + `file_name` + 格式化后的 `size` + 下载按钮）
+
+撤回后 `attachment` 字段不会返回，`deleted = true`，`content` 为撤回提示文案。
 
 ### 4. 发送消息
 `POST /api/chats/:id/messages`
@@ -246,7 +311,62 @@ user_blocks 字段：
 }
 ```
 
-### 5. 撤回消息
+### 5. 发送附件消息
+`POST /api/chats/:id/messages/attachment`
+
+请求格式：`multipart/form-data`
+
+| 字段 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `file` | File | 要发送的文件，必填 |
+
+文件大小限制：
+- 图片（`image/*`）：最大 **10 MB**
+- 视频（`video/*`）：最大 **100 MB**
+- 其他文件：最大 **50 MB**
+
+发送限制与"发送消息"相同：适用 block / reply-required 规则。
+
+示例请求（iOS Swift）：
+```swift
+var request = URLRequest(url: URL(string: "/api/chats/12/messages/attachment")!)
+request.httpMethod = "POST"
+let boundary = UUID().uuidString
+request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+var body = Data()
+body.append("--\(boundary)\r\n".data(using: .utf8)!)
+body.append("Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n".data(using: .utf8)!)
+body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+body.append(imageData)
+body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+request.httpBody = body
+```
+
+响应（成功，HTTP 201）
+```json
+{
+  "message": "发送成功",
+  "id": 90,
+  "is_implicit_friend": true,
+  "reply_required": false,
+  "reply_required_message": ""
+}
+```
+
+响应字段与"发送消息"相同。失败时的错误响应格式也与"发送消息"一致（`chat blocked` / `chat reply required`），另增：
+
+文件过大时，返回 `400 Bad Request`：
+```json
+{ "error": "文件大小超过限制（最大 10 MB）" }
+```
+
+未携带文件时，返回 `400 Bad Request`：
+```json
+{ "error": "请选择要发送的文件" }
+```
+
+### 6. 撤回消息
 `DELETE /api/chats/:id/messages/:messageId`
 
 响应
@@ -277,7 +397,7 @@ iOS 端连接时需带 Cookie（Session）。
 
 ### 事件示例
 
-#### 新消息
+#### 新消息（文本）
 ```json
 {
   "type": "message",
@@ -287,8 +407,35 @@ iOS 端连接时需带 Cookie（Session）。
     "thread_id": 12,
     "sender_id": "me123",
     "sender_username": "Me",
+    "message_type": "text",
     "content": "你好",
     "created_at": "2026-03-19T09:10:00+08:00"
+  }
+}
+```
+
+#### 新消息（附件）
+```json
+{
+  "type": "message",
+  "chat_id": 12,
+  "message": {
+    "id": 90,
+    "thread_id": 12,
+    "sender_id": "me123",
+    "sender_username": "Me",
+    "message_type": "attachment",
+    "content": "[图片]",
+    "attachment": {
+      "url": "/uploads/chat_abc123.jpg",
+      "file_name": "photo.jpg",
+      "size": 204800,
+      "mime_type": "image/jpeg",
+      "thumbnail_url": "/uploads/chat_abc123_sm.jpg",
+      "width": 1280,
+      "height": 960
+    },
+    "created_at": "2026-03-19T09:13:00+08:00"
   }
 }
 ```
