@@ -265,6 +265,34 @@ button:hover {
   flex-wrap: wrap;
 }
 
+.identity-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.role-badge-admin {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--border));
+  color: var(--accent);
+}
+
+.role-badge-inline {
+  transform: translateY(1px);
+}
+
 .header-nav-link {
   display: inline-flex;
   align-items: center;
@@ -1311,6 +1339,27 @@ button:hover {
 .profile-meta-line {
   font-size: 13px;
   color: var(--muted);
+}
+
+.profile-email-line {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.profile-meta-label {
+  color: var(--muted);
+}
+
+.profile-email-link {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.profile-email-link:hover {
+  text-decoration: underline;
 }
 
 .profile-bio-copy {

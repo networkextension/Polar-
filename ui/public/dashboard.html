@@ -23,6 +23,7 @@
           <div>
             <h1 data-i18n="dashboard.title">Dashboard</h1>
             <p id="welcomeText" data-i18n="dashboard.loading">Loading user info...</p>
+            <div id="dashboardRoleBadge" class="role-badge role-badge-admin" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
           </div>
           <div class="header-actions">
             <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button" data-i18n="dashboard.drawerToggle">Entry list</button>
@@ -58,7 +59,10 @@
                 <div class="settings-entry-head">
                   <img id="settingsCardAvatar" class="avatar avatar-sm" alt="User avatar" />
                   <div class="settings-entry-copy">
-                    <div id="settingsCardName" class="group-name" data-i18n="dashboard.loadingUser">Loading...</div>
+                    <div class="identity-line">
+                      <div id="settingsCardName" class="group-name" data-i18n="dashboard.loadingUser">Loading...</div>
+                      <div id="settingsCardRoleBadge" class="role-badge role-badge-admin role-badge-inline" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
+                    </div>
                     <div id="settingsCardMeta" class="group-meta"></div>
                   </div>
                 </div>
@@ -174,7 +178,10 @@
                 <div class="settings-profile-hero">
                   <img id="userIcon" class="avatar settings-avatar-lg" alt="User avatar" />
                   <div class="settings-profile-copy">
-                    <div id="settingsProfileName" class="settings-profile-name" data-i18n="dashboard.loadingUser">Loading...</div>
+                    <div class="identity-line">
+                      <div id="settingsProfileName" class="settings-profile-name" data-i18n="dashboard.loadingUser">Loading...</div>
+                      <div id="settingsProfileRoleBadge" class="role-badge role-badge-admin role-badge-inline" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
+                    </div>
                     <div id="settingsProfileMeta" class="settings-profile-meta" data-i18n="dashboard.userProfileMeta">Manage your profile, devices and preferences</div>
                     <div class="inline-actions">
                       <a class="btn-inline btn-secondary" href="/profile.html" data-i18n="dashboard.viewPublicProfile">View public Profile</a>

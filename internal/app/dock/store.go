@@ -331,6 +331,7 @@ type ProfileRecommendation struct {
 type UserProfileDetail struct {
 	UserID          string                  `json:"user_id"`
 	Username        string                  `json:"username"`
+	Email           string                  `json:"email,omitempty"`
 	IconURL         string                  `json:"icon_url"`
 	Bio             string                  `json:"bio"`
 	CreatedAt       time.Time               `json:"created_at"`
@@ -1285,14 +1286,36 @@ func (s *Server) createUser(user *User) error {
 	if user.IconURL == "" {
 		user.IconURL = ""
 	}
-	_, err := s.db.Exec(
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`LOCK TABLE users IN EXCLUSIVE MODE`); err != nil {
+		return err
+	}
+
+	role := user.Role
+	if role == "user" {
+		var realUserCount int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM users WHERE id <> $1`, systemUserID).Scan(&realUserCount); err != nil {
+			return err
+		}
+		if realUserCount == 0 {
+			role = "admin"
+		}
+	}
+
+	_, err = tx.Exec(
 		`INSERT INTO users (id, username, email, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		user.ID,
 		user.Username,
 		user.Email,
 		user.Password,
-		user.Role,
+		role,
 		user.Bio,
 		user.IconURL,
 		user.IsOnline,
@@ -1306,7 +1329,9 @@ func (s *Server) createUser(user *User) error {
 		}
 		return err
 	}
-	return nil
+
+	user.Role = role
+	return tx.Commit()
 }
 
 func (s *Server) upsertUserDevice(userID, deviceType, pushToken string, loginAt time.Time) error {
@@ -1730,6 +1755,7 @@ func (s *Server) getUserProfileDetail(targetUserID, viewerUserID string) (*UserP
 	return &UserProfileDetail{
 		UserID:          user.ID,
 		Username:        user.Username,
+		Email:           func() string { if targetUserID == viewerUserID { return user.Email }; return "" }(),
 		IconURL:         user.IconURL,
 		Bio:             user.Bio,
 		CreatedAt:       user.CreatedAt,

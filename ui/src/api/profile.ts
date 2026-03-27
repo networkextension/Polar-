@@ -14,6 +14,7 @@ export type ProfileRecommendation = {
 export type UserProfileDetail = {
   user_id: string;
   username: string;
+  email?: string;
   icon_url?: string;
   bio?: string;
   created_at: string;

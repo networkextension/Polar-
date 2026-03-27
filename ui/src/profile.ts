@@ -46,12 +46,16 @@ async function loadCurrentUser(): Promise<void> {
 
 function renderProfileCard(profile: UserProfileDetail): void {
   const avatar = resolveAvatar(profile.username, profile.icon_url, 120);
+  const emailLine = profile.is_me && profile.email
+    ? `<div class="profile-meta-line profile-email-line"><span class="profile-meta-label">${t("profile.email")}</span><a class="profile-email-link" href="mailto:${escapeHtml(profile.email)}">${escapeHtml(profile.email)}</a></div>`
+    : "";
   profileCard.innerHTML = `
     <div class="profile-hero">
       <img class="profile-hero-avatar" src="${avatar}" alt="${profile.username}" />
       <div class="profile-hero-body">
         <div class="badge">${profile.is_me ? t("profile.myProfile") : t("profile.userProfile")}</div>
         <h2>${profile.username}</h2>
+        ${emailLine}
         <div class="profile-meta-line">${t("profile.userId", { id: profile.user_id })}</div>
         <div class="profile-meta-line">${t("profile.joinedAt", { time: formatTime(profile.created_at) })}</div>
       </div>
