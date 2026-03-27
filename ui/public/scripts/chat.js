@@ -47,6 +47,14 @@ let activeChatReplyRequiredMessage = "";
 const expandedMarkdownMessages = new Set();
 const sharedMarkdownContentCache = new Map();
 const sharedMarkdownLoading = new Set();
+const messageCacheMap = new Map();
+const MSG_PAGE_SIZE = 50;
+let visibleOlderCount = 0;
+function getCacheKey() {
+    return activeLLMThreadId != null
+        ? `${activeThreadId}:${activeLLMThreadId}`
+        : (activeThreadId || "");
+}
 function escapeHtml(input) {
     return input
         .split("&").join("&amp;")
@@ -435,14 +443,23 @@ async function loadChatLLMConfigs() {
     currentLLMConfigs = data.configs || [];
     renderLLMThreadModelBar();
 }
-function renderMessages(messages) {
+function renderMessages(messages, scrollToBottom = false) {
     activeMessages = messages;
     updateActiveMessageLoadedAt(messages);
+    const cacheKey = getCacheKey();
+    if (cacheKey) messageCacheMap.set(cacheKey, messages);
     if (!messages.length) {
         messageList.innerHTML = `<div class='chat-empty'>${t("chat.noMessages")}</div>`;
         return;
     }
-    messageList.innerHTML = messages
+    const visibleStart = Math.max(0, messages.length - MSG_PAGE_SIZE - visibleOlderCount);
+    const visibleMessages = messages.slice(visibleStart);
+    const loadOlderHtml = visibleStart > 0
+        ? `<div class="message-load-older"><button class="btn-inline btn-secondary" id="msgLoadOlderBtn" type="button">↑ Load older messages (${visibleStart} more)</button></div>`
+        : "";
+    const prevScrollHeight = messageList.scrollHeight;
+    const prevScrollTop = messageList.scrollTop;
+    messageList.innerHTML = loadOlderHtml + visibleMessages
         .map((msg) => {
         const isMine = msg.sender_id === currentUserId;
         const isSystem = msg.sender_id === "system";
@@ -520,6 +537,10 @@ function renderMessages(messages) {
       `;
     })
         .join("");
+    document.getElementById("msgLoadOlderBtn")?.addEventListener("click", () => {
+        visibleOlderCount += MSG_PAGE_SIZE;
+        renderMessages(activeMessages, false);
+    });
     messageList.querySelectorAll(".message-revoke").forEach((button) => {
         button.addEventListener("click", async () => {
             const messageId = button.dataset.id;
@@ -673,13 +694,26 @@ function renderMessages(messages) {
             window.open(`/editor.html?id=${encodeURIComponent(String(saveResult.data.id))}`, "_blank");
         });
     });
-    messageList.scrollTop = messageList.scrollHeight;
+    if (scrollToBottom) {
+        messageList.scrollTop = messageList.scrollHeight;
+    } else {
+        messageList.scrollTop = prevScrollTop + (messageList.scrollHeight - prevScrollHeight);
+    }
 }
 async function loadMessages(threadId) {
-    messageList.innerHTML = `<div class='chat-empty'>${t("chat.loading")}</div>`;
+    const cacheKey = getCacheKey();
+    const cached = messageCacheMap.get(cacheKey);
+    if (cached?.length) {
+        visibleOlderCount = 0;
+        renderMessages(cached, true);
+    } else {
+        messageList.innerHTML = `<div class='chat-empty'>${t("chat.loading")}</div>`;
+    }
     const { response, data } = await fetchMessages(threadId, 200, activeLLMThreadId);
     if (!response.ok) {
-        messageList.innerHTML = `<div class='chat-empty'>${t("chat.loadFailed")}</div>`;
+        if (!cached?.length) {
+            messageList.innerHTML = `<div class='chat-empty'>${t("chat.loadFailed")}</div>`;
+        }
         return;
     }
     activeChatBlocked = Boolean(data.blocked);
@@ -697,7 +731,7 @@ async function loadMessages(threadId) {
         }
         renderLLMThreadBar();
     }
-    renderMessages(data.messages || []);
+    renderMessages(data.messages || [], true);
 }
 async function refreshActiveMessagesIfNeeded(threadId, force = false) {
     if (force || shouldRefreshActiveMessages(threadId)) {
@@ -714,6 +748,7 @@ async function openChat(chat) {
     activeChatReplyRequiredMessage = "";
     activeMessageLoadedAt = "";
     activeLLMThreadId = null;
+    visibleOlderCount = 0;
     updateActiveChatHeader();
     messageInput.disabled = false;
     renderChatList(chatCache);
@@ -820,7 +855,7 @@ function connectWebSocket() {
                 const incomingLLMThreadId = payload.message.llm_thread_id || null;
                 if ((!activeLLMThreadId && !incomingLLMThreadId) || activeLLMThreadId === incomingLLMThreadId) {
                     if (appendMessageIfNeeded(payload.message)) {
-                        renderMessages(activeMessages);
+                        renderMessages(activeMessages, true);
                     }
                 }
                 else if (activeIsAIChat) {
@@ -944,6 +979,8 @@ chatThreadSelect.addEventListener("change", async () => {
     activeLLMThreadId = nextID > 0 ? nextID : null;
     renderLLMThreadModelBar();
     activeMessageLoadedAt = "";
+    visibleOlderCount = 0;
+    messageCacheMap.delete(getCacheKey());
     await loadMessages(activeThreadId);
 });
 chatNewTopicBtn.addEventListener("click", async () => {
