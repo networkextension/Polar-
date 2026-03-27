@@ -1088,7 +1088,14 @@ func (s *Server) handleChatSendAttachment(c *gin.Context) {
 		return
 	}
 
-	publicURL := "/uploads/" + filename
+	// Store the file (local or R2). For R2 this uploads dstPath to the bucket.
+	publicURL, err := s.chatStorage.Store(c.Request.Context(), dstPath, filename, mimeType)
+	if err != nil {
+		removeLocalFile(dstPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件上传失败"})
+		return
+	}
+
 	att := ChatMessageAttachment{
 		URL:      publicURL,
 		FileName: file.Filename,
@@ -1101,17 +1108,41 @@ func (s *Server) handleChatSendAttachment(c *gin.Context) {
 			att.Width = w
 			att.Height = h
 		}
-		imageItem, _, processErr := processUploadedPostImage(s.uploadDir, dstPath, publicURL, filename)
-		if processErr == nil && imageItem.SmallURL != "" {
-			att.ThumbnailURL = imageItem.SmallURL
+		// processUploadedPostImage writes resized variants to uploadDir with /uploads/ URLs.
+		imageItem, savedPaths, processErr := processUploadedPostImage(s.uploadDir, dstPath, publicURL, filename)
+		if processErr == nil {
+			if s.chatStorage.IsRemote() {
+				// Upload generated variants to R2 and remap their URLs.
+				_, extraURLs, _ := storeAttachmentFiles(
+					c.Request.Context(), s.chatStorage,
+					dstPath, filename, mimeType,
+					savedPaths,
+				)
+				// The small thumbnail is the last saved path (sm variant).
+				if len(savedPaths) > 0 {
+					if u, ok := extraURLs[savedPaths[len(savedPaths)-1]]; ok {
+						att.ThumbnailURL = u
+					}
+				}
+				// Remove the local staging file for the main upload.
+				removeLocalFile(dstPath)
+			} else {
+				if imageItem.SmallURL != "" {
+					att.ThumbnailURL = imageItem.SmallURL
+				}
+			}
+		} else if s.chatStorage.IsRemote() {
+			removeLocalFile(dstPath)
 		}
+	} else if s.chatStorage.IsRemote() {
+		// Non-image remote upload: remove local staging file.
+		removeLocalFile(dstPath)
 	}
 
 	preview := buildAttachmentPreview(att)
 	now := time.Now()
 	msgID, err := s.createAttachmentChatMessage(threadID, userIDStr, preview, att, now)
 	if err != nil {
-		_ = os.Remove(dstPath)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}

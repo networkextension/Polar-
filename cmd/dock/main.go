@@ -44,6 +44,13 @@ func main() {
 		ApplePushTeamID:     os.Getenv("APPLE_PUSH_TEAM_ID"),
 		ApplePushTeamIDDev:  os.Getenv("APPLE_PUSH_TEAM_ID_DEV"),
 		ApplePushTeamIDProd: os.Getenv("APPLE_PUSH_TEAM_ID_PROD"),
+
+		// Cloudflare R2 — chat attachment storage (optional)
+		CloudflareR2AccountID:       os.Getenv("CF_R2_ACCOUNT_ID"),
+		CloudflareR2AccessKeyID:     os.Getenv("CF_R2_ACCESS_KEY_ID"),
+		CloudflareR2SecretAccessKey: os.Getenv("CF_R2_SECRET_ACCESS_KEY"),
+		CloudflareR2Bucket:          os.Getenv("CF_R2_BUCKET"),
+		CloudflareR2PublicURL:       os.Getenv("CF_R2_PUBLIC_URL"),
 	}
 
 	server, err := dock.NewServer(cfg)

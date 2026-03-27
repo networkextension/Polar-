@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net"
@@ -40,6 +41,7 @@ type Server struct {
 	wsHub               *wsHub
 	workDir             string
 	aiAgent             *aiAgent
+	chatStorage         AttachmentStorage
 	backgroundCtx       context.Context
 	backgroundStop      context.CancelFunc
 	applePushTopic      string
@@ -91,6 +93,18 @@ func NewServer(cfg Config) (*Server, error) {
 	workDir, err := os.Getwd()
 	if err == nil {
 		server.workDir = workDir
+	}
+
+	chatStorage, err := newAttachmentStorage(cfg.UploadDir, cfg)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("init chat storage: %w", err)
+	}
+	server.chatStorage = chatStorage
+	if chatStorage.IsRemote() {
+		log.Printf("chat attachment storage: Cloudflare R2 bucket=%s", cfg.CloudflareR2Bucket)
+	} else {
+		log.Printf("chat attachment storage: local filesystem dir=%s", cfg.UploadDir)
 	}
 
 	if err := server.redis.Ping(context.Background()).Err(); err != nil {
