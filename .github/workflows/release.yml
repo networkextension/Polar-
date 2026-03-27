@@ -21,6 +21,11 @@ jobs:
             arch: amd64
           - os: linux
             arch: arm64
+          - os: linux
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: darwin
     env:
       BIN_PATH: cmd/dock
       BINARY_NAME: dock_${{ matrix.arch }}_${{ matrix.os }}
