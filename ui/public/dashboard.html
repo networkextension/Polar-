@@ -147,6 +147,10 @@
                 <span class="settings-center-nav-icon">▣</span>
                 <span data-i18n="dashboard.navSite">Site Management</span>
               </button>
+              <button class="settings-center-nav-btn" type="button" data-settings-nav="latch" hidden>
+                <span class="settings-center-nav-icon">◈</span>
+                <span>Latch 服务</span>
+              </button>
             </div>
           </aside>
 
@@ -188,6 +192,23 @@
                   </div>
                 </div>
                 <div id="iconStatus" class="status-text" data-i18n="dashboard.avatarHint">Supports upload and basic cropping.</div>
+              </div>
+
+              <div class="settings-section-card">
+                <div class="settings-section-heading">
+                  <div>
+                    <div class="settings-section-title" data-i18n="dashboard.emailVerificationTitle">Email verification</div>
+                    <p class="settings-section-text" data-i18n="dashboard.emailVerificationText">Verify your email address so it can be used for account recovery and future security flows.</p>
+                  </div>
+                  <button id="sendEmailVerificationBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.sendVerificationEmail">Send verification email</button>
+                </div>
+                <ul class="meta-list">
+                  <li>
+                    <div id="emailVerificationAddress" class="meta-title">-</div>
+                    <div id="emailVerificationState" class="meta-subtitle">-</div>
+                  </li>
+                </ul>
+                <div id="emailVerificationStatus" class="status-text"></div>
               </div>
 
               <div class="settings-section-card">
@@ -433,6 +454,130 @@
                     <button class="btn-inline btn-secondary" type="button" id="siteAddTagBtnProxy" data-i18n="dashboard.siteNewTag">New Tag</button>
                   </div>
                   <ul id="tagList" class="tag-list"></ul>
+                </div>
+              </div>
+            </section>
+
+            <section class="settings-panel" data-settings-panel="latch" hidden>
+              <div class="site-admin-panel">
+                <div class="site-tags-section">
+                  <div class="site-tags-header">
+                    <div>
+                      <div class="badge">Latch 服务</div>
+                      <p class="drawer-help">管理员在这里维护全局代理配置和 rules 文件，iOS 端只消费 active 配置。</p>
+                    </div>
+                    <div id="packTunnelStatus" class="status-text"></div>
+                  </div>
+                  <div class="site-admin-grid site-admin-grid-wide">
+                    <form id="packTunnelProfileForm" class="site-settings-form">
+                      <label class="form-label" for="packTunnelNameInput">配置名</label>
+                      <input id="packTunnelNameInput" class="input" type="text" maxlength="80" placeholder="例如 Tokyo-01" />
+
+                      <label class="form-label" for="packTunnelTypeSelect">协议类型</label>
+                      <select id="packTunnelTypeSelect" class="input">
+                        <option value="shadowsocks">shadowsocks</option>
+                        <option value="socks5">socks5</option>
+                        <option value="http">http</option>
+                        <option value="https">https</option>
+                        <option value="vmess">vmess</option>
+                        <option value="vless">vless</option>
+                        <option value="trojan">trojan</option>
+                      </select>
+
+                      <label class="form-label" for="packTunnelServerAddressInput">服务器地址</label>
+                      <input id="packTunnelServerAddressInput" class="input" type="text" maxlength="200" placeholder="例如 1.2.3.4 或 example.com" />
+
+                      <label class="form-label" for="packTunnelServerPortInput">端口</label>
+                      <input id="packTunnelServerPortInput" class="input" type="number" min="1" max="65535" placeholder="8388" />
+
+                      <label class="form-label" for="packTunnelPasswordInput">密码</label>
+                      <input id="packTunnelPasswordInput" class="input" type="text" maxlength="300" placeholder="连接密码" />
+
+                      <label class="form-label" for="packTunnelMethodInput">加密 / Method</label>
+                      <input id="packTunnelMethodInput" class="input" type="text" maxlength="120" placeholder="例如 aes-256-gcm" />
+
+                      <div class="settings-info-grid packtunnel-options-grid">
+                        <label class="form-checkbox" for="packTunnelTlsEnabledInput">
+                          <input id="packTunnelTlsEnabledInput" type="checkbox" />
+                          <span>TLS Enabled</span>
+                        </label>
+                        <label class="form-checkbox" for="packTunnelUdpRelayEnabledInput">
+                          <input id="packTunnelUdpRelayEnabledInput" type="checkbox" checked />
+                          <span>UDP Relay</span>
+                        </label>
+                        <label class="form-checkbox" for="packTunnelChainEnabledInput">
+                          <input id="packTunnelChainEnabledInput" type="checkbox" />
+                          <span>Chain Enabled</span>
+                        </label>
+                        <label class="form-checkbox" for="packTunnelEnabledInput">
+                          <input id="packTunnelEnabledInput" type="checkbox" checked />
+                          <span>Enabled</span>
+                        </label>
+                        <label class="form-checkbox" for="packTunnelEditableInput">
+                          <input id="packTunnelEditableInput" type="checkbox" checked />
+                          <span>Editable</span>
+                        </label>
+                        <label class="form-checkbox" for="packTunnelActiveInput">
+                          <input id="packTunnelActiveInput" type="checkbox" />
+                          <span>设为 Active</span>
+                        </label>
+                      </div>
+
+                      <label class="form-label" for="packTunnelPriorityInput">优先级</label>
+                      <input id="packTunnelPriorityInput" class="input" type="number" value="0" />
+
+                      <label class="form-label" for="packTunnelSourceSelect">来源</label>
+                      <select id="packTunnelSourceSelect" class="input">
+                        <option value="local">local</option>
+                        <option value="remote">remote</option>
+                        <option value="system">system</option>
+                      </select>
+
+                      <label class="form-label" for="packTunnelCountryCodeInput">国家代码</label>
+                      <input id="packTunnelCountryCodeInput" class="input" type="text" maxlength="8" placeholder="例如 JP" />
+
+                      <label class="form-label" for="packTunnelCountryFlagInput">国旗</label>
+                      <input id="packTunnelCountryFlagInput" class="input" type="text" maxlength="16" placeholder="例如 🇯🇵" />
+
+                      <label class="form-label" for="packTunnelTransportKindSelect">传输层</label>
+                      <select id="packTunnelTransportKindSelect" class="input">
+                        <option value="">none</option>
+                        <option value="kcptun">kcptun</option>
+                      </select>
+
+                      <label class="form-label" for="packTunnelKcptunConfigInput">KCPTun JSON</label>
+                      <textarea id="packTunnelKcptunConfigInput" class="input textarea" rows="10" placeholder='{"key":"it'\''s a secret","crypt":"none","mode":"fast"}'></textarea>
+
+                      <div class="site-settings-actions inline-actions">
+                        <button id="packTunnelProfileResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                        <button id="packTunnelProfileSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
+                      </div>
+                    </form>
+
+                    <div class="site-settings-form">
+                      <div class="settings-section-heading">
+                        <div>
+                          <div class="settings-section-title">配置列表</div>
+                          <p class="settings-section-text">激活中的配置会被普通用户和 iOS 端消费。</p>
+                        </div>
+                      </div>
+                      <ul id="packTunnelProfileList" class="tag-list"></ul>
+
+                      <div class="settings-section-heading packtunnel-rules-heading">
+                        <div>
+                          <div class="settings-section-title">Rules 文件</div>
+                          <p class="settings-section-text">当前只支持上传、下载和删除，不支持在线编辑。</p>
+                        </div>
+                      </div>
+                      <input id="packTunnelRulesFile" class="input" type="file" />
+                      <div class="site-settings-actions inline-actions">
+                        <button id="packTunnelRulesUploadBtn" class="btn-inline btn-secondary" type="button">上传 rules</button>
+                        <button id="packTunnelRulesDownloadBtn" class="btn-inline btn-secondary" type="button">下载 rules</button>
+                        <button id="packTunnelRulesDeleteBtn" class="btn-inline" type="button">删除 rules</button>
+                      </div>
+                      <div id="packTunnelRulesStatus" class="status-text">默认下载全局 rules 文件。</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>

@@ -9,6 +9,9 @@ import type {
   LLMConfigListResponse,
   LLMConfigPayload,
   LoginHistoryResponse,
+  PackTunnelProfileListResponse,
+  PackTunnelProfilePayload,
+  PackTunnelRuleResponse,
   PasskeyBeginResponse,
   PasskeyListResponse,
   SiteSettings,
@@ -148,10 +151,57 @@ export async function deleteApplePushCertificate(environment: "dev" | "prod") {
   });
 }
 
+export async function fetchPackTunnelProfiles() {
+  return requestJson<PackTunnelProfileListResponse>("/api/packtunnel/profiles");
+}
+
+export async function createPackTunnelProfile(payload: PackTunnelProfilePayload) {
+  return requestJson<PackTunnelProfileListResponse>("/api/packtunnel/profiles", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updatePackTunnelProfile(id: string, payload: PackTunnelProfilePayload) {
+  return requestJson<PackTunnelProfileListResponse>(`/api/packtunnel/profiles/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: payload,
+  });
+}
+
+export async function removePackTunnelProfile(id: string) {
+  return requestJson<PackTunnelProfileListResponse>(`/api/packtunnel/profiles/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function activatePackTunnelProfile(id: string) {
+  return requestJson<PackTunnelProfileListResponse>(`/api/packtunnel/profiles/${encodeURIComponent(id)}/activate`, {
+    method: "PUT",
+  });
+}
+
+export async function uploadPackTunnelRules(formData: FormData) {
+  return requestJson<PackTunnelRuleResponse>("/api/packtunnel/rules", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function deletePackTunnelRules() {
+  return requestJson<PackTunnelRuleResponse>("/api/packtunnel/rules", {
+    method: "DELETE",
+  });
+}
+
 export async function deleteEntry(id: number) {
   return request(`/api/markdown/${id}`, {
     method: "DELETE",
   });
+}
+
+export async function downloadPackTunnelRules() {
+  return request("/api/packtunnel/rules");
 }
 
 export async function uploadUserIcon(formData: FormData) {

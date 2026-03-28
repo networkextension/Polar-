@@ -1901,6 +1901,511 @@ curl -X POST http://localhost:3000/api/posts \
 }
 ```
 
+## Latch 服务 API
+
+以下接口用于 Latch 服务的全局配置管理与规则文件管理。当前服务端内部仍沿用 `/api/packtunnel/*` 路径，但在产品和管理后台中统一称为“Latch 服务”。
+
+设计约束：
+
+- Latch 配置是全局配置，不按个人隔离
+- 服务端内部统一将全局配置挂在 `system` 名下持久化
+- 管理员负责维护配置列表、切换 active 配置、上传和删除 rules 文件
+- 普通登录用户只消费当前 active 配置和全局 rules 文件
+
+权限矩阵：
+
+- 管理员可用：`GET /api/packtunnel/profiles`、`GET /api/packtunnel/profiles/:id`、`POST /api/packtunnel/profiles`、`PUT /api/packtunnel/profiles/:id`、`DELETE /api/packtunnel/profiles/:id`、`PUT /api/packtunnel/profiles/:id/activate`、`POST /api/packtunnel/rules`、`DELETE /api/packtunnel/rules`
+- 普通登录用户可用：`GET /api/packtunnel/profiles/active`、`GET /api/packtunnel/rules`
+
+配置模型说明：
+
+- `type` 表示代理类型，目前支持：`shadowsocks`、`socks5`、`http`、`https`、`vmess`、`vless`、`trojan`
+- `server` 表示接入地址与端口
+- `auth` 表示鉴权信息
+- `options` 表示通用开关项
+- `transport` 表示可选传输层扩展，目前支持 `kcptun`
+- `metadata.is_active` 表示当前生效配置
+- 同一时间只允许存在一条 active 配置
+
+### 获取配置列表
+
+**GET** `/api/packtunnel/profiles`
+
+权限要求：管理员
+
+说明：
+
+- 返回全局配置列表
+- 同时返回当前 active 配置，方便管理后台直接高亮展示
+
+成功响应：
+
+```json
+{
+  "profiles": [
+    {
+      "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+      "user_id": "system",
+      "name": "Tokyo-01",
+      "type": "shadowsocks",
+      "server": {
+        "address": "1.2.3.4",
+        "port": 8388
+      },
+      "auth": {
+        "password": "secret",
+        "method": "aes-256-gcm"
+      },
+      "options": {
+        "tls_enabled": false,
+        "udp_relay_enabled": true,
+        "chain_enabled": false
+      },
+      "transport": {
+        "kind": "kcptun",
+        "kcptun": {
+          "key": "it's a secret",
+          "crypt": "none",
+          "mode": "fast",
+          "auto_expire": 0,
+          "scavenge_ttl": 600,
+          "mtu": 1350,
+          "snd_wnd": 1024,
+          "rcv_wnd": 1024,
+          "data_shard": 10,
+          "parity_shard": 3,
+          "dscp": 0,
+          "no_comp": false,
+          "salt": "kcp-go"
+        }
+      },
+      "metadata": {
+        "priority": 100,
+        "enabled": true,
+        "editable": true,
+        "source": "remote",
+        "country_code": "JP",
+        "country_flag": "🇯🇵",
+        "is_active": true
+      },
+      "created_at": "2026-03-28T10:00:00Z",
+      "updated_at": "2026-03-28T10:00:00Z"
+    }
+  ],
+  "active_profile": {
+    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+    "user_id": "system",
+    "name": "Tokyo-01",
+    "type": "shadowsocks",
+    "server": {
+      "address": "1.2.3.4",
+      "port": 8388
+    },
+    "auth": {
+      "password": "secret",
+      "method": "aes-256-gcm"
+    },
+    "options": {
+      "tls_enabled": false,
+      "udp_relay_enabled": true,
+      "chain_enabled": false
+    },
+    "metadata": {
+      "priority": 100,
+      "enabled": true,
+      "editable": true,
+      "source": "remote",
+      "country_code": "JP",
+      "country_flag": "🇯🇵",
+      "is_active": true
+    },
+    "created_at": "2026-03-28T10:00:00Z",
+    "updated_at": "2026-03-28T10:00:00Z"
+  }
+}
+```
+
+### 获取当前启用配置
+
+**GET** `/api/packtunnel/profiles/active`
+
+权限要求：已登录用户
+
+说明：
+
+- 普通用户和管理员都可以调用
+- iOS 客户端建议优先使用这个接口拉取当前生效配置
+
+成功响应：
+
+```json
+{
+  "profile": {
+    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+    "user_id": "system",
+    "name": "Tokyo-01",
+    "type": "shadowsocks",
+    "server": {
+      "address": "1.2.3.4",
+      "port": 8388
+    },
+    "auth": {
+      "password": "secret",
+      "method": "aes-256-gcm"
+    },
+    "options": {
+      "tls_enabled": false,
+      "udp_relay_enabled": true,
+      "chain_enabled": false
+    },
+    "metadata": {
+      "priority": 100,
+      "enabled": true,
+      "editable": true,
+      "source": "remote",
+      "country_code": "JP",
+      "country_flag": "🇯🇵",
+      "is_active": true
+    },
+    "created_at": "2026-03-28T10:00:00Z",
+    "updated_at": "2026-03-28T10:00:00Z"
+  }
+}
+```
+
+如果当前没有启用配置，返回 `404`：
+
+```json
+{
+  "error": "当前没有启用配置"
+}
+```
+
+### 获取单个配置
+
+**GET** `/api/packtunnel/profiles/:id`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "profile": {
+    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+    "user_id": "system",
+    "name": "Tokyo-01",
+    "type": "shadowsocks",
+    "server": {
+      "address": "1.2.3.4",
+      "port": 8388
+    },
+    "auth": {
+      "password": "secret",
+      "method": "aes-256-gcm"
+    },
+    "options": {
+      "tls_enabled": false,
+      "udp_relay_enabled": true,
+      "chain_enabled": false
+    },
+    "metadata": {
+      "priority": 100,
+      "enabled": true,
+      "editable": true,
+      "source": "remote",
+      "country_code": "JP",
+      "country_flag": "🇯🇵",
+      "is_active": false
+    },
+    "created_at": "2026-03-28T10:00:00Z",
+    "updated_at": "2026-03-28T10:00:00Z"
+  }
+}
+```
+
+### 创建配置
+
+**POST** `/api/packtunnel/profiles`
+
+权限要求：管理员
+
+请求体：
+
+```json
+{
+  "name": "Tokyo-01",
+  "type": "https",
+  "server": {
+    "address": "gateway.example.com",
+    "port": 443
+  },
+  "auth": {
+    "password": "secret",
+    "method": "basic"
+  },
+  "options": {
+    "tls_enabled": true,
+    "udp_relay_enabled": true,
+    "chain_enabled": false
+  },
+  "transport": {
+    "kind": "kcptun",
+    "kcptun": {
+      "key": "it's a secret",
+      "crypt": "none",
+      "mode": "fast",
+      "auto_expire": 0,
+      "scavenge_ttl": 600,
+      "mtu": 1350,
+      "snd_wnd": 1024,
+      "rcv_wnd": 1024,
+      "data_shard": 10,
+      "parity_shard": 3,
+      "dscp": 0,
+      "no_comp": false,
+      "salt": "kcp-go"
+    }
+  },
+  "metadata": {
+    "priority": 100,
+    "enabled": true,
+    "editable": true,
+    "source": "remote",
+    "country_code": "JP",
+    "country_flag": "🇯🇵",
+    "is_active": true
+  }
+}
+```
+
+说明：
+
+- `id` 可不传，服务端会自动生成
+- `metadata.enabled` 和 `metadata.editable` 不传时默认为 `true`
+- 如果 `metadata.is_active = true`，服务端会自动取消当前其他 active 配置
+- `http` / `https` 类型同样使用这套结构；`auth.method` 的具体语义由客户端按类型解释
+
+成功响应：
+
+```json
+{
+  "profile": {
+    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+    "user_id": "system",
+    "name": "Tokyo-01",
+    "type": "https",
+    "server": {
+      "address": "gateway.example.com",
+      "port": 443
+    },
+    "auth": {
+      "password": "secret",
+      "method": "basic"
+    },
+    "options": {
+      "tls_enabled": true,
+      "udp_relay_enabled": true,
+      "chain_enabled": false
+    },
+    "metadata": {
+      "priority": 100,
+      "enabled": true,
+      "editable": true,
+      "source": "remote",
+      "country_code": "JP",
+      "country_flag": "🇯🇵",
+      "is_active": true
+    },
+    "created_at": "2026-03-28T10:00:00Z",
+    "updated_at": "2026-03-28T10:00:00Z"
+  },
+  "message": "配置已创建"
+}
+```
+
+### 更新配置
+
+**PUT** `/api/packtunnel/profiles/:id`
+
+权限要求：管理员
+
+请求体格式与创建接口一致。
+
+说明：
+
+- 更新时仍按整条配置覆盖
+- 若请求中包含 `metadata.is_active = true`，服务端会同步切换 active 状态
+
+成功响应：
+
+```json
+{
+  "profile": {
+    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+    "user_id": "system",
+    "name": "Tokyo-02",
+    "type": "https",
+    "server": {
+      "address": "5.6.7.8",
+      "port": 443
+    },
+    "auth": {
+      "password": "secret",
+      "method": "aes-256-gcm"
+    },
+    "options": {
+      "tls_enabled": true,
+      "udp_relay_enabled": true,
+      "chain_enabled": false
+    },
+    "metadata": {
+      "priority": 200,
+      "enabled": true,
+      "editable": true,
+      "source": "remote",
+      "country_code": "JP",
+      "country_flag": "🇯🇵",
+      "is_active": true
+    },
+    "created_at": "2026-03-28T10:00:00Z",
+    "updated_at": "2026-03-28T11:00:00Z"
+  },
+  "message": "配置已更新"
+}
+```
+
+### 删除配置
+
+**DELETE** `/api/packtunnel/profiles/:id`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "message": "配置已删除"
+}
+```
+
+### 启用配置
+
+**PUT** `/api/packtunnel/profiles/:id/activate`
+
+权限要求：管理员
+
+说明：
+
+- 当前是全局配置，因此同一系统同一时间最多只有一条 active 配置
+- 启用新配置时，服务端会自动将其他配置标记为非 active
+
+成功响应：
+
+```json
+{
+  "profile": {
+    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
+    "user_id": "system",
+    "name": "Tokyo-01",
+    "type": "shadowsocks",
+    "server": {
+      "address": "1.2.3.4",
+      "port": 8388
+    },
+    "auth": {
+      "password": "secret",
+      "method": "aes-256-gcm"
+    },
+    "options": {
+      "tls_enabled": false,
+      "udp_relay_enabled": true,
+      "chain_enabled": false
+    },
+    "metadata": {
+      "priority": 100,
+      "enabled": true,
+      "editable": true,
+      "source": "remote",
+      "country_code": "JP",
+      "country_flag": "🇯🇵",
+      "is_active": true
+    },
+    "created_at": "2026-03-28T10:00:00Z",
+    "updated_at": "2026-03-28T11:00:00Z"
+  },
+  "message": "配置已启用"
+}
+```
+
+### 上传 rules 文件
+
+**POST** `/api/packtunnel/rules`
+
+权限要求：管理员
+
+请求类型：`multipart/form-data`
+
+字段：
+
+- `file`: rules 文件
+
+说明：
+
+- 当前按“全局一份 rules 文件”管理
+- 重复上传会覆盖旧文件
+- 当前阶段只支持上传、下载和删除，不支持服务端在线编辑
+
+成功响应：
+
+```json
+{
+  "message": "rules 已上传",
+  "rule": {
+    "user_id": "u123",
+    "file_name": "rules.conf",
+    "stored_name": "packtunnel_rules_u123_20260328_120000_abcd1234.conf",
+    "file_path": "data/uploads/packtunnel_rules/packtunnel_rules_u123_20260328_120000_abcd1234.conf",
+    "size": 2048,
+    "content_type": "text/plain",
+    "uploaded_at": "2026-03-28T12:00:00Z"
+  }
+}
+```
+
+### 下载 rules 文件
+
+**GET** `/api/packtunnel/rules`
+
+权限要求：已登录用户
+
+说明：
+
+- 若存在 rules 文件，服务端会以附件下载方式返回
+- 下载文件名为上传时的原始文件名
+
+若文件不存在，返回 `404`：
+
+```json
+{
+  "error": "rules 文件不存在"
+}
+```
+
+### 删除 rules 文件
+
+**DELETE** `/api/packtunnel/rules`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "message": "rules 已删除"
+}
+```
+
 ### 发送消息
 
 **POST** `/api/chats/:id/messages`

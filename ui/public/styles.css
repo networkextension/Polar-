@@ -497,6 +497,18 @@ button:hover {
   justify-content: flex-end;
 }
 
+.packtunnel-options-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  margin-top: 2px;
+}
+
+.packtunnel-rules-heading {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 .drawer-header {
   display: flex;
   align-items: center;
@@ -1366,6 +1378,15 @@ button:hover {
   white-space: pre-wrap;
   line-height: 1.7;
   color: var(--text);
+}
+
+.profile-verification-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
 }
 
 .profile-recommendation-item {

@@ -166,3 +166,104 @@ export type BotListResponse = ErrorResponse & {
   bots?: BotUser[];
   bot?: BotUser;
 };
+
+export type PackTunnelKCPTunConfig = {
+  key: string;
+  crypt: string;
+  mode: string;
+  auto_expire?: number;
+  scavenge_ttl?: number;
+  mtu?: number;
+  snd_wnd?: number;
+  rcv_wnd?: number;
+  data_shard?: number;
+  parity_shard?: number;
+  dscp?: number;
+  no_comp?: boolean;
+  salt?: string;
+};
+
+export type PackTunnelTransport = {
+  kind: string;
+  kcptun?: PackTunnelKCPTunConfig;
+};
+
+export type PackTunnelProfile = {
+  id: string;
+  user_id: string;
+  name: string;
+  type: string;
+  server: {
+    address: string;
+    port: number;
+  };
+  auth: {
+    password: string;
+    method: string;
+  };
+  options: {
+    tls_enabled: boolean;
+    udp_relay_enabled: boolean;
+    chain_enabled: boolean;
+  };
+  transport?: PackTunnelTransport;
+  metadata: {
+    priority: number;
+    enabled: boolean;
+    editable: boolean;
+    source: string;
+    country_code: string;
+    country_flag: string;
+    is_active: boolean;
+  };
+  created_at: string;
+  updated_at: string;
+};
+
+export type PackTunnelProfilePayload = {
+  name: string;
+  type: string;
+  server: {
+    address: string;
+    port: number;
+  };
+  auth: {
+    password: string;
+    method: string;
+  };
+  options: {
+    tls_enabled: boolean;
+    udp_relay_enabled: boolean;
+    chain_enabled: boolean;
+  };
+  transport?: PackTunnelTransport;
+  metadata: {
+    priority: number;
+    enabled: boolean;
+    editable: boolean;
+    source: string;
+    country_code: string;
+    country_flag: string;
+    is_active: boolean;
+  };
+};
+
+export type PackTunnelProfileListResponse = ErrorResponse & {
+  profiles?: PackTunnelProfile[];
+  active_profile?: PackTunnelProfile | null;
+  profile?: PackTunnelProfile;
+};
+
+export type PackTunnelRuleFile = {
+  user_id: string;
+  file_name: string;
+  stored_name: string;
+  file_path: string;
+  size: number;
+  content_type: string;
+  uploaded_at: string;
+};
+
+export type PackTunnelRuleResponse = ErrorResponse & {
+  rule?: PackTunnelRuleFile;
+};

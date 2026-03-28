@@ -1,5 +1,5 @@
-import { createBotUser, createLLMConfig, beginPasskeyRegistration, createTag, deleteApplePushCertificate, deleteEntry, fetchAvailableLLMConfigs, fetchBotUsers, fetchEntries, fetchEntry, fetchLLMConfigs, fetchLoginHistory, fetchPasskeys, fetchSiteSettings, fetchTags, finishPasskeyRegistration, removePasskey, removeBotUser, removeLLMConfig, removeTag, testLLMConfig, updateBotUser, updateLLMConfig, updateSiteSettings, updateTag, uploadApplePushCertificate, uploadSiteIcon, uploadUserIcon, } from "./api/dashboard.js";
-import { fetchCurrentUser, logout } from "./api/session.js";
+import { activatePackTunnelProfile, createBotUser, createLLMConfig, createPackTunnelProfile, beginPasskeyRegistration, createTag, deletePackTunnelRules, deleteApplePushCertificate, deleteEntry, downloadPackTunnelRules, fetchAvailableLLMConfigs, fetchBotUsers, fetchEntries, fetchEntry, fetchLLMConfigs, fetchLoginHistory, fetchPackTunnelProfiles, fetchPasskeys, fetchSiteSettings, fetchTags, finishPasskeyRegistration, removePasskey, removeBotUser, removeLLMConfig, removePackTunnelProfile, removeTag, testLLMConfig, updateBotUser, updateLLMConfig, updatePackTunnelProfile, updateSiteSettings, updateTag, uploadApplePushCertificate, uploadPackTunnelRules, uploadSiteIcon, uploadUserIcon, } from "./api/dashboard.js";
+import { fetchCurrentUser, logout, sendEmailVerification } from "./api/session.js";
 import { formatDeviceType } from "./lib/client.js";
 import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
@@ -25,6 +25,10 @@ const themeToggleBtn = byId("themeToggleBtn");
 const passkeyRegisterBtn = byId("passkeyRegisterBtn");
 const passkeyStatus = byId("passkeyStatus");
 const passkeyList = byId("passkeyList");
+const sendEmailVerificationBtn = byId("sendEmailVerificationBtn");
+const emailVerificationAddress = byId("emailVerificationAddress");
+const emailVerificationState = byId("emailVerificationState");
+const emailVerificationStatus = byId("emailVerificationStatus");
 const userIcon = byId("userIcon");
 const iconFile = byId("iconFile");
 const iconEditor = byId("iconEditor");
@@ -99,6 +103,34 @@ const applePushDevDeleteBtn = byId("applePushDevDeleteBtn");
 const applePushProdDeleteBtn = byId("applePushProdDeleteBtn");
 const siteAddTagBtnProxy = byId("siteAddTagBtnProxy");
 const tagList = byId("tagList");
+const packTunnelProfileForm = byId("packTunnelProfileForm");
+const packTunnelNameInput = byId("packTunnelNameInput");
+const packTunnelTypeSelect = byId("packTunnelTypeSelect");
+const packTunnelServerAddressInput = byId("packTunnelServerAddressInput");
+const packTunnelServerPortInput = byId("packTunnelServerPortInput");
+const packTunnelPasswordInput = byId("packTunnelPasswordInput");
+const packTunnelMethodInput = byId("packTunnelMethodInput");
+const packTunnelTlsEnabledInput = byId("packTunnelTlsEnabledInput");
+const packTunnelUdpRelayEnabledInput = byId("packTunnelUdpRelayEnabledInput");
+const packTunnelChainEnabledInput = byId("packTunnelChainEnabledInput");
+const packTunnelEnabledInput = byId("packTunnelEnabledInput");
+const packTunnelEditableInput = byId("packTunnelEditableInput");
+const packTunnelActiveInput = byId("packTunnelActiveInput");
+const packTunnelPriorityInput = byId("packTunnelPriorityInput");
+const packTunnelSourceSelect = byId("packTunnelSourceSelect");
+const packTunnelCountryCodeInput = byId("packTunnelCountryCodeInput");
+const packTunnelCountryFlagInput = byId("packTunnelCountryFlagInput");
+const packTunnelTransportKindSelect = byId("packTunnelTransportKindSelect");
+const packTunnelKcptunConfigInput = byId("packTunnelKcptunConfigInput");
+const packTunnelProfileResetBtn = byId("packTunnelProfileResetBtn");
+const packTunnelProfileSubmitBtn = byId("packTunnelProfileSubmitBtn");
+const packTunnelProfileList = byId("packTunnelProfileList");
+const packTunnelStatus = byId("packTunnelStatus");
+const packTunnelRulesFile = byId("packTunnelRulesFile");
+const packTunnelRulesUploadBtn = byId("packTunnelRulesUploadBtn");
+const packTunnelRulesDownloadBtn = byId("packTunnelRulesDownloadBtn");
+const packTunnelRulesDeleteBtn = byId("packTunnelRulesDeleteBtn");
+const packTunnelRulesStatus = byId("packTunnelRulesStatus");
 const settingsNavButtons = Array.from(document.querySelectorAll("[data-settings-nav]"));
 const settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
 const settingsOpenButtons = Array.from(document.querySelectorAll("[data-open-settings-center], #openSiteAdminBtn"));
@@ -119,10 +151,17 @@ let editingTagId = null;
 let currentTags = [];
 let editingLLMConfigId = null;
 let editingBotUserId = null;
+let editingPackTunnelProfileId = null;
 let currentLLMConfigs = [];
 let currentAvailableLLMConfigs = [];
 let currentBotUsers = [];
+let currentPackTunnelProfiles = [];
 let activeSettingsSection = "personalization";
+function renderEmailVerificationState(email, verified) {
+    emailVerificationAddress.textContent = email || t("dashboard.emailUnavailable");
+    emailVerificationState.textContent = verified ? t("dashboard.emailVerifiedState") : t("dashboard.emailUnverifiedState");
+    sendEmailVerificationBtn.disabled = !email || Boolean(verified);
+}
 function setStatusMessage(element, message, tone = "default") {
     element.textContent = message;
     element.classList.remove("status-success", "status-error");
@@ -187,6 +226,10 @@ function switchSettingsSection(section) {
         site: {
             title: t("dashboard.siteManagementTitle"),
             lead: t("dashboard.siteLead"),
+        },
+        latch: {
+            title: "Latch 服务",
+            lead: "管理员在这里维护全局代理配置与 rules 文件，客户端只消费当前 active 配置。",
         },
     };
     settingsPanels.forEach((panel) => {
@@ -413,6 +456,149 @@ function renderBotUserList(bots) {
       `)
         .join("");
 }
+function resetPackTunnelProfileForm() {
+    editingPackTunnelProfileId = null;
+    packTunnelProfileForm.reset();
+    packTunnelTypeSelect.value = "shadowsocks";
+    packTunnelUdpRelayEnabledInput.checked = true;
+    packTunnelEnabledInput.checked = true;
+    packTunnelEditableInput.checked = true;
+    packTunnelPriorityInput.value = "0";
+    packTunnelSourceSelect.value = "local";
+    packTunnelStatus.textContent = "";
+    packTunnelProfileSubmitBtn.textContent = "保存配置";
+}
+function stringifyKCPTunConfig(config) {
+    if (!config) {
+        return "";
+    }
+    return JSON.stringify(config, null, 2);
+}
+function renderPackTunnelProfiles(profiles) {
+    if (!profiles.length) {
+        packTunnelProfileList.innerHTML = '<li class="tag-item tag-item-empty">还没有 PackTunnel 配置。</li>';
+        return;
+    }
+    packTunnelProfileList.innerHTML = profiles
+        .map((profile) => {
+        const chips = [
+            `<span class="tag-chip">${profile.type}</span>`,
+            profile.metadata.is_active ? '<span class="tag-chip">active</span>' : "",
+            profile.metadata.enabled ? '<span class="tag-chip">enabled</span>' : '<span class="tag-chip">disabled</span>',
+            profile.transport?.kind ? `<span class="tag-chip">${profile.transport.kind}</span>` : "",
+        ]
+            .filter(Boolean)
+            .join("");
+        const meta = [
+            `${profile.server.address}:${profile.server.port}`,
+            profile.auth.method || "no-method",
+            profile.metadata.country_code || "global",
+            `priority ${profile.metadata.priority}`,
+        ].join(" · ");
+        return `
+        <li class="tag-item" data-packtunnel-profile-id="${profile.id}">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${profile.name}</strong>
+              ${chips}
+            </div>
+            <div class="tag-item-meta">${meta}</div>
+            <div class="tag-item-desc">source=${profile.metadata.source} · updated ${new Date(profile.updated_at).toLocaleString()}</div>
+          </div>
+          <div class="tag-item-actions">
+            <button class="btn-inline btn-secondary" type="button" data-action="activate">设为 Active</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+            <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>
+          </div>
+        </li>
+      `;
+    })
+        .join("");
+}
+function fillPackTunnelProfileForm(profile) {
+    editingPackTunnelProfileId = profile.id;
+    packTunnelNameInput.value = profile.name;
+    packTunnelTypeSelect.value = profile.type;
+    packTunnelServerAddressInput.value = profile.server.address;
+    packTunnelServerPortInput.value = String(profile.server.port || "");
+    packTunnelPasswordInput.value = profile.auth.password || "";
+    packTunnelMethodInput.value = profile.auth.method || "";
+    packTunnelTlsEnabledInput.checked = Boolean(profile.options.tls_enabled);
+    packTunnelUdpRelayEnabledInput.checked = Boolean(profile.options.udp_relay_enabled);
+    packTunnelChainEnabledInput.checked = Boolean(profile.options.chain_enabled);
+    packTunnelEnabledInput.checked = Boolean(profile.metadata.enabled);
+    packTunnelEditableInput.checked = Boolean(profile.metadata.editable);
+    packTunnelActiveInput.checked = Boolean(profile.metadata.is_active);
+    packTunnelPriorityInput.value = String(profile.metadata.priority ?? 0);
+    packTunnelSourceSelect.value = profile.metadata.source || "local";
+    packTunnelCountryCodeInput.value = profile.metadata.country_code || "";
+    packTunnelCountryFlagInput.value = profile.metadata.country_flag || "";
+    packTunnelTransportKindSelect.value = profile.transport?.kind || "";
+    packTunnelKcptunConfigInput.value = stringifyKCPTunConfig(profile.transport?.kcptun);
+    packTunnelProfileSubmitBtn.textContent = "更新配置";
+    packTunnelStatus.textContent = "";
+}
+function buildPackTunnelPayload() {
+    const name = packTunnelNameInput.value.trim();
+    const type = packTunnelTypeSelect.value.trim();
+    const address = packTunnelServerAddressInput.value.trim();
+    const port = Number(packTunnelServerPortInput.value || 0);
+    if (!name || !type || !address || port <= 0) {
+        setStatusMessage(packTunnelStatus, "请先填写配置名、协议、服务器地址和端口。", "error");
+        return null;
+    }
+    let transport;
+    const transportKind = packTunnelTransportKindSelect.value.trim();
+    if (transportKind) {
+        if (transportKind === "kcptun") {
+            const raw = packTunnelKcptunConfigInput.value.trim();
+            if (!raw) {
+                setStatusMessage(packTunnelStatus, "选择 kcptun 后需要填写 KCPTun JSON。", "error");
+                return null;
+            }
+            try {
+                transport = {
+                    kind: transportKind,
+                    kcptun: JSON.parse(raw),
+                };
+            }
+            catch {
+                setStatusMessage(packTunnelStatus, "KCPTun JSON 格式不合法。", "error");
+                return null;
+            }
+        }
+        else {
+            transport = { kind: transportKind };
+        }
+    }
+    return {
+        name,
+        type,
+        server: {
+            address,
+            port,
+        },
+        auth: {
+            password: packTunnelPasswordInput.value.trim(),
+            method: packTunnelMethodInput.value.trim(),
+        },
+        options: {
+            tls_enabled: packTunnelTlsEnabledInput.checked,
+            udp_relay_enabled: packTunnelUdpRelayEnabledInput.checked,
+            chain_enabled: packTunnelChainEnabledInput.checked,
+        },
+        transport,
+        metadata: {
+            priority: Number(packTunnelPriorityInput.value || 0),
+            enabled: packTunnelEnabledInput.checked,
+            editable: packTunnelEditableInput.checked,
+            source: packTunnelSourceSelect.value.trim() || "local",
+            country_code: packTunnelCountryCodeInput.value.trim(),
+            country_flag: packTunnelCountryFlagInput.value.trim(),
+            is_active: packTunnelActiveInput.checked,
+        },
+    };
+}
 async function loadLoginHistory() {
     const { response, data } = await fetchLoginHistory();
     if (!response.ok) {
@@ -461,12 +647,14 @@ async function loadProfile() {
     settingsProfileName.textContent = data.username || t("dashboard.currentUser");
     settingsProfileMeta.textContent = isAdmin ? t("dashboard.adminProfileMeta") : t("dashboard.userProfileMeta");
     settingsProfileRoleBadge.hidden = !isAdmin;
+    renderEmailVerificationState(data.email, data.email_verified);
+    setStatusMessage(emailVerificationStatus, "");
     addTagBtn.disabled = !isAdmin;
     addTagBtn.textContent = isAdmin ? t("dashboard.newTag") : t("dashboard.adminOnlyTag");
     addTagBtn.hidden = !isAdmin;
     siteAdminPanel.hidden = !isAdmin;
     settingsNavButtons.forEach((button) => {
-        if (button.dataset.settingsNav === "site") {
+        if (button.dataset.settingsNav === "site" || button.dataset.settingsNav === "latch") {
             button.hidden = !isAdmin;
         }
     });
@@ -524,7 +712,11 @@ async function loadSiteAdminData() {
     ];
     if (isAdmin) {
         tasks.push((async () => {
-            const [siteResult, tagResult] = await Promise.all([fetchSiteSettings(), fetchTags()]);
+            const [siteResult, tagResult, packTunnelResult] = await Promise.all([
+                fetchSiteSettings(),
+                fetchTags(),
+                fetchPackTunnelProfiles(),
+            ]);
             if (siteResult.response.ok) {
                 renderSiteSettings(siteResult.data.site);
             }
@@ -538,9 +730,38 @@ async function loadSiteAdminData() {
             else {
                 tagList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.tagListLoadFailed")}</li>`;
             }
+            if (packTunnelResult.response.ok) {
+                currentPackTunnelProfiles = packTunnelResult.data.profiles || [];
+                renderPackTunnelProfiles(currentPackTunnelProfiles);
+            }
+            else {
+                packTunnelProfileList.innerHTML = '<li class="tag-item tag-item-empty">无法加载 PackTunnel 配置。</li>';
+                setStatusMessage(packTunnelStatus, packTunnelResult.data.error || "无法加载 PackTunnel 配置。", "error");
+            }
         })());
     }
     await Promise.all(tasks);
+}
+async function handleEmailVerificationSend() {
+    sendEmailVerificationBtn.disabled = true;
+    setStatusMessage(emailVerificationStatus, t("dashboard.sendingVerificationEmail"));
+    try {
+        const { response, data } = await sendEmailVerification();
+        if (!response.ok) {
+            renderEmailVerificationState(emailVerificationAddress.textContent || "", false);
+            setStatusMessage(emailVerificationStatus, data.error || t("dashboard.emailVerificationSendFailed"), "error");
+            return;
+        }
+        const { response: meResponse, data: meData } = await fetchCurrentUser();
+        if (meResponse.ok) {
+            renderEmailVerificationState(meData.email, meData.email_verified);
+        }
+        setStatusMessage(emailVerificationStatus, data.message || t("dashboard.verificationEmailSent"), "success");
+    }
+    catch {
+        renderEmailVerificationState(emailVerificationAddress.textContent || "", false);
+        setStatusMessage(emailVerificationStatus, t("common.networkErrorRetry"), "error");
+    }
 }
 function openTagModal(tag) {
     editingTagId = tag?.id || null;
@@ -564,6 +785,18 @@ function openSiteAdminModal(section = "personalization") {
     setModalOpen(siteAdminModal, true);
     if (section === "settings") {
         llmConfigNameInput.focus();
+        return;
+    }
+    if (section === "bots") {
+        botUserNameInput.focus();
+        return;
+    }
+    if (section === "site") {
+        siteNameInput.focus();
+        return;
+    }
+    if (section === "latch") {
+        packTunnelNameInput.focus();
         return;
     }
     if (section === "system") {
@@ -757,6 +990,91 @@ tagList.addEventListener("click", async (event) => {
 });
 llmConfigResetBtn.addEventListener("click", () => {
     resetLLMConfigForm();
+});
+packTunnelProfileResetBtn.addEventListener("click", () => {
+    resetPackTunnelProfileForm();
+});
+packTunnelProfileForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = buildPackTunnelPayload();
+    if (!payload) {
+        return;
+    }
+    packTunnelProfileSubmitBtn.disabled = true;
+    setStatusMessage(packTunnelStatus, editingPackTunnelProfileId ? "正在更新 PackTunnel 配置..." : "正在创建 PackTunnel 配置...");
+    try {
+        const { response, data } = editingPackTunnelProfileId
+            ? await updatePackTunnelProfile(editingPackTunnelProfileId, payload)
+            : await createPackTunnelProfile(payload);
+        if (!response.ok) {
+            setStatusMessage(packTunnelStatus, data.error || "保存失败", "error");
+            return;
+        }
+        setStatusMessage(packTunnelStatus, data.message || (editingPackTunnelProfileId ? "配置已更新" : "配置已创建"), "success");
+        resetPackTunnelProfileForm();
+        await loadSiteAdminData();
+    }
+    catch {
+        setStatusMessage(packTunnelStatus, t("common.networkErrorRetry"), "error");
+    }
+    finally {
+        packTunnelProfileSubmitBtn.disabled = false;
+    }
+});
+packTunnelProfileList.addEventListener("click", async (event) => {
+    const target = event.target;
+    const button = target.closest("button[data-action]");
+    if (!button) {
+        return;
+    }
+    const item = button.closest("[data-packtunnel-profile-id]");
+    const profileID = item?.dataset.packtunnelProfileId || "";
+    const profile = currentPackTunnelProfiles.find((entry) => entry.id === profileID);
+    if (!profile) {
+        return;
+    }
+    const action = button.dataset.action;
+    if (action === "edit") {
+        fillPackTunnelProfileForm(profile);
+        packTunnelNameInput.focus();
+        return;
+    }
+    if (action === "activate") {
+        setStatusMessage(packTunnelStatus, `正在激活 ${profile.name}...`);
+        try {
+            const { response, data } = await activatePackTunnelProfile(profile.id);
+            if (!response.ok) {
+                setStatusMessage(packTunnelStatus, data.error || "激活失败", "error");
+                return;
+            }
+            setStatusMessage(packTunnelStatus, data.message || `已激活 ${profile.name}`, "success");
+            await loadSiteAdminData();
+        }
+        catch {
+            setStatusMessage(packTunnelStatus, t("common.networkErrorRetry"), "error");
+        }
+        return;
+    }
+    if (action === "delete") {
+        if (!window.confirm(`确定删除 PackTunnel 配置 "${profile.name}" 吗？`)) {
+            return;
+        }
+        try {
+            const { response, data } = await removePackTunnelProfile(profile.id);
+            if (!response.ok) {
+                setStatusMessage(packTunnelStatus, data.error || "删除失败", "error");
+                return;
+            }
+            setStatusMessage(packTunnelStatus, data.message || `已删除 ${profile.name}`, "success");
+            if (editingPackTunnelProfileId === profile.id) {
+                resetPackTunnelProfileForm();
+            }
+            await loadSiteAdminData();
+        }
+        catch {
+            setStatusMessage(packTunnelStatus, t("common.networkErrorRetry"), "error");
+        }
+    }
 });
 llmConfigTestBtn.addEventListener("click", async () => {
     const payload = {
@@ -1055,6 +1373,92 @@ applePushDevDeleteBtn.addEventListener("click", async () => {
 applePushProdDeleteBtn.addEventListener("click", async () => {
     await handleApplePushCertificateDelete("prod");
 });
+packTunnelRulesUploadBtn.addEventListener("click", async () => {
+    const file = packTunnelRulesFile.files?.[0];
+    if (!file) {
+        setStatusMessage(packTunnelRulesStatus, "请先选择 rules 文件。", "error");
+        return;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    packTunnelRulesUploadBtn.disabled = true;
+    setStatusMessage(packTunnelRulesStatus, "正在上传 rules...");
+    try {
+        const { response, data } = await uploadPackTunnelRules(formData);
+        if (!response.ok) {
+            setStatusMessage(packTunnelRulesStatus, data.error || "上传失败", "error");
+            return;
+        }
+        const fileName = data.rule?.file_name || file.name;
+        setStatusMessage(packTunnelRulesStatus, data.message || `rules 已上传：${fileName}`, "success");
+        packTunnelRulesFile.value = "";
+    }
+    catch {
+        setStatusMessage(packTunnelRulesStatus, t("common.networkErrorRetry"), "error");
+    }
+    finally {
+        packTunnelRulesUploadBtn.disabled = false;
+    }
+});
+packTunnelRulesDownloadBtn.addEventListener("click", async () => {
+    packTunnelRulesDownloadBtn.disabled = true;
+    setStatusMessage(packTunnelRulesStatus, "正在下载 rules...");
+    try {
+        const response = await downloadPackTunnelRules();
+        if (!response.ok) {
+            let message = "下载失败";
+            try {
+                const data = (await response.json());
+                message = data.error || message;
+            }
+            catch {
+                // ignore json parse failures for non-json responses
+            }
+            setStatusMessage(packTunnelRulesStatus, message, "error");
+            return;
+        }
+        const blob = await response.blob();
+        const disposition = response.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        const filename = match?.[1] || "packtunnel-rules.dat";
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setStatusMessage(packTunnelRulesStatus, `已下载 ${filename}`, "success");
+    }
+    catch {
+        setStatusMessage(packTunnelRulesStatus, t("common.networkErrorRetry"), "error");
+    }
+    finally {
+        packTunnelRulesDownloadBtn.disabled = false;
+    }
+});
+packTunnelRulesDeleteBtn.addEventListener("click", async () => {
+    if (!window.confirm("确定删除全局 rules 文件吗？")) {
+        return;
+    }
+    packTunnelRulesDeleteBtn.disabled = true;
+    setStatusMessage(packTunnelRulesStatus, "正在删除 rules...");
+    try {
+        const { response, data } = await deletePackTunnelRules();
+        if (!response.ok) {
+            setStatusMessage(packTunnelRulesStatus, data.error || "删除失败", "error");
+            return;
+        }
+        setStatusMessage(packTunnelRulesStatus, data.message || "rules 已删除", "success");
+    }
+    catch {
+        setStatusMessage(packTunnelRulesStatus, t("common.networkErrorRetry"), "error");
+    }
+    finally {
+        packTunnelRulesDeleteBtn.disabled = false;
+    }
+});
 logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = true;
     try {
@@ -1256,7 +1660,11 @@ passkeyRegisterBtn.addEventListener("click", async () => {
         setStatusMessage(passkeyStatus, "网络错误，请重试", "error");
     }
 });
+sendEmailVerificationBtn.addEventListener("click", () => {
+    void handleEmailVerificationSend();
+});
 const initialTheme = initStoredTheme();
+resetPackTunnelProfileForm();
 syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
 switchSettingsSection(activeSettingsSection);

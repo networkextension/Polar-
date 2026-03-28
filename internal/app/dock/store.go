@@ -2,8 +2,10 @@ package dock
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -111,6 +113,15 @@ type LoginRecord struct {
 	LoggedInAt  time.Time `json:"logged_in_at"`
 }
 
+type EmailVerificationToken struct {
+	TokenHash  string
+	UserID     string
+	Email      string
+	ExpiresAt  time.Time
+	ConsumedAt *time.Time
+	CreatedAt  time.Time
+}
+
 type Tag struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
@@ -151,6 +162,77 @@ type LLMConfig struct {
 	HasAPIKey    bool      `json:"has_api_key"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type PackTunnelProfile struct {
+	ID        string                    `json:"id"`
+	UserID    string                    `json:"user_id"`
+	Name      string                    `json:"name"`
+	Type      string                    `json:"type"`
+	Server    PackTunnelServerEndpoint  `json:"server"`
+	Auth      PackTunnelAuth            `json:"auth"`
+	Options   PackTunnelOptions         `json:"options"`
+	Transport *PackTunnelTransport      `json:"transport,omitempty"`
+	Metadata  PackTunnelProfileMetadata `json:"metadata"`
+	CreatedAt time.Time                 `json:"created_at"`
+	UpdatedAt time.Time                 `json:"updated_at"`
+}
+
+type PackTunnelServerEndpoint struct {
+	Address string `json:"address"`
+	Port    int    `json:"port"`
+}
+
+type PackTunnelAuth struct {
+	Password string `json:"password"`
+	Method   string `json:"method"`
+}
+
+type PackTunnelOptions struct {
+	TLSEnabled      bool `json:"tls_enabled"`
+	UDPRelayEnabled bool `json:"udp_relay_enabled"`
+	ChainEnabled    bool `json:"chain_enabled"`
+}
+
+type PackTunnelTransport struct {
+	Kind   string                  `json:"kind"`
+	KCPTun *PackTunnelKCPTunConfig `json:"kcptun,omitempty"`
+}
+
+type PackTunnelKCPTunConfig struct {
+	Key         string `json:"key"`
+	Crypt       string `json:"crypt"`
+	Mode        string `json:"mode"`
+	AutoExpire  int    `json:"auto_expire"`
+	ScavengeTTL int    `json:"scavenge_ttl"`
+	MTU         int    `json:"mtu"`
+	SndWnd      int    `json:"snd_wnd"`
+	RcvWnd      int    `json:"rcv_wnd"`
+	DataShard   int    `json:"data_shard"`
+	ParityShard int    `json:"parity_shard"`
+	DSCP        int    `json:"dscp"`
+	NoComp      bool   `json:"no_comp"`
+	Salt        string `json:"salt"`
+}
+
+type PackTunnelProfileMetadata struct {
+	Priority    int    `json:"priority"`
+	Enabled     bool   `json:"enabled"`
+	Editable    bool   `json:"editable"`
+	Source      string `json:"source"`
+	CountryCode string `json:"country_code"`
+	CountryFlag string `json:"country_flag"`
+	IsActive    bool   `json:"is_active"`
+}
+
+type PackTunnelRuleFile struct {
+	UserID      string    `json:"user_id"`
+	FileName    string    `json:"file_name"`
+	StoredName  string    `json:"stored_name"`
+	FilePath    string    `json:"file_path"`
+	Size        int64     `json:"size"`
+	ContentType string    `json:"content_type"`
+	UploadedAt  time.Time `json:"uploaded_at"`
 }
 
 type BotUser struct {
@@ -373,6 +455,7 @@ CREATE TABLE IF NOT EXISTS users (
 	id TEXT PRIMARY KEY,
 	username TEXT NOT NULL,
 	email TEXT NOT NULL UNIQUE,
+	email_verified BOOLEAN NOT NULL DEFAULT FALSE,
 	password_hash TEXT NOT NULL,
 	role TEXT NOT NULL DEFAULT 'user',
 	bio TEXT NOT NULL DEFAULT '',
@@ -383,6 +466,8 @@ CREATE TABLE IF NOT EXISTS users (
 	created_at TIMESTAMPTZ NOT NULL
 );
 
+ALTER TABLE users
+	ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users
 	ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 ALTER TABLE users
@@ -404,6 +489,18 @@ CREATE TABLE IF NOT EXISTS profile_recommendations (
 	created_at TIMESTAMPTZ NOT NULL,
 	updated_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+	token_hash TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	email TEXT NOT NULL,
+	expires_at TIMESTAMPTZ NOT NULL,
+	consumed_at TIMESTAMPTZ,
+	created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user_id
+	ON email_verification_tokens (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS user_blocks (
 	blocker_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -587,6 +684,36 @@ ALTER TABLE llm_configs
 	ADD COLUMN IF NOT EXISTS share_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE llm_configs
 	ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS packtunnel_profiles (
+	id TEXT PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	profile_type TEXT NOT NULL,
+	server_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+	auth_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+	options_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+	transport_config JSONB,
+	priority INTEGER NOT NULL DEFAULT 0,
+	enabled BOOLEAN NOT NULL DEFAULT TRUE,
+	editable BOOLEAN NOT NULL DEFAULT TRUE,
+	source TEXT NOT NULL DEFAULT 'local',
+	country_code TEXT NOT NULL DEFAULT '',
+	country_flag TEXT NOT NULL DEFAULT '',
+	is_active BOOLEAN NOT NULL DEFAULT FALSE,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS packtunnel_rule_files (
+	owner_user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	file_name TEXT NOT NULL,
+	stored_name TEXT NOT NULL,
+	file_path TEXT NOT NULL,
+	file_size BIGINT NOT NULL DEFAULT 0,
+	content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+	uploaded_at TIMESTAMPTZ NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS posts (
 	id BIGSERIAL PRIMARY KEY,
@@ -772,6 +899,9 @@ CREATE INDEX IF NOT EXISTS idx_push_deliveries_message_id ON push_deliveries(mes
 CREATE INDEX IF NOT EXISTS idx_push_deliveries_user_id_created_at ON push_deliveries(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_llm_configs_owner_user_id ON llm_configs(owner_user_id, updated_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_llm_configs_share_id ON llm_configs(share_id) WHERE share_id <> '';
+CREATE INDEX IF NOT EXISTS idx_packtunnel_profiles_owner_updated_at ON packtunnel_profiles(owner_user_id, updated_at DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_packtunnel_profiles_owner_active ON packtunnel_profiles(owner_user_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_packtunnel_rule_files_uploaded_at ON packtunnel_rule_files(uploaded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_bot_users_owner_user_id ON bot_users(owner_user_id, updated_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_recommendations_target_author ON profile_recommendations(target_user_id, author_user_id);
 CREATE INDEX IF NOT EXISTS idx_profile_recommendations_target_updated_at ON profile_recommendations(target_user_id, updated_at DESC);
@@ -810,6 +940,12 @@ func generateSessionID() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)
+}
+
+func generateResourceID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func (s *Server) createLoginRecord(record *LoginRecord) error {
@@ -1094,6 +1230,335 @@ func (s *Server) getLLMConfigByShareID(shareID string) (*LLMConfig, error) {
 	return &item, nil
 }
 
+func (s *Server) listPackTunnelProfiles(ownerUserID string) ([]PackTunnelProfile, error) {
+	rows, err := s.db.Query(
+		`SELECT id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+		        priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at
+		   FROM packtunnel_profiles
+		  WHERE owner_user_id = $1
+		  ORDER BY is_active DESC, priority DESC, updated_at DESC, id DESC`,
+		ownerUserID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]PackTunnelProfile, 0)
+	for rows.Next() {
+		item, err := scanPackTunnelProfile(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Server) getPackTunnelProfile(ownerUserID, id string) (*PackTunnelProfile, error) {
+	item, err := scanPackTunnelProfile(s.db.QueryRow(
+		`SELECT id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+		        priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at
+		   FROM packtunnel_profiles
+		  WHERE owner_user_id = $1 AND id = $2`,
+		ownerUserID,
+		id,
+	).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return item, nil
+}
+
+func (s *Server) getActivePackTunnelProfile(ownerUserID string) (*PackTunnelProfile, error) {
+	item, err := scanPackTunnelProfile(s.db.QueryRow(
+		`SELECT id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+		        priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at
+		   FROM packtunnel_profiles
+		  WHERE owner_user_id = $1 AND is_active = TRUE`,
+		ownerUserID,
+	).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return item, nil
+}
+
+func (s *Server) createPackTunnelProfile(ownerUserID string, item PackTunnelProfile, now time.Time) (*PackTunnelProfile, error) {
+	if strings.TrimSpace(item.ID) == "" {
+		item.ID = generateResourceID()
+	}
+
+	serverJSON, authJSON, optionsJSON, transportJSON, err := marshalPackTunnelProfile(item)
+	if err != nil {
+		return nil, err
+	}
+
+	if item.Metadata.IsActive {
+		if _, err := s.db.Exec(`UPDATE packtunnel_profiles SET is_active = FALSE, updated_at = $2 WHERE owner_user_id = $1 AND is_active = TRUE`, ownerUserID, now); err != nil {
+			return nil, err
+		}
+	}
+
+	created, err := scanPackTunnelProfile(s.db.QueryRow(
+		`INSERT INTO packtunnel_profiles (
+			id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+			priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8,
+			$9, $10, $11, $12, $13, $14, $15, $16, $16
+		)
+		RETURNING id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+		          priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at`,
+		item.ID, ownerUserID, item.Name, item.Type, serverJSON, authJSON, optionsJSON, transportJSON,
+		item.Metadata.Priority, item.Metadata.Enabled, item.Metadata.Editable, item.Metadata.Source,
+		item.Metadata.CountryCode, item.Metadata.CountryFlag, item.Metadata.IsActive, now,
+	).Scan)
+	if err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+func (s *Server) updatePackTunnelProfile(ownerUserID, id string, item PackTunnelProfile, now time.Time) (*PackTunnelProfile, error) {
+	serverJSON, authJSON, optionsJSON, transportJSON, err := marshalPackTunnelProfile(item)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if item.Metadata.IsActive {
+		if _, err := tx.Exec(`UPDATE packtunnel_profiles SET is_active = FALSE, updated_at = $2 WHERE owner_user_id = $1 AND id <> $3 AND is_active = TRUE`, ownerUserID, now, id); err != nil {
+			return nil, err
+		}
+	}
+
+	updated, err := scanPackTunnelProfile(tx.QueryRow(
+		`UPDATE packtunnel_profiles
+		    SET name = $3,
+		        profile_type = $4,
+		        server_config = $5,
+		        auth_config = $6,
+		        options_config = $7,
+		        transport_config = $8,
+		        priority = $9,
+		        enabled = $10,
+		        editable = $11,
+		        source = $12,
+		        country_code = $13,
+		        country_flag = $14,
+		        is_active = $15,
+		        updated_at = $16
+		  WHERE owner_user_id = $1 AND id = $2
+		RETURNING id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+		          priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at`,
+		ownerUserID, id, item.Name, item.Type, serverJSON, authJSON, optionsJSON, transportJSON,
+		item.Metadata.Priority, item.Metadata.Enabled, item.Metadata.Editable, item.Metadata.Source,
+		item.Metadata.CountryCode, item.Metadata.CountryFlag, item.Metadata.IsActive, now,
+	).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func (s *Server) deletePackTunnelProfile(ownerUserID, id string) (bool, error) {
+	result, err := s.db.Exec(`DELETE FROM packtunnel_profiles WHERE owner_user_id = $1 AND id = $2`, ownerUserID, id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func (s *Server) setActivePackTunnelProfile(ownerUserID, id string, now time.Time) (*PackTunnelProfile, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`UPDATE packtunnel_profiles SET is_active = FALSE, updated_at = $2 WHERE owner_user_id = $1 AND is_active = TRUE`, ownerUserID, now); err != nil {
+		return nil, err
+	}
+
+	item, err := scanPackTunnelProfile(tx.QueryRow(
+		`UPDATE packtunnel_profiles
+		    SET is_active = TRUE, updated_at = $3
+		  WHERE owner_user_id = $1 AND id = $2
+		RETURNING id, owner_user_id, name, profile_type, server_config, auth_config, options_config, transport_config,
+		          priority, enabled, editable, source, country_code, country_flag, is_active, created_at, updated_at`,
+		ownerUserID,
+		id,
+		now,
+	).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+func (s *Server) upsertPackTunnelRuleFile(item PackTunnelRuleFile) error {
+	_, err := s.db.Exec(
+		`INSERT INTO packtunnel_rule_files (owner_user_id, file_name, stored_name, file_path, file_size, content_type, uploaded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT (owner_user_id) DO UPDATE
+		     SET file_name = EXCLUDED.file_name,
+		         stored_name = EXCLUDED.stored_name,
+		         file_path = EXCLUDED.file_path,
+		         file_size = EXCLUDED.file_size,
+		         content_type = EXCLUDED.content_type,
+		         uploaded_at = EXCLUDED.uploaded_at`,
+		item.UserID,
+		item.FileName,
+		item.StoredName,
+		item.FilePath,
+		item.Size,
+		item.ContentType,
+		item.UploadedAt,
+	)
+	return err
+}
+
+func (s *Server) getPackTunnelRuleFile(ownerUserID string) (*PackTunnelRuleFile, error) {
+	var item PackTunnelRuleFile
+	err := s.db.QueryRow(
+		`SELECT owner_user_id, file_name, stored_name, file_path, file_size, content_type, uploaded_at
+		   FROM packtunnel_rule_files
+		  WHERE owner_user_id = $1`,
+		ownerUserID,
+	).Scan(
+		&item.UserID,
+		&item.FileName,
+		&item.StoredName,
+		&item.FilePath,
+		&item.Size,
+		&item.ContentType,
+		&item.UploadedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (s *Server) deletePackTunnelRuleFile(ownerUserID string) (bool, error) {
+	result, err := s.db.Exec(`DELETE FROM packtunnel_rule_files WHERE owner_user_id = $1`, ownerUserID)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func scanPackTunnelProfile(scan func(dest ...any) error) (*PackTunnelProfile, error) {
+	var (
+		item          PackTunnelProfile
+		serverJSON    []byte
+		authJSON      []byte
+		optionsJSON   []byte
+		transportJSON []byte
+	)
+	err := scan(
+		&item.ID,
+		&item.UserID,
+		&item.Name,
+		&item.Type,
+		&serverJSON,
+		&authJSON,
+		&optionsJSON,
+		&transportJSON,
+		&item.Metadata.Priority,
+		&item.Metadata.Enabled,
+		&item.Metadata.Editable,
+		&item.Metadata.Source,
+		&item.Metadata.CountryCode,
+		&item.Metadata.CountryFlag,
+		&item.Metadata.IsActive,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(serverJSON, &item.Server); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(authJSON, &item.Auth); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(optionsJSON, &item.Options); err != nil {
+		return nil, err
+	}
+	if len(transportJSON) > 0 && string(transportJSON) != "null" {
+		var transport PackTunnelTransport
+		if err := json.Unmarshal(transportJSON, &transport); err != nil {
+			return nil, err
+		}
+		item.Transport = &transport
+	}
+
+	return &item, nil
+}
+
+func marshalPackTunnelProfile(item PackTunnelProfile) ([]byte, []byte, []byte, []byte, error) {
+	serverJSON, err := json.Marshal(item.Server)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	authJSON, err := json.Marshal(item.Auth)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	optionsJSON, err := json.Marshal(item.Options)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	var transportJSON []byte
+	if item.Transport != nil {
+		transportJSON, err = json.Marshal(item.Transport)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
+	return serverJSON, authJSON, optionsJSON, transportJSON, nil
+}
+
 func (s *Server) listBotUsers(ownerUserID string) ([]BotUser, error) {
 	rows, err := s.db.Query(
 		`SELECT b.id, b.owner_user_id, b.bot_user_id, b.name, b.description, b.system_prompt, b.llm_config_id, c.name, b.created_at, b.updated_at
@@ -1338,11 +1803,12 @@ func (s *Server) createUser(user *User) error {
 	}
 
 	_, err = tx.Exec(
-		`INSERT INTO users (id, username, email, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		`INSERT INTO users (id, username, email, email_verified, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		user.ID,
 		user.Username,
 		user.Email,
+		user.EmailVerified,
 		user.Password,
 		role,
 		user.Bio,
@@ -1361,6 +1827,129 @@ func (s *Server) createUser(user *User) error {
 
 	user.Role = role
 	return tx.Commit()
+}
+
+func hashEmailVerificationToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func generateEmailVerificationToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func (s *Server) createEmailVerificationToken(userID, email string, now time.Time, ttl time.Duration) (string, error) {
+	token, err := generateEmailVerificationToken()
+	if err != nil {
+		return "", err
+	}
+	tokenHash := hashEmailVerificationToken(token)
+	expiresAt := now.Add(ttl)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(
+		`DELETE FROM email_verification_tokens
+		  WHERE user_id = $1
+		    AND consumed_at IS NULL`,
+		userID,
+	); err != nil {
+		return "", err
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO email_verification_tokens (token_hash, user_id, email, expires_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		tokenHash, userID, email, expiresAt, now,
+	); err != nil {
+		return "", err
+	}
+
+	return token, tx.Commit()
+}
+
+func (s *Server) deletePendingEmailVerificationTokens(userID string) error {
+	_, err := s.db.Exec(
+		`DELETE FROM email_verification_tokens
+		  WHERE user_id = $1
+		    AND consumed_at IS NULL`,
+		userID,
+	)
+	return err
+}
+
+func (s *Server) consumeEmailVerificationToken(token string, now time.Time) (*User, error) {
+	tokenHash := hashEmailVerificationToken(token)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var row EmailVerificationToken
+	err = tx.QueryRow(
+		`SELECT token_hash, user_id, email, expires_at, consumed_at, created_at
+		   FROM email_verification_tokens
+		  WHERE token_hash = $1`,
+		tokenHash,
+	).Scan(&row.TokenHash, &row.UserID, &row.Email, &row.ExpiresAt, &row.ConsumedAt, &row.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if row.ConsumedAt != nil || now.After(row.ExpiresAt) {
+		return nil, nil
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE email_verification_tokens
+		    SET consumed_at = $2
+		  WHERE token_hash = $1`,
+		tokenHash, now,
+	); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE users
+		    SET email_verified = TRUE
+		  WHERE id = $1 AND email = $2`,
+		row.UserID, row.Email,
+	); err != nil {
+		return nil, err
+	}
+
+	var user User
+	var lastSeenAt sql.NullTime
+	err = tx.QueryRow(
+		`SELECT id, username, email, email_verified, password_hash, role, bio, icon_url, is_online, last_active_device_type, last_seen_at, created_at
+		   FROM users
+		  WHERE id = $1`,
+		row.UserID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.EmailVerified, &user.Password, &user.Role, &user.Bio, &user.IconURL, &user.IsOnline, &user.DeviceType, &lastSeenAt, &user.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if lastSeenAt.Valid {
+		user.LastSeenAt = &lastSeenAt.Time
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (s *Server) upsertUserDevice(userID, deviceType, pushToken string, loginAt time.Time) error {

@@ -1,16 +1,21 @@
 import {
+  activatePackTunnelProfile,
   createBotUser,
   createLLMConfig,
+  createPackTunnelProfile,
   beginPasskeyRegistration,
   createTag,
+  deletePackTunnelRules,
   deleteApplePushCertificate,
   deleteEntry,
+  downloadPackTunnelRules,
   fetchAvailableLLMConfigs,
   fetchBotUsers,
   fetchEntries,
   fetchEntry,
   fetchLLMConfigs,
   fetchLoginHistory,
+  fetchPackTunnelProfiles,
   fetchPasskeys,
   fetchSiteSettings,
   fetchTags,
@@ -18,17 +23,20 @@ import {
   removePasskey,
   removeBotUser,
   removeLLMConfig,
+  removePackTunnelProfile,
   removeTag,
   testLLMConfig,
   updateBotUser,
   updateLLMConfig,
+  updatePackTunnelProfile,
   updateSiteSettings,
   updateTag,
   uploadApplePushCertificate,
+  uploadPackTunnelRules,
   uploadSiteIcon,
   uploadUserIcon,
 } from "./api/dashboard.js";
-import { fetchCurrentUser, logout } from "./api/session.js";
+import { fetchCurrentUser, logout, sendEmailVerification } from "./api/session.js";
 import { formatDeviceType } from "./lib/client.js";
 import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
@@ -45,6 +53,9 @@ import type {
   LLMConfig,
   LLMConfigPayload,
   LoginRecord,
+  PackTunnelKCPTunConfig,
+  PackTunnelProfile,
+  PackTunnelProfilePayload,
   PasskeyCredential,
   SiteSettings,
   SystemInfo,
@@ -69,6 +80,10 @@ const themeToggleBtn = byId<HTMLButtonElement>("themeToggleBtn");
 const passkeyRegisterBtn = byId<HTMLButtonElement>("passkeyRegisterBtn");
 const passkeyStatus = byId<HTMLElement>("passkeyStatus");
 const passkeyList = byId<HTMLUListElement>("passkeyList");
+const sendEmailVerificationBtn = byId<HTMLButtonElement>("sendEmailVerificationBtn");
+const emailVerificationAddress = byId<HTMLElement>("emailVerificationAddress");
+const emailVerificationState = byId<HTMLElement>("emailVerificationState");
+const emailVerificationStatus = byId<HTMLElement>("emailVerificationStatus");
 const userIcon = byId<HTMLImageElement>("userIcon");
 const iconFile = byId<HTMLInputElement>("iconFile");
 const iconEditor = byId<HTMLElement>("iconEditor");
@@ -143,6 +158,34 @@ const applePushDevDeleteBtn = byId<HTMLButtonElement>("applePushDevDeleteBtn");
 const applePushProdDeleteBtn = byId<HTMLButtonElement>("applePushProdDeleteBtn");
 const siteAddTagBtnProxy = byId<HTMLButtonElement>("siteAddTagBtnProxy");
 const tagList = byId<HTMLUListElement>("tagList");
+const packTunnelProfileForm = byId<HTMLFormElement>("packTunnelProfileForm");
+const packTunnelNameInput = byId<HTMLInputElement>("packTunnelNameInput");
+const packTunnelTypeSelect = byId<HTMLSelectElement>("packTunnelTypeSelect");
+const packTunnelServerAddressInput = byId<HTMLInputElement>("packTunnelServerAddressInput");
+const packTunnelServerPortInput = byId<HTMLInputElement>("packTunnelServerPortInput");
+const packTunnelPasswordInput = byId<HTMLInputElement>("packTunnelPasswordInput");
+const packTunnelMethodInput = byId<HTMLInputElement>("packTunnelMethodInput");
+const packTunnelTlsEnabledInput = byId<HTMLInputElement>("packTunnelTlsEnabledInput");
+const packTunnelUdpRelayEnabledInput = byId<HTMLInputElement>("packTunnelUdpRelayEnabledInput");
+const packTunnelChainEnabledInput = byId<HTMLInputElement>("packTunnelChainEnabledInput");
+const packTunnelEnabledInput = byId<HTMLInputElement>("packTunnelEnabledInput");
+const packTunnelEditableInput = byId<HTMLInputElement>("packTunnelEditableInput");
+const packTunnelActiveInput = byId<HTMLInputElement>("packTunnelActiveInput");
+const packTunnelPriorityInput = byId<HTMLInputElement>("packTunnelPriorityInput");
+const packTunnelSourceSelect = byId<HTMLSelectElement>("packTunnelSourceSelect");
+const packTunnelCountryCodeInput = byId<HTMLInputElement>("packTunnelCountryCodeInput");
+const packTunnelCountryFlagInput = byId<HTMLInputElement>("packTunnelCountryFlagInput");
+const packTunnelTransportKindSelect = byId<HTMLSelectElement>("packTunnelTransportKindSelect");
+const packTunnelKcptunConfigInput = byId<HTMLTextAreaElement>("packTunnelKcptunConfigInput");
+const packTunnelProfileResetBtn = byId<HTMLButtonElement>("packTunnelProfileResetBtn");
+const packTunnelProfileSubmitBtn = byId<HTMLButtonElement>("packTunnelProfileSubmitBtn");
+const packTunnelProfileList = byId<HTMLUListElement>("packTunnelProfileList");
+const packTunnelStatus = byId<HTMLElement>("packTunnelStatus");
+const packTunnelRulesFile = byId<HTMLInputElement>("packTunnelRulesFile");
+const packTunnelRulesUploadBtn = byId<HTMLButtonElement>("packTunnelRulesUploadBtn");
+const packTunnelRulesDownloadBtn = byId<HTMLButtonElement>("packTunnelRulesDownloadBtn");
+const packTunnelRulesDeleteBtn = byId<HTMLButtonElement>("packTunnelRulesDeleteBtn");
+const packTunnelRulesStatus = byId<HTMLElement>("packTunnelRulesStatus");
 const settingsNavButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-settings-nav]"));
 const settingsPanels = Array.from(document.querySelectorAll<HTMLElement>("[data-settings-panel]"));
 const settingsOpenButtons = Array.from(document.querySelectorAll<HTMLElement>("[data-open-settings-center], #openSiteAdminBtn"));
@@ -165,10 +208,18 @@ let editingTagId: number | null = null;
 let currentTags: Tag[] = [];
 let editingLLMConfigId: number | null = null;
 let editingBotUserId: number | null = null;
+let editingPackTunnelProfileId: string | null = null;
 let currentLLMConfigs: LLMConfig[] = [];
 let currentAvailableLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
-let activeSettingsSection: "profile" | "personalization" | "settings" | "system" | "bots" | "site" = "personalization";
+let currentPackTunnelProfiles: PackTunnelProfile[] = [];
+let activeSettingsSection: "profile" | "personalization" | "settings" | "system" | "bots" | "site" | "latch" = "personalization";
+
+function renderEmailVerificationState(email?: string, verified?: boolean): void {
+  emailVerificationAddress.textContent = email || t("dashboard.emailUnavailable");
+  emailVerificationState.textContent = verified ? t("dashboard.emailVerifiedState") : t("dashboard.emailUnverifiedState");
+  sendEmailVerificationBtn.disabled = !email || Boolean(verified);
+}
 
 function setStatusMessage(element: HTMLElement, message: string, tone: "default" | "success" | "error" = "default"): void {
   element.textContent = message;
@@ -213,7 +264,7 @@ function syncThemeButton(theme: ThemeName): void {
   themeCurrentValue.textContent = theme === "mono" ? t("dashboard.themeMonochrome") : t("dashboard.themeDefault");
 }
 
-function switchSettingsSection(section: "profile" | "personalization" | "settings" | "system" | "bots" | "site"): void {
+function switchSettingsSection(section: "profile" | "personalization" | "settings" | "system" | "bots" | "site" | "latch"): void {
   activeSettingsSection = section;
   const titles: Record<typeof activeSettingsSection, { title: string; lead: string }> = {
     profile: {
@@ -239,6 +290,10 @@ function switchSettingsSection(section: "profile" | "personalization" | "setting
     site: {
       title: t("dashboard.siteManagementTitle"),
       lead: t("dashboard.siteLead"),
+    },
+    latch: {
+      title: "Latch 服务",
+      lead: "管理员在这里维护全局代理配置与 rules 文件，客户端只消费当前 active 配置。",
     },
   };
   settingsPanels.forEach((panel) => {
@@ -491,6 +546,155 @@ function renderBotUserList(bots: BotUser[]): void {
     .join("");
 }
 
+function resetPackTunnelProfileForm(): void {
+  editingPackTunnelProfileId = null;
+  packTunnelProfileForm.reset();
+  packTunnelTypeSelect.value = "shadowsocks";
+  packTunnelUdpRelayEnabledInput.checked = true;
+  packTunnelEnabledInput.checked = true;
+  packTunnelEditableInput.checked = true;
+  packTunnelPriorityInput.value = "0";
+  packTunnelSourceSelect.value = "local";
+  packTunnelStatus.textContent = "";
+  packTunnelProfileSubmitBtn.textContent = "保存配置";
+}
+
+function stringifyKCPTunConfig(config?: PackTunnelKCPTunConfig): string {
+  if (!config) {
+    return "";
+  }
+  return JSON.stringify(config, null, 2);
+}
+
+function renderPackTunnelProfiles(profiles: PackTunnelProfile[]): void {
+  if (!profiles.length) {
+    packTunnelProfileList.innerHTML = '<li class="tag-item tag-item-empty">还没有 PackTunnel 配置。</li>';
+    return;
+  }
+
+  packTunnelProfileList.innerHTML = profiles
+    .map((profile) => {
+      const chips = [
+        `<span class="tag-chip">${profile.type}</span>`,
+        profile.metadata.is_active ? '<span class="tag-chip">active</span>' : "",
+        profile.metadata.enabled ? '<span class="tag-chip">enabled</span>' : '<span class="tag-chip">disabled</span>',
+        profile.transport?.kind ? `<span class="tag-chip">${profile.transport.kind}</span>` : "",
+      ]
+        .filter(Boolean)
+        .join("");
+      const meta = [
+        `${profile.server.address}:${profile.server.port}`,
+        profile.auth.method || "no-method",
+        profile.metadata.country_code || "global",
+        `priority ${profile.metadata.priority}`,
+      ].join(" · ");
+      return `
+        <li class="tag-item" data-packtunnel-profile-id="${profile.id}">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${profile.name}</strong>
+              ${chips}
+            </div>
+            <div class="tag-item-meta">${meta}</div>
+            <div class="tag-item-desc">source=${profile.metadata.source} · updated ${new Date(profile.updated_at).toLocaleString()}</div>
+          </div>
+          <div class="tag-item-actions">
+            <button class="btn-inline btn-secondary" type="button" data-action="activate">设为 Active</button>
+            <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+            <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>
+          </div>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+function fillPackTunnelProfileForm(profile: PackTunnelProfile): void {
+  editingPackTunnelProfileId = profile.id;
+  packTunnelNameInput.value = profile.name;
+  packTunnelTypeSelect.value = profile.type;
+  packTunnelServerAddressInput.value = profile.server.address;
+  packTunnelServerPortInput.value = String(profile.server.port || "");
+  packTunnelPasswordInput.value = profile.auth.password || "";
+  packTunnelMethodInput.value = profile.auth.method || "";
+  packTunnelTlsEnabledInput.checked = Boolean(profile.options.tls_enabled);
+  packTunnelUdpRelayEnabledInput.checked = Boolean(profile.options.udp_relay_enabled);
+  packTunnelChainEnabledInput.checked = Boolean(profile.options.chain_enabled);
+  packTunnelEnabledInput.checked = Boolean(profile.metadata.enabled);
+  packTunnelEditableInput.checked = Boolean(profile.metadata.editable);
+  packTunnelActiveInput.checked = Boolean(profile.metadata.is_active);
+  packTunnelPriorityInput.value = String(profile.metadata.priority ?? 0);
+  packTunnelSourceSelect.value = profile.metadata.source || "local";
+  packTunnelCountryCodeInput.value = profile.metadata.country_code || "";
+  packTunnelCountryFlagInput.value = profile.metadata.country_flag || "";
+  packTunnelTransportKindSelect.value = profile.transport?.kind || "";
+  packTunnelKcptunConfigInput.value = stringifyKCPTunConfig(profile.transport?.kcptun);
+  packTunnelProfileSubmitBtn.textContent = "更新配置";
+  packTunnelStatus.textContent = "";
+}
+
+function buildPackTunnelPayload(): PackTunnelProfilePayload | null {
+  const name = packTunnelNameInput.value.trim();
+  const type = packTunnelTypeSelect.value.trim();
+  const address = packTunnelServerAddressInput.value.trim();
+  const port = Number(packTunnelServerPortInput.value || 0);
+  if (!name || !type || !address || port <= 0) {
+    setStatusMessage(packTunnelStatus, "请先填写配置名、协议、服务器地址和端口。", "error");
+    return null;
+  }
+
+  let transport;
+  const transportKind = packTunnelTransportKindSelect.value.trim();
+  if (transportKind) {
+    if (transportKind === "kcptun") {
+      const raw = packTunnelKcptunConfigInput.value.trim();
+      if (!raw) {
+        setStatusMessage(packTunnelStatus, "选择 kcptun 后需要填写 KCPTun JSON。", "error");
+        return null;
+      }
+      try {
+        transport = {
+          kind: transportKind,
+          kcptun: JSON.parse(raw) as PackTunnelKCPTunConfig,
+        };
+      } catch {
+        setStatusMessage(packTunnelStatus, "KCPTun JSON 格式不合法。", "error");
+        return null;
+      }
+    } else {
+      transport = { kind: transportKind };
+    }
+  }
+
+  return {
+    name,
+    type,
+    server: {
+      address,
+      port,
+    },
+    auth: {
+      password: packTunnelPasswordInput.value.trim(),
+      method: packTunnelMethodInput.value.trim(),
+    },
+    options: {
+      tls_enabled: packTunnelTlsEnabledInput.checked,
+      udp_relay_enabled: packTunnelUdpRelayEnabledInput.checked,
+      chain_enabled: packTunnelChainEnabledInput.checked,
+    },
+    transport,
+    metadata: {
+      priority: Number(packTunnelPriorityInput.value || 0),
+      enabled: packTunnelEnabledInput.checked,
+      editable: packTunnelEditableInput.checked,
+      source: packTunnelSourceSelect.value.trim() || "local",
+      country_code: packTunnelCountryCodeInput.value.trim(),
+      country_flag: packTunnelCountryFlagInput.value.trim(),
+      is_active: packTunnelActiveInput.checked,
+    },
+  };
+}
+
 async function loadLoginHistory(): Promise<void> {
   const { response, data } = await fetchLoginHistory();
   if (!response.ok) {
@@ -544,12 +748,14 @@ async function loadProfile(): Promise<void> {
   settingsProfileName.textContent = data.username || t("dashboard.currentUser");
   settingsProfileMeta.textContent = isAdmin ? t("dashboard.adminProfileMeta") : t("dashboard.userProfileMeta");
   settingsProfileRoleBadge.hidden = !isAdmin;
+  renderEmailVerificationState(data.email, data.email_verified);
+  setStatusMessage(emailVerificationStatus, "");
   addTagBtn.disabled = !isAdmin;
   addTagBtn.textContent = isAdmin ? t("dashboard.newTag") : t("dashboard.adminOnlyTag");
   addTagBtn.hidden = !isAdmin;
   siteAdminPanel.hidden = !isAdmin;
   settingsNavButtons.forEach((button) => {
-    if (button.dataset.settingsNav === "site") {
+    if (button.dataset.settingsNav === "site" || button.dataset.settingsNav === "latch") {
       button.hidden = !isAdmin;
     }
   });
@@ -609,7 +815,11 @@ async function loadSiteAdminData(): Promise<void> {
   if (isAdmin) {
     tasks.push(
       (async () => {
-        const [siteResult, tagResult] = await Promise.all([fetchSiteSettings(), fetchTags()]);
+        const [siteResult, tagResult, packTunnelResult] = await Promise.all([
+          fetchSiteSettings(),
+          fetchTags(),
+          fetchPackTunnelProfiles(),
+        ]);
         if (siteResult.response.ok) {
           renderSiteSettings(siteResult.data.site);
         } else {
@@ -622,11 +832,40 @@ async function loadSiteAdminData(): Promise<void> {
         } else {
           tagList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.tagListLoadFailed")}</li>`;
         }
+
+        if (packTunnelResult.response.ok) {
+          currentPackTunnelProfiles = packTunnelResult.data.profiles || [];
+          renderPackTunnelProfiles(currentPackTunnelProfiles);
+        } else {
+          packTunnelProfileList.innerHTML = '<li class="tag-item tag-item-empty">无法加载 PackTunnel 配置。</li>';
+          setStatusMessage(packTunnelStatus, packTunnelResult.data.error || "无法加载 PackTunnel 配置。", "error");
+        }
       })(),
     );
   }
 
   await Promise.all(tasks);
+}
+
+async function handleEmailVerificationSend(): Promise<void> {
+  sendEmailVerificationBtn.disabled = true;
+  setStatusMessage(emailVerificationStatus, t("dashboard.sendingVerificationEmail"));
+  try {
+    const { response, data } = await sendEmailVerification();
+    if (!response.ok) {
+      renderEmailVerificationState(emailVerificationAddress.textContent || "", false);
+      setStatusMessage(emailVerificationStatus, data.error || t("dashboard.emailVerificationSendFailed"), "error");
+      return;
+    }
+    const { response: meResponse, data: meData } = await fetchCurrentUser();
+    if (meResponse.ok) {
+      renderEmailVerificationState(meData.email, meData.email_verified);
+    }
+    setStatusMessage(emailVerificationStatus, data.message || t("dashboard.verificationEmailSent"), "success");
+  } catch {
+    renderEmailVerificationState(emailVerificationAddress.textContent || "", false);
+    setStatusMessage(emailVerificationStatus, t("common.networkErrorRetry"), "error");
+  }
 }
 
 function openTagModal(tag?: Tag): void {
@@ -648,11 +887,25 @@ function closeTagModal(): void {
   setModalOpen(tagModal, false);
 }
 
-function openSiteAdminModal(section: "profile" | "personalization" | "settings" | "system" = "personalization"): void {
+function openSiteAdminModal(
+  section: "profile" | "personalization" | "settings" | "system" | "bots" | "site" | "latch" = "personalization"
+): void {
   switchSettingsSection(section);
   setModalOpen(siteAdminModal, true);
   if (section === "settings") {
     llmConfigNameInput.focus();
+    return;
+  }
+  if (section === "bots") {
+    botUserNameInput.focus();
+    return;
+  }
+  if (section === "site") {
+    siteNameInput.focus();
+    return;
+  }
+  if (section === "latch") {
+    packTunnelNameInput.focus();
     return;
   }
   if (section === "system") {
@@ -782,7 +1035,15 @@ addTagBtn.addEventListener("click", () => {
 
 settingsOpenButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    const target = (button.dataset.settingsTarget as "profile" | "personalization" | "settings" | "system" | undefined) || "personalization";
+    const target = (button.dataset.settingsTarget as
+      | "profile"
+      | "personalization"
+      | "settings"
+      | "system"
+      | "bots"
+      | "site"
+      | "latch"
+      | undefined) || "personalization";
     openSiteAdminModal(target);
   });
 });
@@ -797,6 +1058,7 @@ settingsNavButtons.forEach((button) => {
       | "system"
       | "bots"
       | "site"
+      | "latch"
       | undefined;
     if (!target) {
       return;
@@ -884,6 +1146,95 @@ tagList.addEventListener("click", async (event) => {
 
 llmConfigResetBtn.addEventListener("click", () => {
   resetLLMConfigForm();
+});
+
+packTunnelProfileResetBtn.addEventListener("click", () => {
+  resetPackTunnelProfileForm();
+});
+
+packTunnelProfileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload = buildPackTunnelPayload();
+  if (!payload) {
+    return;
+  }
+
+  packTunnelProfileSubmitBtn.disabled = true;
+  setStatusMessage(packTunnelStatus, editingPackTunnelProfileId ? "正在更新 PackTunnel 配置..." : "正在创建 PackTunnel 配置...");
+  try {
+    const { response, data } = editingPackTunnelProfileId
+      ? await updatePackTunnelProfile(editingPackTunnelProfileId, payload)
+      : await createPackTunnelProfile(payload);
+    if (!response.ok) {
+      setStatusMessage(packTunnelStatus, data.error || "保存失败", "error");
+      return;
+    }
+    setStatusMessage(packTunnelStatus, data.message || (editingPackTunnelProfileId ? "配置已更新" : "配置已创建"), "success");
+    resetPackTunnelProfileForm();
+    await loadSiteAdminData();
+  } catch {
+    setStatusMessage(packTunnelStatus, t("common.networkErrorRetry"), "error");
+  } finally {
+    packTunnelProfileSubmitBtn.disabled = false;
+  }
+});
+
+packTunnelProfileList.addEventListener("click", async (event) => {
+  const target = event.target as HTMLElement;
+  const button = target.closest<HTMLButtonElement>("button[data-action]");
+  if (!button) {
+    return;
+  }
+
+  const item = button.closest<HTMLElement>("[data-packtunnel-profile-id]");
+  const profileID = item?.dataset.packtunnelProfileId || "";
+  const profile = currentPackTunnelProfiles.find((entry) => entry.id === profileID);
+  if (!profile) {
+    return;
+  }
+
+  const action = button.dataset.action;
+  if (action === "edit") {
+    fillPackTunnelProfileForm(profile);
+    packTunnelNameInput.focus();
+    return;
+  }
+
+  if (action === "activate") {
+    setStatusMessage(packTunnelStatus, `正在激活 ${profile.name}...`);
+    try {
+      const { response, data } = await activatePackTunnelProfile(profile.id);
+      if (!response.ok) {
+        setStatusMessage(packTunnelStatus, data.error || "激活失败", "error");
+        return;
+      }
+      setStatusMessage(packTunnelStatus, data.message || `已激活 ${profile.name}`, "success");
+      await loadSiteAdminData();
+    } catch {
+      setStatusMessage(packTunnelStatus, t("common.networkErrorRetry"), "error");
+    }
+    return;
+  }
+
+  if (action === "delete") {
+    if (!window.confirm(`确定删除 PackTunnel 配置 "${profile.name}" 吗？`)) {
+      return;
+    }
+    try {
+      const { response, data } = await removePackTunnelProfile(profile.id);
+      if (!response.ok) {
+        setStatusMessage(packTunnelStatus, data.error || "删除失败", "error");
+        return;
+      }
+      setStatusMessage(packTunnelStatus, data.message || `已删除 ${profile.name}`, "success");
+      if (editingPackTunnelProfileId === profile.id) {
+        resetPackTunnelProfileForm();
+      }
+      await loadSiteAdminData();
+    } catch {
+      setStatusMessage(packTunnelStatus, t("common.networkErrorRetry"), "error");
+    }
+  }
 });
 
 llmConfigTestBtn.addEventListener("click", async () => {
@@ -1201,6 +1552,90 @@ applePushProdDeleteBtn.addEventListener("click", async () => {
   await handleApplePushCertificateDelete("prod");
 });
 
+packTunnelRulesUploadBtn.addEventListener("click", async () => {
+  const file = packTunnelRulesFile.files?.[0];
+  if (!file) {
+    setStatusMessage(packTunnelRulesStatus, "请先选择 rules 文件。", "error");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  packTunnelRulesUploadBtn.disabled = true;
+  setStatusMessage(packTunnelRulesStatus, "正在上传 rules...");
+  try {
+    const { response, data } = await uploadPackTunnelRules(formData);
+    if (!response.ok) {
+      setStatusMessage(packTunnelRulesStatus, data.error || "上传失败", "error");
+      return;
+    }
+    const fileName = data.rule?.file_name || file.name;
+    setStatusMessage(packTunnelRulesStatus, data.message || `rules 已上传：${fileName}`, "success");
+    packTunnelRulesFile.value = "";
+  } catch {
+    setStatusMessage(packTunnelRulesStatus, t("common.networkErrorRetry"), "error");
+  } finally {
+    packTunnelRulesUploadBtn.disabled = false;
+  }
+});
+
+packTunnelRulesDownloadBtn.addEventListener("click", async () => {
+  packTunnelRulesDownloadBtn.disabled = true;
+  setStatusMessage(packTunnelRulesStatus, "正在下载 rules...");
+  try {
+    const response = await downloadPackTunnelRules();
+    if (!response.ok) {
+      let message = "下载失败";
+      try {
+        const data = (await response.json()) as { error?: string };
+        message = data.error || message;
+      } catch {
+        // ignore json parse failures for non-json responses
+      }
+      setStatusMessage(packTunnelRulesStatus, message, "error");
+      return;
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1] || "packtunnel-rules.dat";
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setStatusMessage(packTunnelRulesStatus, `已下载 ${filename}`, "success");
+  } catch {
+    setStatusMessage(packTunnelRulesStatus, t("common.networkErrorRetry"), "error");
+  } finally {
+    packTunnelRulesDownloadBtn.disabled = false;
+  }
+});
+
+packTunnelRulesDeleteBtn.addEventListener("click", async () => {
+  if (!window.confirm("确定删除全局 rules 文件吗？")) {
+    return;
+  }
+  packTunnelRulesDeleteBtn.disabled = true;
+  setStatusMessage(packTunnelRulesStatus, "正在删除 rules...");
+  try {
+    const { response, data } = await deletePackTunnelRules();
+    if (!response.ok) {
+      setStatusMessage(packTunnelRulesStatus, data.error || "删除失败", "error");
+      return;
+    }
+    setStatusMessage(packTunnelRulesStatus, data.message || "rules 已删除", "success");
+  } catch {
+    setStatusMessage(packTunnelRulesStatus, t("common.networkErrorRetry"), "error");
+  } finally {
+    packTunnelRulesDeleteBtn.disabled = false;
+  }
+});
+
 logoutBtn.addEventListener("click", async () => {
   logoutBtn.disabled = true;
   try {
@@ -1437,7 +1872,12 @@ passkeyRegisterBtn.addEventListener("click", async () => {
   }
 });
 
+sendEmailVerificationBtn.addEventListener("click", () => {
+  void handleEmailVerificationSend();
+});
+
 const initialTheme = initStoredTheme();
+resetPackTunnelProfileForm();
 syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
 switchSettingsSection(activeSettingsSection);

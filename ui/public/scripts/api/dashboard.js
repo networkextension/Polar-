@@ -103,10 +103,49 @@ export async function deleteApplePushCertificate(environment) {
         method: "DELETE",
     });
 }
+export async function fetchPackTunnelProfiles() {
+    return requestJson("/api/packtunnel/profiles");
+}
+export async function createPackTunnelProfile(payload) {
+    return requestJson("/api/packtunnel/profiles", {
+        method: "POST",
+        body: payload,
+    });
+}
+export async function updatePackTunnelProfile(id, payload) {
+    return requestJson(`/api/packtunnel/profiles/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: payload,
+    });
+}
+export async function removePackTunnelProfile(id) {
+    return requestJson(`/api/packtunnel/profiles/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+    });
+}
+export async function activatePackTunnelProfile(id) {
+    return requestJson(`/api/packtunnel/profiles/${encodeURIComponent(id)}/activate`, {
+        method: "PUT",
+    });
+}
+export async function uploadPackTunnelRules(formData) {
+    return requestJson("/api/packtunnel/rules", {
+        method: "POST",
+        body: formData,
+    });
+}
+export async function deletePackTunnelRules() {
+    return requestJson("/api/packtunnel/rules", {
+        method: "DELETE",
+    });
+}
 export async function deleteEntry(id) {
     return request(`/api/markdown/${id}`, {
         method: "DELETE",
     });
+}
+export async function downloadPackTunnelRules() {
+    return request("/api/packtunnel/rules");
 }
 export async function uploadUserIcon(formData) {
     return requestJson("/api/user/icon", {

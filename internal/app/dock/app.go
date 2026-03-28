@@ -56,6 +56,8 @@ type Server struct {
 	apnsMu              sync.Mutex
 	apnsClients         map[string]*http.Client
 	apnsTokens          map[string]cachedAPNSToken
+	publicBaseURL       string
+	mailer              MailSender
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -80,6 +82,8 @@ func NewServer(cfg Config) (*Server, error) {
 		applePushTeamID:     cfg.ApplePushTeamID,
 		applePushTeamIDDev:  cfg.ApplePushTeamIDDev,
 		applePushTeamIDProd: cfg.ApplePushTeamIDProd,
+		publicBaseURL:       strings.TrimRight(cfg.PublicBaseURL, "/"),
+		mailer:              newSMTPMailer(cfg),
 		apnsClients:         make(map[string]*http.Client),
 		apnsTokens:          make(map[string]cachedAPNSToken),
 		redis: redis.NewClient(&redis.Options{
@@ -290,6 +294,8 @@ func (s *Server) registerRoutes() {
 		api.DELETE("/passkeys/:credentialId", s.AuthMiddleware(), s.handlePasskeyDelete)
 		api.POST("/passkey/login/begin", s.GuestMiddleware(), s.handlePasskeyLoginBegin)
 		api.POST("/passkey/login/finish", s.GuestMiddleware(), s.handlePasskeyLoginFinish)
+		api.POST("/email-verification/send", s.AuthMiddleware(), s.handleEmailVerificationSend)
+		api.GET("/email-verification/verify", s.handleEmailVerificationConfirm)
 		api.POST("/user/icon", s.AuthMiddleware(), s.handleUserIconUpload)
 		api.PUT("/users/me/profile", s.AuthMiddleware(), s.handleMyProfileUpdate)
 		api.GET("/users/:id/profile", s.AuthMiddleware(), s.handleUserProfileGet)
@@ -308,6 +314,16 @@ func (s *Server) registerRoutes() {
 		api.GET("/llm-configs/shared/:shareId", s.AuthMiddleware(), s.handleLLMConfigGetByShareID)
 		api.PUT("/llm-configs/:id", s.AuthMiddleware(), s.handleLLMConfigUpdate)
 		api.DELETE("/llm-configs/:id", s.AuthMiddleware(), s.handleLLMConfigDelete)
+		api.GET("/packtunnel/profiles", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelProfileList)
+		api.GET("/packtunnel/profiles/active", s.AuthMiddleware(), s.handlePackTunnelActiveProfileGet)
+		api.GET("/packtunnel/profiles/:id", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelProfileGet)
+		api.POST("/packtunnel/profiles", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelProfileCreate)
+		api.PUT("/packtunnel/profiles/:id", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelProfileUpdate)
+		api.DELETE("/packtunnel/profiles/:id", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelProfileDelete)
+		api.PUT("/packtunnel/profiles/:id/activate", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelProfileActivate)
+		api.POST("/packtunnel/rules", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelRuleUpload)
+		api.GET("/packtunnel/rules", s.AuthMiddleware(), s.handlePackTunnelRuleDownload)
+		api.DELETE("/packtunnel/rules", s.AuthMiddleware(), s.AdminMiddleware(), s.handlePackTunnelRuleDelete)
 		api.GET("/bots", s.AuthMiddleware(), s.handleBotUserList)
 		api.POST("/bots", s.AuthMiddleware(), s.handleBotUserCreate)
 		api.PUT("/bots/:id", s.AuthMiddleware(), s.handleBotUserUpdate)
