@@ -447,7 +447,8 @@ function renderMessages(messages, scrollToBottom = false) {
     activeMessages = messages;
     updateActiveMessageLoadedAt(messages);
     const cacheKey = getCacheKey();
-    if (cacheKey) messageCacheMap.set(cacheKey, messages);
+    if (cacheKey)
+        messageCacheMap.set(cacheKey, messages);
     if (!messages.length) {
         messageList.innerHTML = `<div class='chat-empty'>${t("chat.noMessages")}</div>`;
         return;
@@ -696,7 +697,8 @@ function renderMessages(messages, scrollToBottom = false) {
     });
     if (scrollToBottom) {
         messageList.scrollTop = messageList.scrollHeight;
-    } else {
+    }
+    else {
         messageList.scrollTop = prevScrollTop + (messageList.scrollHeight - prevScrollHeight);
     }
 }
@@ -706,7 +708,8 @@ async function loadMessages(threadId) {
     if (cached?.length) {
         visibleOlderCount = 0;
         renderMessages(cached, true);
-    } else {
+    }
+    else {
         messageList.innerHTML = `<div class='chat-empty'>${t("chat.loading")}</div>`;
     }
     const { response, data } = await fetchMessages(threadId, 200, activeLLMThreadId);
