@@ -54,6 +54,7 @@ import type {
   LLMConfigPayload,
   LoginRecord,
   PackTunnelKCPTunConfig,
+  PackTunnelProxyNodeType,
   PackTunnelProfile,
   PackTunnelProfilePayload,
   PasskeyCredential,
@@ -549,7 +550,7 @@ function renderBotUserList(bots: BotUser[]): void {
 function resetPackTunnelProfileForm(): void {
   editingPackTunnelProfileId = null;
   packTunnelProfileForm.reset();
-  packTunnelTypeSelect.value = "shadowsocks";
+  packTunnelTypeSelect.value = "http";
   packTunnelUdpRelayEnabledInput.checked = true;
   packTunnelEnabledInput.checked = true;
   packTunnelEditableInput.checked = true;
@@ -635,7 +636,7 @@ function fillPackTunnelProfileForm(profile: PackTunnelProfile): void {
 
 function buildPackTunnelPayload(): PackTunnelProfilePayload | null {
   const name = packTunnelNameInput.value.trim();
-  const type = packTunnelTypeSelect.value.trim();
+  const type = packTunnelTypeSelect.value.trim() as PackTunnelProxyNodeType;
   const address = packTunnelServerAddressInput.value.trim();
   const port = Number(packTunnelServerPortInput.value || 0);
   if (!name || !type || !address || port <= 0) {
