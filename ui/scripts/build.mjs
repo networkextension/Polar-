@@ -13,8 +13,6 @@ const tsconfigPath = path.join(rootDir, "tsconfig.json");
 const publicScriptsDir = path.join(publicDir, "scripts");
 
 async function runTypeScriptBuild() {
-  await rm(publicScriptsDir, { recursive: true, force: true });
-
   await new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,

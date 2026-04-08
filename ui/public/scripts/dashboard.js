@@ -459,7 +459,7 @@ function renderBotUserList(bots) {
 function resetPackTunnelProfileForm() {
     editingPackTunnelProfileId = null;
     packTunnelProfileForm.reset();
-    packTunnelTypeSelect.value = "shadowsocks";
+    packTunnelTypeSelect.value = "http";
     packTunnelUdpRelayEnabledInput.checked = true;
     packTunnelEnabledInput.checked = true;
     packTunnelEditableInput.checked = true;

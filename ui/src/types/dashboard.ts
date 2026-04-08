@@ -183,6 +183,14 @@ export type PackTunnelKCPTunConfig = {
   salt?: string;
 };
 
+export type PackTunnelProxyNodeType =
+  | "http"
+  | "https"
+  | "socks5"
+  | "kcptun"
+  | "ss"
+  | "ss3";
+
 export type PackTunnelTransport = {
   kind: string;
   kcptun?: PackTunnelKCPTunConfig;
@@ -192,7 +200,7 @@ export type PackTunnelProfile = {
   id: string;
   user_id: string;
   name: string;
-  type: string;
+  type: PackTunnelProxyNodeType;
   server: {
     address: string;
     port: number;
@@ -222,7 +230,7 @@ export type PackTunnelProfile = {
 
 export type PackTunnelProfilePayload = {
   name: string;
-  type: string;
+  type: PackTunnelProxyNodeType;
   server: {
     address: string;
     port: number;
