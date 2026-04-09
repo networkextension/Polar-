@@ -147,6 +147,69 @@ export async function deleteEntry(id) {
 export async function downloadPackTunnelRules() {
     return request("/api/packtunnel/rules");
 }
+// ---------------------------------------------------------------------------
+// Latch — Proxies
+// ---------------------------------------------------------------------------
+export async function fetchLatchProxies() {
+    return requestJson("/api/latch/proxies");
+}
+export async function createLatchProxy(payload) {
+    return requestJson("/api/latch/proxies", { method: "POST", body: payload });
+}
+export async function updateLatchProxy(groupId, payload) {
+    return requestJson(`/api/latch/proxies/${encodeURIComponent(groupId)}`, { method: "PUT", body: payload });
+}
+export async function removeLatchProxy(groupId) {
+    return requestJson(`/api/latch/proxies/${encodeURIComponent(groupId)}`, { method: "DELETE" });
+}
+export async function fetchLatchProxyVersions(groupId) {
+    return requestJson(`/api/latch/proxies/${encodeURIComponent(groupId)}/versions`);
+}
+export async function rollbackLatchProxy(groupId, version) {
+    return requestJson(`/api/latch/proxies/${encodeURIComponent(groupId)}/rollback/${version}`, { method: "PUT" });
+}
+// ---------------------------------------------------------------------------
+// Latch — Rules
+// ---------------------------------------------------------------------------
+export async function fetchLatchRules() {
+    return requestJson("/api/latch/rules");
+}
+export async function createLatchRule(payload) {
+    return requestJson("/api/latch/rules", { method: "POST", body: payload });
+}
+export async function createLatchRuleFromFile(formData) {
+    return requestJson("/api/latch/rules/upload", { method: "POST", body: formData });
+}
+export async function updateLatchRule(groupId, payload) {
+    return requestJson(`/api/latch/rules/${encodeURIComponent(groupId)}`, { method: "PUT", body: payload });
+}
+export async function uploadLatchRuleFile(groupId, formData) {
+    return requestJson(`/api/latch/rules/${encodeURIComponent(groupId)}/upload`, { method: "POST", body: formData });
+}
+export async function removeLatchRule(groupId) {
+    return requestJson(`/api/latch/rules/${encodeURIComponent(groupId)}`, { method: "DELETE" });
+}
+export async function fetchLatchRuleVersions(groupId) {
+    return requestJson(`/api/latch/rules/${encodeURIComponent(groupId)}/versions`);
+}
+export async function rollbackLatchRule(groupId, version) {
+    return requestJson(`/api/latch/rules/${encodeURIComponent(groupId)}/rollback/${version}`, { method: "PUT" });
+}
+// ---------------------------------------------------------------------------
+// Latch — Profiles
+// ---------------------------------------------------------------------------
+export async function fetchLatchAdminProfiles() {
+    return requestJson("/api/latch/admin/profiles");
+}
+export async function createLatchProfile(payload) {
+    return requestJson("/api/latch/admin/profiles", { method: "POST", body: payload });
+}
+export async function updateLatchProfile(id, payload) {
+    return requestJson(`/api/latch/admin/profiles/${encodeURIComponent(id)}`, { method: "PUT", body: payload });
+}
+export async function removeLatchProfile(id) {
+    return requestJson(`/api/latch/admin/profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
 export async function uploadUserIcon(formData) {
     return requestJson("/api/user/icon", {
         method: "POST",
