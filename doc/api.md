@@ -1903,230 +1903,85 @@ curl -X POST http://localhost:3000/api/posts \
 
 ## Latch 服务 API
 
-以下接口用于 Latch 服务的全局配置管理与规则文件管理。当前服务端内部仍沿用 `/api/packtunnel/*` 路径，但在产品和管理后台中统一称为“Latch 服务”。
+Latch 服务提供代理节点（Proxy）、规则文件（Rule）和配置组合（Profile）三类资源的管理能力，支持 SHA1 内容版本化和回滚。
 
-设计约束：
+### 架构概述
 
-- Latch 配置是全局配置，不按个人隔离
-- 服务端内部统一将全局配置挂在 `system` 名下持久化
-- 管理员负责维护配置列表、切换 active 配置、上传和删除 rules 文件
-- 普通登录用户只消费当前 active 配置和全局 rules 文件
+| 资源 | 说明 |
+|------|------|
+| **代理（Proxy）** | 单个代理节点，含类型和 JSON 配置；内容变更时自动生成新版本 |
+| **规则（Rule）** | 纯文本规则文件，支持内联编辑或文件上传；内容变更时自动生成新版本 |
+| **配置（Profile）** | 将 0-N 个代理节点和 0-1 个规则文件组合为一个命名配置，可独立控制启用状态和共享状态 |
+
+版本机制：
+
+- 每个 Proxy / Rule 通过 `group_id` 标识一个逻辑资源
+- 每次更新时，服务端计算内容 SHA1；若与最新版本不同则插入新版本（`version` 自增），否则仅更新名称
+- 所有读取接口默认返回最新版本
+- 支持通过 `rollback` 接口将指定历史版本复制为新版本（最新）
+
+代理类型（`type` 字段）取值：
+
+| 值 | 说明 |
+|----|------|
+| `ss` | Shadowsocks |
+| `ss3` | Shadowsocks 第三方扩展协议 |
+| `kcp_over_http` | KCP over HTTP |
+| `kcp_over_ss` | KCP over Shadowsocks |
+| `kcp_over_ss3` | KCP over SS3 |
 
 权限矩阵：
 
-- 管理员可用：`GET /api/packtunnel/profiles`、`GET /api/packtunnel/profiles/:id`、`POST /api/packtunnel/profiles`、`PUT /api/packtunnel/profiles/:id`、`DELETE /api/packtunnel/profiles/:id`、`PUT /api/packtunnel/profiles/:id/activate`、`POST /api/packtunnel/rules`、`DELETE /api/packtunnel/rules`
-- 普通登录用户可用：`GET /api/packtunnel/profiles/active`、`GET /api/packtunnel/rules`
+| 接口 | 权限 |
+|------|------|
+| `GET /api/latch/proxies` 及所有 `/api/latch/proxies/*` | 管理员 |
+| `GET /api/latch/rules` 及所有 `/api/latch/rules/*` | 管理员 |
+| `GET /api/latch/admin/profiles` 及所有 `/api/latch/admin/profiles/*` | 管理员 |
+| `GET /api/latch/profiles` | 已登录用户 |
 
-配置模型说明：
+> 旧版 PackTunnel 路径（`/api/packtunnel/*` 及 `/api/proxy-configs/*`）保留用于旧客户端兼容，不再新增功能。
 
-- `type` 表示代理类型，目前支持：`shadowsocks`、`socks5`、`http`、`https`、`vmess`、`vless`、`trojan`
-- `server` 表示接入地址与端口
-- `auth` 表示鉴权信息
-- `options` 表示通用开关项
-- `transport` 表示可选传输层扩展，目前支持 `kcptun`
-- `metadata.is_active` 表示当前生效配置
-- 同一时间只允许存在一条 active 配置
+### 代理（Proxy）管理
 
-### 获取配置列表
+---
 
-**GET** `/api/packtunnel/profiles`
+#### 获取代理列表
+
+**GET** `/api/latch/proxies`
 
 权限要求：管理员
 
-说明：
-
-- 返回全局配置列表
-- 同时返回当前 active 配置，方便管理后台直接高亮展示
+说明：返回每个 `group_id` 的最新版本代理节点。
 
 成功响应：
 
 ```json
 {
-  "profiles": [
+  "proxies": [
     {
-      "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-      "user_id": "system",
-      "name": "Tokyo-01",
-      "type": "shadowsocks",
-      "server": {
-        "address": "1.2.3.4",
-        "port": 8388
-      },
-      "auth": {
+      "id": "a1b2c3d4...",
+      "group_id": "g_abc123",
+      "name": "Tokyo-SS",
+      "type": "ss",
+      "config": {
+        "server": "1.2.3.4",
+        "port": 8388,
         "password": "secret",
         "method": "aes-256-gcm"
       },
-      "options": {
-        "tls_enabled": false,
-        "udp_relay_enabled": true,
-        "chain_enabled": false
-      },
-      "transport": {
-        "kind": "kcptun",
-        "kcptun": {
-          "key": "it's a secret",
-          "crypt": "none",
-          "mode": "fast",
-          "auto_expire": 0,
-          "scavenge_ttl": 600,
-          "mtu": 1350,
-          "snd_wnd": 1024,
-          "rcv_wnd": 1024,
-          "data_shard": 10,
-          "parity_shard": 3,
-          "dscp": 0,
-          "no_comp": false,
-          "salt": "kcp-go"
-        }
-      },
-      "metadata": {
-        "priority": 100,
-        "enabled": true,
-        "editable": true,
-        "source": "remote",
-        "country_code": "JP",
-        "country_flag": "🇯🇵",
-        "is_active": true
-      },
-      "created_at": "2026-03-28T10:00:00Z",
-      "updated_at": "2026-03-28T10:00:00Z"
+      "sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+      "version": 2,
+      "created_at": "2026-04-01T10:00:00Z"
     }
-  ],
-  "active_profile": {
-    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-    "user_id": "system",
-    "name": "Tokyo-01",
-    "type": "shadowsocks",
-    "server": {
-      "address": "1.2.3.4",
-      "port": 8388
-    },
-    "auth": {
-      "password": "secret",
-      "method": "aes-256-gcm"
-    },
-    "options": {
-      "tls_enabled": false,
-      "udp_relay_enabled": true,
-      "chain_enabled": false
-    },
-    "metadata": {
-      "priority": 100,
-      "enabled": true,
-      "editable": true,
-      "source": "remote",
-      "country_code": "JP",
-      "country_flag": "🇯🇵",
-      "is_active": true
-    },
-    "created_at": "2026-03-28T10:00:00Z",
-    "updated_at": "2026-03-28T10:00:00Z"
-  }
+  ]
 }
 ```
 
-### 获取当前启用配置
+---
 
-**GET** `/api/packtunnel/profiles/active`
+#### 创建代理
 
-权限要求：已登录用户
-
-说明：
-
-- 普通用户和管理员都可以调用
-- iOS 客户端建议优先使用这个接口拉取当前生效配置
-
-成功响应：
-
-```json
-{
-  "profile": {
-    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-    "user_id": "system",
-    "name": "Tokyo-01",
-    "type": "shadowsocks",
-    "server": {
-      "address": "1.2.3.4",
-      "port": 8388
-    },
-    "auth": {
-      "password": "secret",
-      "method": "aes-256-gcm"
-    },
-    "options": {
-      "tls_enabled": false,
-      "udp_relay_enabled": true,
-      "chain_enabled": false
-    },
-    "metadata": {
-      "priority": 100,
-      "enabled": true,
-      "editable": true,
-      "source": "remote",
-      "country_code": "JP",
-      "country_flag": "🇯🇵",
-      "is_active": true
-    },
-    "created_at": "2026-03-28T10:00:00Z",
-    "updated_at": "2026-03-28T10:00:00Z"
-  }
-}
-```
-
-如果当前没有启用配置，返回 `404`：
-
-```json
-{
-  "error": "当前没有启用配置"
-}
-```
-
-### 获取单个配置
-
-**GET** `/api/packtunnel/profiles/:id`
-
-权限要求：管理员
-
-成功响应：
-
-```json
-{
-  "profile": {
-    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-    "user_id": "system",
-    "name": "Tokyo-01",
-    "type": "shadowsocks",
-    "server": {
-      "address": "1.2.3.4",
-      "port": 8388
-    },
-    "auth": {
-      "password": "secret",
-      "method": "aes-256-gcm"
-    },
-    "options": {
-      "tls_enabled": false,
-      "udp_relay_enabled": true,
-      "chain_enabled": false
-    },
-    "metadata": {
-      "priority": 100,
-      "enabled": true,
-      "editable": true,
-      "source": "remote",
-      "country_code": "JP",
-      "country_flag": "🇯🇵",
-      "is_active": false
-    },
-    "created_at": "2026-03-28T10:00:00Z",
-    "updated_at": "2026-03-28T10:00:00Z"
-  }
-}
-```
-
-### 创建配置
-
-**POST** `/api/packtunnel/profiles`
+**POST** `/api/latch/proxies`
 
 权限要求：管理员
 
@@ -2134,99 +1989,62 @@ curl -X POST http://localhost:3000/api/posts \
 
 ```json
 {
-  "name": "Tokyo-01",
-  "type": "https",
-  "server": {
-    "address": "gateway.example.com",
-    "port": 443
-  },
-  "auth": {
+  "name": "Tokyo-SS",
+  "type": "ss",
+  "config": {
+    "server": "1.2.3.4",
+    "port": 8388,
     "password": "secret",
-    "method": "basic"
-  },
-  "options": {
-    "tls_enabled": true,
-    "udp_relay_enabled": true,
-    "chain_enabled": false
-  },
-  "transport": {
-    "kind": "kcptun",
-    "kcptun": {
-      "key": "it's a secret",
-      "crypt": "none",
-      "mode": "fast",
-      "auto_expire": 0,
-      "scavenge_ttl": 600,
-      "mtu": 1350,
-      "snd_wnd": 1024,
-      "rcv_wnd": 1024,
-      "data_shard": 10,
-      "parity_shard": 3,
-      "dscp": 0,
-      "no_comp": false,
-      "salt": "kcp-go"
-    }
-  },
-  "metadata": {
-    "priority": 100,
-    "enabled": true,
-    "editable": true,
-    "source": "remote",
-    "country_code": "JP",
-    "country_flag": "🇯🇵",
-    "is_active": true
+    "method": "aes-256-gcm"
   }
 }
 ```
 
 说明：
 
-- `id` 可不传，服务端会自动生成
-- `metadata.enabled` 和 `metadata.editable` 不传时默认为 `true`
-- 如果 `metadata.is_active = true`，服务端会自动取消当前其他 active 配置
-- `http` / `https` 类型同样使用这套结构；`auth.method` 的具体语义由客户端按类型解释
+- `type` 必填，取值范围：`ss`、`ss3`、`kcp_over_http`、`kcp_over_ss`、`kcp_over_ss3`
+- `config` 为自由 JSON 对象，结构由客户端按类型解释；不传时默认 `{}`
+- 服务端自动生成 `id`、`group_id`、`sha1`，`version` 从 1 开始
+
+成功响应（201）：
+
+```json
+{
+  "proxy": {
+    "id": "a1b2c3d4...",
+    "group_id": "g_abc123",
+    "name": "Tokyo-SS",
+    "type": "ss",
+    "config": { "server": "1.2.3.4", "port": 8388, "password": "secret", "method": "aes-256-gcm" },
+    "sha1": "da39a3ee...",
+    "version": 1,
+    "created_at": "2026-04-01T10:00:00Z"
+  },
+  "message": "代理已创建"
+}
+```
+
+---
+
+#### 获取单个代理（最新版本）
+
+**GET** `/api/latch/proxies/:group_id`
+
+权限要求：管理员
 
 成功响应：
 
 ```json
 {
-  "profile": {
-    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-    "user_id": "system",
-    "name": "Tokyo-01",
-    "type": "https",
-    "server": {
-      "address": "gateway.example.com",
-      "port": 443
-    },
-    "auth": {
-      "password": "secret",
-      "method": "basic"
-    },
-    "options": {
-      "tls_enabled": true,
-      "udp_relay_enabled": true,
-      "chain_enabled": false
-    },
-    "metadata": {
-      "priority": 100,
-      "enabled": true,
-      "editable": true,
-      "source": "remote",
-      "country_code": "JP",
-      "country_flag": "🇯🇵",
-      "is_active": true
-    },
-    "created_at": "2026-03-28T10:00:00Z",
-    "updated_at": "2026-03-28T10:00:00Z"
-  },
-  "message": "配置已创建"
+  "proxy": { ... }
 }
 ```
 
-### 更新配置
+---
 
-**PUT** `/api/packtunnel/profiles/:id`
+#### 更新代理
+
+**PUT** `/api/latch/proxies/:group_id`
 
 权限要求：管理员
 
@@ -2234,50 +2052,462 @@ curl -X POST http://localhost:3000/api/posts \
 
 说明：
 
-- 更新时仍按整条配置覆盖
-- 若请求中包含 `metadata.is_active = true`，服务端会同步切换 active 状态
+- 服务端计算新 `config` 的 SHA1；若与最新版本不同，则插入新行（`version+1`）
+- 若 SHA1 相同（仅改名），则原地更新名称，不新增版本
+- 始终返回最新版本
 
 成功响应：
 
 ```json
 {
-  "profile": {
-    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-    "user_id": "system",
-    "name": "Tokyo-02",
-    "type": "https",
-    "server": {
-      "address": "5.6.7.8",
-      "port": 443
+  "proxy": { ... },
+  "message": "代理已更新"
+}
+```
+
+---
+
+#### 删除代理
+
+**DELETE** `/api/latch/proxies/:group_id`
+
+权限要求：管理员
+
+说明：删除该 `group_id` 下的所有历史版本。
+
+成功响应：
+
+```json
+{
+  "message": "代理已删除"
+}
+```
+
+---
+
+#### 获取代理版本历史
+
+**GET** `/api/latch/proxies/:group_id/versions`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "versions": [
+    {
+      "id": "v2_id...",
+      "group_id": "g_abc123",
+      "name": "Tokyo-SS",
+      "type": "ss",
+      "config": { ... },
+      "sha1": "abc...",
+      "version": 2,
+      "created_at": "2026-04-02T10:00:00Z"
     },
-    "auth": {
-      "password": "secret",
-      "method": "aes-256-gcm"
-    },
-    "options": {
-      "tls_enabled": true,
-      "udp_relay_enabled": true,
-      "chain_enabled": false
-    },
-    "metadata": {
-      "priority": 200,
-      "enabled": true,
-      "editable": true,
-      "source": "remote",
-      "country_code": "JP",
-      "country_flag": "🇯🇵",
-      "is_active": true
-    },
-    "created_at": "2026-03-28T10:00:00Z",
-    "updated_at": "2026-03-28T11:00:00Z"
+    {
+      "id": "v1_id...",
+      "group_id": "g_abc123",
+      "name": "Tokyo-SS",
+      "type": "ss",
+      "config": { ... },
+      "sha1": "def...",
+      "version": 1,
+      "created_at": "2026-04-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 回滚代理到指定版本
+
+**PUT** `/api/latch/proxies/:group_id/rollback/:version`
+
+权限要求：管理员
+
+说明：将指定历史版本的 config 复制并插入为新的最新版本（`version+1`）。
+
+成功响应：
+
+```json
+{
+  "proxy": { ... },
+  "message": "回滚成功"
+}
+```
+
+如果目标版本不存在，返回 `404`：
+
+```json
+{
+  "error": "目标版本不存在"
+}
+```
+
+---
+
+### 规则（Rule）管理
+
+---
+
+#### 获取规则列表
+
+**GET** `/api/latch/rules`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "rules": [
+    {
+      "id": "r1b2c3...",
+      "group_id": "rg_xyz",
+      "name": "default-rules.conf",
+      "content": "DIRECT,127.0.0.1
+PROXY,*.example.com",
+      "sha1": "da39a3ee...",
+      "version": 3,
+      "created_at": "2026-04-03T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 创建规则（内联文本）
+
+**POST** `/api/latch/rules`
+
+权限要求：管理员
+
+请求体：
+
+```json
+{
+  "name": "default-rules.conf",
+  "content": "DIRECT,127.0.0.1\nPROXY,*.example.com"
+}
+```
+
+成功响应（201）：
+
+```json
+{
+  "rule": {
+    "id": "r1b2c3...",
+    "group_id": "rg_xyz",
+    "name": "default-rules.conf",
+    "content": "DIRECT,127.0.0.1\nPROXY,*.example.com",
+    "sha1": "abc123...",
+    "version": 1,
+    "created_at": "2026-04-01T10:00:00Z"
   },
+  "message": "规则已创建"
+}
+```
+
+---
+
+#### 创建规则（文件上传）
+
+**POST** `/api/latch/rules/upload`
+
+权限要求：管理员
+
+请求类型：`multipart/form-data`
+
+字段：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `name` | 是 | 规则名称 |
+| `file` | 是 | 纯文本规则文件，最大 10 MB |
+
+成功响应（201）：
+
+```json
+{
+  "rule": { ... },
+  "message": "规则已上传创建"
+}
+```
+
+---
+
+#### 获取单个规则（最新版本）
+
+**GET** `/api/latch/rules/:group_id`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "rule": { ... }
+}
+```
+
+---
+
+#### 下载规则原始内容
+
+**GET** `/api/latch/rules/:group_id/content`
+
+权限要求：管理员
+
+说明：以附件方式返回规则的纯文本内容，`Content-Disposition` 中包含原始文件名。
+
+响应头示例：
+
+```
+Content-Type: text/plain; charset=utf-8
+Content-Disposition: attachment; filename="default-rules.conf"
+```
+
+---
+
+#### 更新规则（内联文本）
+
+**PUT** `/api/latch/rules/:group_id`
+
+权限要求：管理员
+
+请求体：
+
+```json
+{
+  "name": "default-rules.conf",
+  "content": "DIRECT,127.0.0.1\nREJECT,*.ads.com\nPROXY,*.example.com"
+}
+```
+
+说明：SHA1 变化时生成新版本，否则仅更新名称。
+
+成功响应：
+
+```json
+{
+  "rule": { ... },
+  "message": "规则已更新"
+}
+```
+
+---
+
+#### 更新规则（文件上传）
+
+**POST** `/api/latch/rules/:group_id/upload`
+
+权限要求：管理员
+
+请求类型：`multipart/form-data`
+
+字段：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `name` | 否 | 新名称；不传则保留原名 |
+| `file` | 是 | 新规则文件，最大 10 MB |
+
+成功响应：
+
+```json
+{
+  "rule": { ... },
+  "message": "规则已上传更新"
+}
+```
+
+---
+
+#### 删除规则
+
+**DELETE** `/api/latch/rules/:group_id`
+
+权限要求：管理员
+
+说明：删除该 `group_id` 下所有版本。
+
+成功响应：
+
+```json
+{
+  "message": "规则已删除"
+}
+```
+
+---
+
+#### 获取规则版本历史
+
+**GET** `/api/latch/rules/:group_id/versions`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "versions": [
+    {
+      "id": "r3...",
+      "group_id": "rg_xyz",
+      "name": "default-rules.conf",
+      "content": "...",
+      "sha1": "abc...",
+      "version": 3,
+      "created_at": "2026-04-03T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 回滚规则到指定版本
+
+**PUT** `/api/latch/rules/:group_id/rollback/:version`
+
+权限要求：管理员
+
+说明：将指定历史版本内容复制为新的最新版本。
+
+成功响应：
+
+```json
+{
+  "rule": { ... },
+  "message": "回滚成功"
+}
+```
+
+---
+
+### 配置（Profile）管理 — 管理员
+
+---
+
+#### 获取配置列表
+
+**GET** `/api/latch/admin/profiles`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "profiles": [
+    {
+      "id": "prof_abc",
+      "name": "学习",
+      "description": "适合学习场景",
+      "proxy_group_ids": ["g_abc123", "g_def456"],
+      "rule_group_id": "rg_xyz",
+      "enabled": true,
+      "shareable": true,
+      "created_at": "2026-04-01T10:00:00Z",
+      "updated_at": "2026-04-05T10:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### 获取单个配置
+
+**GET** `/api/latch/admin/profiles/:id`
+
+权限要求：管理员
+
+成功响应：
+
+```json
+{
+  "profile": { ... }
+}
+```
+
+---
+
+#### 创建配置
+
+**POST** `/api/latch/admin/profiles`
+
+权限要求：管理员
+
+请求体：
+
+```json
+{
+  "name": "工作",
+  "description": "适合工作场景的代理配置",
+  "proxy_group_ids": ["g_abc123"],
+  "rule_group_id": "rg_xyz",
+  "enabled": true,
+  "shareable": false
+}
+```
+
+说明：
+
+- `name` 必填
+- `proxy_group_ids` 可为空数组，表示不关联代理
+- `rule_group_id` 可为空字符串，表示不关联规则
+- `enabled` 默认 `true`；`shareable` 默认 `false`
+- 重复的 `proxy_group_ids` 会自动去重并保持顺序
+
+成功响应（201）：
+
+```json
+{
+  "profile": {
+    "id": "prof_xyz",
+    "name": "工作",
+    "description": "适合工作场景的代理配置",
+    "proxy_group_ids": ["g_abc123"],
+    "rule_group_id": "rg_xyz",
+    "enabled": true,
+    "shareable": false,
+    "created_at": "2026-04-05T10:00:00Z",
+    "updated_at": "2026-04-05T10:00:00Z"
+  },
+  "message": "配置已创建"
+}
+```
+
+---
+
+#### 更新配置
+
+**PUT** `/api/latch/admin/profiles/:id`
+
+权限要求：管理员
+
+请求体格式与创建接口一致（全量覆盖更新）。
+
+成功响应：
+
+```json
+{
+  "profile": { ... },
   "message": "配置已更新"
 }
 ```
 
-### 删除配置
+---
 
-**DELETE** `/api/packtunnel/profiles/:id`
+#### 删除配置
+
+**DELETE** `/api/latch/admin/profiles/:id`
 
 权限要求：管理员
 
@@ -2289,120 +2519,69 @@ curl -X POST http://localhost:3000/api/posts \
 }
 ```
 
-### 启用配置
+---
 
-**PUT** `/api/packtunnel/profiles/:id/activate`
+### 配置列表 — 用户接口
 
-权限要求：管理员
+#### 获取已启用共享配置（含解析后的代理和规则）
 
-说明：
-
-- 当前是全局配置，因此同一系统同一时间最多只有一条 active 配置
-- 启用新配置时，服务端会自动将其他配置标记为非 active
-
-成功响应：
-
-```json
-{
-  "profile": {
-    "id": "f87db1a2b2ec44e4b0f8469cd4ed2f91",
-    "user_id": "system",
-    "name": "Tokyo-01",
-    "type": "shadowsocks",
-    "server": {
-      "address": "1.2.3.4",
-      "port": 8388
-    },
-    "auth": {
-      "password": "secret",
-      "method": "aes-256-gcm"
-    },
-    "options": {
-      "tls_enabled": false,
-      "udp_relay_enabled": true,
-      "chain_enabled": false
-    },
-    "metadata": {
-      "priority": 100,
-      "enabled": true,
-      "editable": true,
-      "source": "remote",
-      "country_code": "JP",
-      "country_flag": "🇯🇵",
-      "is_active": true
-    },
-    "created_at": "2026-03-28T10:00:00Z",
-    "updated_at": "2026-03-28T11:00:00Z"
-  },
-  "message": "配置已启用"
-}
-```
-
-### 上传 rules 文件
-
-**POST** `/api/packtunnel/rules`
-
-权限要求：管理员
-
-请求类型：`multipart/form-data`
-
-字段：
-
-- `file`: rules 文件
-
-说明：
-
-- 当前按“全局一份 rules 文件”管理
-- 重复上传会覆盖旧文件
-- 当前阶段只支持上传、下载和删除，不支持服务端在线编辑
-
-成功响应：
-
-```json
-{
-  "message": "rules 已上传",
-  "rule": {
-    "user_id": "u123",
-    "file_name": "rules.conf",
-    "stored_name": "packtunnel_rules_u123_20260328_120000_abcd1234.conf",
-    "file_path": "data/uploads/packtunnel_rules/packtunnel_rules_u123_20260328_120000_abcd1234.conf",
-    "size": 2048,
-    "content_type": "text/plain",
-    "uploaded_at": "2026-03-28T12:00:00Z"
-  }
-}
-```
-
-### 下载 rules 文件
-
-**GET** `/api/packtunnel/rules`
+**GET** `/api/latch/profiles`
 
 权限要求：已登录用户
 
 说明：
 
-- 若存在 rules 文件，服务端会以附件下载方式返回
-- 下载文件名为上传时的原始文件名
-
-若文件不存在，返回 `404`：
-
-```json
-{
-  "error": "rules 文件不存在"
-}
-```
-
-### 删除 rules 文件
-
-**DELETE** `/api/packtunnel/rules`
-
-权限要求：管理员
+- 返回所有 `enabled = true` 且 `shareable = true` 的配置
+- 每个配置中的 `proxies` 字段包含所有关联代理的最新版本完整对象
+- 每个配置中的 `rule` 字段包含关联规则的最新版本完整对象（无规则时为 `null`）
+- iOS 客户端应使用此接口拉取可用配置列表
 
 成功响应：
 
 ```json
 {
-  "message": "rules 已删除"
+  "profiles": [
+    {
+      "id": "prof_abc",
+      "name": "学习",
+      "description": "适合学习场景",
+      "proxy_group_ids": ["g_abc123", "g_def456"],
+      "rule_group_id": "rg_xyz",
+      "enabled": true,
+      "shareable": true,
+      "created_at": "2026-04-01T10:00:00Z",
+      "updated_at": "2026-04-05T10:00:00Z",
+      "proxies": [
+        {
+          "id": "a1b2...",
+          "group_id": "g_abc123",
+          "name": "Tokyo-SS",
+          "type": "ss",
+          "config": { "server": "1.2.3.4", "port": 8388, "password": "secret", "method": "aes-256-gcm" },
+          "sha1": "da39...",
+          "version": 2,
+          "created_at": "2026-04-02T10:00:00Z"
+        }
+      ],
+      "rule": {
+        "id": "r1b2...",
+        "group_id": "rg_xyz",
+        "name": "default-rules.conf",
+        "content": "DIRECT,127.0.0.1\nPROXY,*.example.com",
+        "sha1": "abc123...",
+        "version": 3,
+        "created_at": "2026-04-03T10:00:00Z"
+      }
+    }
+  ]
+}
+```
+
+如果没有可用配置，`profiles` 为空数组：
+
+```json
+{
+  "profiles": []
 }
 ```
 
