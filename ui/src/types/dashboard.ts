@@ -327,7 +327,12 @@ export type LatchRuleListResponse = ErrorResponse & {
   versions?: LatchRule[];
 };
 
+export type LatchProfileDetail = LatchProfile & {
+  proxies: LatchProxy[];
+  rule?: LatchRule;
+};
+
 export type LatchProfileListResponse = ErrorResponse & {
-  profiles?: LatchProfile[];
+  profiles?: LatchProfile[] | LatchProfileDetail[];
   profile?: LatchProfile;
 };

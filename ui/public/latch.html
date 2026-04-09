@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Latch 服务</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="site-shell">
+    <div class="page-shell-wide">
+      <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
+        <img class="site-brand-icon" data-site-icon alt="Site icon" />
+        <div class="site-brand-copy">
+          <div class="site-brand-name" data-site-name>Polar-</div>
+          <div class="site-brand-description" data-site-description>Loading...</div>
+        </div>
+      </a>
+
+      <div class="dashboard">
+        <div class="dashboard-header">
+          <div>
+            <h1>Latch 服务</h1>
+            <p id="latchWelcome">正在加载...</p>
+          </div>
+          <div class="header-actions">
+            <a class="btn-inline btn-secondary" href="/dashboard.html">返回 Dashboard</a>
+          </div>
+        </div>
+
+        <!-- Sub-tab navigation — admin sees all 3; user sees only profiles -->
+        <div class="latch-subtabs" id="latchSubtabs">
+          <button class="latch-subtab-btn active" type="button" data-latch-tab="proxies" id="latchTabProxies">◈ 代理</button>
+          <button class="latch-subtab-btn" type="button" data-latch-tab="rules" id="latchTabRules">≡ 规则</button>
+          <button class="latch-subtab-btn" type="button" data-latch-tab="profiles" id="latchTabProfiles">◉ 配置</button>
+        </div>
+
+        <!-- ===== Proxies (admin only) ===== -->
+        <div class="latch-tab-panel" data-latch-panel="proxies" id="latchPanelProxies">
+          <div class="site-admin-grid site-admin-grid-wide">
+            <div class="site-settings-form">
+              <div class="latch-form-title">
+                <span class="badge"><span id="latchProxyFormTitle">添加代理</span></span>
+              </div>
+
+              <label class="form-label" for="latchProxyNameInput">名称</label>
+              <input id="latchProxyNameInput" class="input" type="text" maxlength="80" placeholder="例如 Tokyo-SS3" />
+
+              <label class="form-label" for="latchProxyTypeSelect">类型</label>
+              <select id="latchProxyTypeSelect" class="input">
+                <option value="ss">ss</option>
+                <option value="ss3">ss3</option>
+                <option value="kcp_over_http">kcp_over_http</option>
+                <option value="kcp_over_ss">kcp_over_ss</option>
+                <option value="kcp_over_ss3">kcp_over_ss3</option>
+              </select>
+
+              <label class="form-label" for="latchProxyConfigInput">配置 JSON</label>
+              <textarea id="latchProxyConfigInput" class="input textarea latch-config-textarea" rows="12"
+                placeholder='{"server":"1.2.3.4","server_port":8388,"password":"secret","method":"aes-256-gcm"}'></textarea>
+
+              <div class="site-settings-actions inline-actions">
+                <button id="latchProxyResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                <button id="latchProxySubmitBtn" class="btn-secondary" type="button">保存代理</button>
+              </div>
+              <div id="latchProxyStatus" class="status-text"></div>
+            </div>
+
+            <div>
+              <div class="settings-section-heading">
+                <div>
+                  <div class="settings-section-title">代理列表</div>
+                  <p class="settings-section-text">编辑内容变化时自动新建版本，SHA1 相同则不新建。</p>
+                </div>
+              </div>
+              <ul id="latchProxyList" class="tag-list"></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Rules (admin only) ===== -->
+        <div class="latch-tab-panel" data-latch-panel="rules" hidden id="latchPanelRules">
+          <div class="site-admin-grid site-admin-grid-wide">
+            <div class="site-settings-form">
+              <div class="latch-form-title">
+                <span class="badge"><span id="latchRuleFormTitle">添加规则</span></span>
+              </div>
+
+              <label class="form-label" for="latchRuleNameInput">名称</label>
+              <input id="latchRuleNameInput" class="input" type="text" maxlength="80" placeholder="例如 广告过滤" />
+
+              <div class="latch-source-tabs">
+                <button id="latchRuleSourceInlineBtn" class="latch-source-btn active" type="button">在线编辑</button>
+                <button id="latchRuleSourceFileBtn" class="latch-source-btn" type="button">上传文件</button>
+              </div>
+
+              <div id="latchRuleInlineSection">
+                <label class="form-label" for="latchRuleContentInput">内容</label>
+                <textarea id="latchRuleContentInput" class="input textarea latch-rules-textarea" rows="16"
+                  placeholder="# 每行一条规则&#10;DOMAIN-SUFFIX,example.com,PROXY&#10;IP-CIDR,192.168.0.0/16,DIRECT"></textarea>
+                <div class="site-settings-actions inline-actions">
+                  <button id="latchRuleResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                  <button id="latchRuleSubmitBtn" class="btn-secondary" type="button">保存规则</button>
+                </div>
+              </div>
+
+              <div id="latchRuleFileSection" hidden>
+                <label class="form-label" for="latchRuleFileInput">选择文件</label>
+                <input id="latchRuleFileInput" class="input" type="file" accept=".txt,.list,.conf" />
+                <div class="site-settings-actions inline-actions">
+                  <button id="latchRuleUploadBtn" class="btn-secondary" type="button">上传文件</button>
+                </div>
+              </div>
+
+              <div id="latchRuleStatus" class="status-text"></div>
+            </div>
+
+            <div>
+              <div class="settings-section-heading">
+                <div>
+                  <div class="settings-section-title">规则列表</div>
+                  <p class="settings-section-text">支持在线编辑和文件上传，内容变化时版本自动递增。</p>
+                </div>
+              </div>
+              <ul id="latchRuleList" class="tag-list"></ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Profiles ===== -->
+        <!-- Admin: full CRUD view -->
+        <div class="latch-tab-panel" data-latch-panel="profiles" hidden id="latchPanelProfiles">
+          <!-- Admin form (hidden for non-admin) -->
+          <div class="site-admin-grid site-admin-grid-wide" id="latchProfileAdminGrid">
+            <div class="site-settings-form">
+              <div class="latch-form-title">
+                <span class="badge"><span id="latchProfileFormTitle">添加配置</span></span>
+              </div>
+
+              <label class="form-label" for="latchProfileNameInput">名称</label>
+              <input id="latchProfileNameInput" class="input" type="text" maxlength="80" placeholder="例如 工作 / 学习 / 社交" />
+
+              <label class="form-label" for="latchProfileDescInput">备注</label>
+              <input id="latchProfileDescInput" class="input" type="text" maxlength="200" placeholder="例如 日常工作使用" />
+
+              <div class="settings-info-grid packtunnel-options-grid" style="margin-bottom:4px">
+                <label class="form-checkbox" for="latchProfileEnabledInput">
+                  <input id="latchProfileEnabledInput" type="checkbox" checked />
+                  <span>Enabled</span>
+                </label>
+                <label class="form-checkbox" for="latchProfileShareableInput">
+                  <input id="latchProfileShareableInput" type="checkbox" />
+                  <span>Shareable</span>
+                </label>
+              </div>
+
+              <div class="latch-profile-section">
+                <div class="form-label" style="margin-bottom:8px">关联代理（可多选，可不选）</div>
+                <div id="latchProfileProxyCheckboxes" class="latch-check-group"></div>
+              </div>
+
+              <div class="latch-profile-section">
+                <div class="form-label" style="margin-bottom:8px">关联规则（选一条，可不选）</div>
+                <div id="latchProfileRuleRadios" class="latch-check-group"></div>
+              </div>
+
+              <div class="site-settings-actions inline-actions">
+                <button id="latchProfileResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                <button id="latchProfileSubmitBtn" class="btn-secondary" type="button">保存配置</button>
+              </div>
+              <div id="latchProfileStatus" class="status-text"></div>
+            </div>
+
+            <div>
+              <div class="settings-section-heading">
+                <div>
+                  <div class="settings-section-title">配置列表</div>
+                  <p class="settings-section-text">Shareable + Enabled 的配置对已登录用户可见，含最新版本 proxy/rule。</p>
+                </div>
+              </div>
+              <ul id="latchProfileList" class="tag-list"></ul>
+            </div>
+          </div>
+
+          <!-- User read-only view -->
+          <div id="latchProfileUserView" hidden>
+            <div class="settings-section-heading">
+              <div>
+                <div class="settings-section-title">可用配置</div>
+                <p class="settings-section-text">以下配置由管理员共享，包含代理节点和规则文件信息。</p>
+              </div>
+            </div>
+            <ul id="latchProfileUserList" class="tag-list"></ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <script type="module" src="/scripts/latch.js"></script>
+  </body>
+</html>
