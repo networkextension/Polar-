@@ -926,6 +926,44 @@ CREATE INDEX IF NOT EXISTS idx_llm_threads_chat_thread_id_updated_at ON llm_thre
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_id_created_at ON chat_messages(thread_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_llm_thread_id_created_at ON chat_messages(llm_thread_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_reads_user_id ON chat_reads(user_id);
+
+CREATE TABLE IF NOT EXISTS latch_proxies (
+	id       TEXT NOT NULL,
+	group_id TEXT NOT NULL,
+	name     TEXT NOT NULL,
+	type     TEXT NOT NULL,
+	config   JSONB NOT NULL DEFAULT '{}'::jsonb,
+	sha1     TEXT NOT NULL DEFAULT '',
+	version  INT  NOT NULL DEFAULT 1,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS idx_latch_proxies_group_version ON latch_proxies(group_id, version DESC);
+
+CREATE TABLE IF NOT EXISTS latch_rules (
+	id         TEXT NOT NULL,
+	group_id   TEXT NOT NULL,
+	name       TEXT NOT NULL,
+	content    TEXT NOT NULL DEFAULT '',
+	sha1       TEXT NOT NULL DEFAULT '',
+	version    INT  NOT NULL DEFAULT 1,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS idx_latch_rules_group_version ON latch_rules(group_id, version DESC);
+
+CREATE TABLE IF NOT EXISTS latch_profiles (
+	id              TEXT NOT NULL PRIMARY KEY,
+	name            TEXT NOT NULL,
+	description     TEXT NOT NULL DEFAULT '',
+	proxy_group_ids TEXT[] NOT NULL DEFAULT '{}',
+	rule_group_id   TEXT,
+	enabled         BOOLEAN NOT NULL DEFAULT TRUE,
+	shareable       BOOLEAN NOT NULL DEFAULT FALSE,
+	created_at      TIMESTAMPTZ NOT NULL,
+	updated_at      TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_latch_profiles_enabled_shareable ON latch_profiles(enabled, shareable, created_at DESC);
 `
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
