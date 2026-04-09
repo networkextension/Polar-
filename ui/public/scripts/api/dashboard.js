@@ -210,6 +210,9 @@ export async function updateLatchProfile(id, payload) {
 export async function removeLatchProfile(id) {
     return requestJson(`/api/latch/admin/profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+export async function fetchLatchProfiles() {
+    return requestJson("/api/latch/profiles");
+}
 export async function uploadUserIcon(formData) {
     return requestJson("/api/user/icon", {
         method: "POST",
