@@ -459,126 +459,160 @@
             </section>
 
             <section class="settings-panel" data-settings-panel="latch" hidden>
-              <div class="site-admin-panel">
-                <div class="site-tags-section">
-                  <div class="site-tags-header">
-                    <div>
-                      <div class="badge">Latch 服务</div>
-                      <p class="drawer-help">管理员在这里维护全局代理配置和 rules 文件，iOS 端只消费 active 配置。</p>
+
+              <!-- Sub-tab navigation -->
+              <div class="latch-subtabs">
+                <button class="latch-subtab-btn active" type="button" data-latch-tab="proxies">◈ 代理</button>
+                <button class="latch-subtab-btn" type="button" data-latch-tab="rules">≡ 规则</button>
+                <button class="latch-subtab-btn" type="button" data-latch-tab="profiles">◉ 配置</button>
+              </div>
+
+              <!-- ===== Proxies ===== -->
+              <div class="latch-tab-panel" data-latch-panel="proxies">
+                <div class="site-admin-grid site-admin-grid-wide">
+                  <div class="site-settings-form">
+                    <div class="latch-form-title">
+                      <span class="badge"><span id="latchProxyFormTitle">添加代理</span></span>
                     </div>
-                    <div id="packTunnelStatus" class="status-text"></div>
+
+                    <label class="form-label" for="latchProxyNameInput">名称</label>
+                    <input id="latchProxyNameInput" class="input" type="text" maxlength="80" placeholder="例如 Tokyo-SS3" />
+
+                    <label class="form-label" for="latchProxyTypeSelect">类型</label>
+                    <select id="latchProxyTypeSelect" class="input">
+                      <option value="ss">ss</option>
+                      <option value="ss3">ss3</option>
+                      <option value="kcp_over_http">kcp_over_http</option>
+                      <option value="kcp_over_ss">kcp_over_ss</option>
+                      <option value="kcp_over_ss3">kcp_over_ss3</option>
+                    </select>
+
+                    <label class="form-label" for="latchProxyConfigInput">配置 JSON</label>
+                    <textarea id="latchProxyConfigInput" class="input textarea latch-config-textarea" rows="12"
+                      placeholder='{"server":"1.2.3.4","server_port":8388,"password":"secret","method":"aes-256-gcm"}'></textarea>
+
+                    <div class="site-settings-actions inline-actions">
+                      <button id="latchProxyResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                      <button id="latchProxySubmitBtn" class="btn-secondary" type="button">保存代理</button>
+                    </div>
+                    <div id="latchProxyStatus" class="status-text"></div>
                   </div>
-                  <div class="site-admin-grid site-admin-grid-wide">
-                    <form id="packTunnelProfileForm" class="site-settings-form">
-                      <label class="form-label" for="packTunnelNameInput">配置名</label>
-                      <input id="packTunnelNameInput" class="input" type="text" maxlength="80" placeholder="例如 Tokyo-01" />
 
-                      <label class="form-label" for="packTunnelTypeSelect">协议类型</label>
-                      <select id="packTunnelTypeSelect" class="input">
-                        <option value="http">http</option>
-                        <option value="https">https</option>
-                        <option value="socks5">socks5</option>
-                        <option value="kcptun">kcptun</option>
-                        <option value="ss">ss</option>
-                        <option value="ss3">ss3</option>
-                      </select>
-
-                      <label class="form-label" for="packTunnelServerAddressInput">服务器地址</label>
-                      <input id="packTunnelServerAddressInput" class="input" type="text" maxlength="200" placeholder="例如 1.2.3.4 或 example.com" />
-
-                      <label class="form-label" for="packTunnelServerPortInput">端口</label>
-                      <input id="packTunnelServerPortInput" class="input" type="number" min="1" max="65535" placeholder="8388" />
-
-                      <label class="form-label" for="packTunnelPasswordInput">密码</label>
-                      <input id="packTunnelPasswordInput" class="input" type="text" maxlength="300" placeholder="连接密码" />
-
-                      <label class="form-label" for="packTunnelMethodInput">加密 / Method</label>
-                      <input id="packTunnelMethodInput" class="input" type="text" maxlength="120" placeholder="例如 aes-256-gcm" />
-
-                      <div class="settings-info-grid packtunnel-options-grid">
-                        <label class="form-checkbox" for="packTunnelTlsEnabledInput">
-                          <input id="packTunnelTlsEnabledInput" type="checkbox" />
-                          <span>TLS Enabled</span>
-                        </label>
-                        <label class="form-checkbox" for="packTunnelUdpRelayEnabledInput">
-                          <input id="packTunnelUdpRelayEnabledInput" type="checkbox" checked />
-                          <span>UDP Relay</span>
-                        </label>
-                        <label class="form-checkbox" for="packTunnelChainEnabledInput">
-                          <input id="packTunnelChainEnabledInput" type="checkbox" />
-                          <span>Chain Enabled</span>
-                        </label>
-                        <label class="form-checkbox" for="packTunnelEnabledInput">
-                          <input id="packTunnelEnabledInput" type="checkbox" checked />
-                          <span>Enabled</span>
-                        </label>
-                        <label class="form-checkbox" for="packTunnelEditableInput">
-                          <input id="packTunnelEditableInput" type="checkbox" checked />
-                          <span>Editable</span>
-                        </label>
-                        <label class="form-checkbox" for="packTunnelActiveInput">
-                          <input id="packTunnelActiveInput" type="checkbox" />
-                          <span>设为 Active</span>
-                        </label>
+                  <div>
+                    <div class="settings-section-heading">
+                      <div>
+                        <div class="settings-section-title">代理列表</div>
+                        <p class="settings-section-text">编辑内容变化时自动新建版本，SHA1 相同则不新建。</p>
                       </div>
-
-                      <label class="form-label" for="packTunnelPriorityInput">优先级</label>
-                      <input id="packTunnelPriorityInput" class="input" type="number" value="0" />
-
-                      <label class="form-label" for="packTunnelSourceSelect">来源</label>
-                      <select id="packTunnelSourceSelect" class="input">
-                        <option value="local">local</option>
-                        <option value="remote">remote</option>
-                        <option value="system">system</option>
-                      </select>
-
-                      <label class="form-label" for="packTunnelCountryCodeInput">国家代码</label>
-                      <input id="packTunnelCountryCodeInput" class="input" type="text" maxlength="8" placeholder="例如 JP" />
-
-                      <label class="form-label" for="packTunnelCountryFlagInput">国旗</label>
-                      <input id="packTunnelCountryFlagInput" class="input" type="text" maxlength="16" placeholder="例如 🇯🇵" />
-
-                      <label class="form-label" for="packTunnelTransportKindSelect">传输层</label>
-                      <select id="packTunnelTransportKindSelect" class="input">
-                        <option value="">none</option>
-                        <option value="kcptun">kcptun</option>
-                      </select>
-
-                      <label class="form-label" for="packTunnelKcptunConfigInput">KCPTun JSON</label>
-                      <textarea id="packTunnelKcptunConfigInput" class="input textarea" rows="10" placeholder='{"key":"it'\''s a secret","crypt":"none","mode":"fast"}'></textarea>
-
-                      <div class="site-settings-actions inline-actions">
-                        <button id="packTunnelProfileResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                        <button id="packTunnelProfileSubmitBtn" class="btn-secondary" type="submit">保存配置</button>
-                      </div>
-                    </form>
-
-                    <div class="site-settings-form">
-                      <div class="settings-section-heading">
-                        <div>
-                          <div class="settings-section-title">配置列表</div>
-                          <p class="settings-section-text">激活中的配置会被普通用户和 iOS 端消费。</p>
-                        </div>
-                      </div>
-                      <ul id="packTunnelProfileList" class="tag-list"></ul>
-
-                      <div class="settings-section-heading packtunnel-rules-heading">
-                        <div>
-                          <div class="settings-section-title">Rules 文件</div>
-                          <p class="settings-section-text">当前只支持上传、下载和删除，不支持在线编辑。</p>
-                        </div>
-                      </div>
-                      <input id="packTunnelRulesFile" class="input" type="file" />
-                      <div class="site-settings-actions inline-actions">
-                        <button id="packTunnelRulesUploadBtn" class="btn-inline btn-secondary" type="button">上传 rules</button>
-                        <button id="packTunnelRulesDownloadBtn" class="btn-inline btn-secondary" type="button">下载 rules</button>
-                        <button id="packTunnelRulesDeleteBtn" class="btn-inline" type="button">删除 rules</button>
-                      </div>
-                      <div id="packTunnelRulesStatus" class="status-text">默认下载全局 rules 文件。</div>
                     </div>
+                    <ul id="latchProxyList" class="tag-list"></ul>
                   </div>
                 </div>
               </div>
+
+              <!-- ===== Rules ===== -->
+              <div class="latch-tab-panel" data-latch-panel="rules" hidden>
+                <div class="site-admin-grid site-admin-grid-wide">
+                  <div class="site-settings-form">
+                    <div class="latch-form-title">
+                      <span class="badge"><span id="latchRuleFormTitle">添加规则</span></span>
+                    </div>
+
+                    <label class="form-label" for="latchRuleNameInput">名称</label>
+                    <input id="latchRuleNameInput" class="input" type="text" maxlength="80" placeholder="例如 广告过滤" />
+
+                    <div class="latch-source-tabs">
+                      <button id="latchRuleSourceInlineBtn" class="latch-source-btn active" type="button">在线编辑</button>
+                      <button id="latchRuleSourceFileBtn" class="latch-source-btn" type="button">上传文件</button>
+                    </div>
+
+                    <div id="latchRuleInlineSection">
+                      <label class="form-label" for="latchRuleContentInput">内容</label>
+                      <textarea id="latchRuleContentInput" class="input textarea latch-rules-textarea" rows="16"
+                        placeholder="# 每行一条规则&#10;DOMAIN-SUFFIX,example.com,PROXY&#10;IP-CIDR,192.168.0.0/16,DIRECT"></textarea>
+                      <div class="site-settings-actions inline-actions">
+                        <button id="latchRuleResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                        <button id="latchRuleSubmitBtn" class="btn-secondary" type="button">保存规则</button>
+                      </div>
+                    </div>
+
+                    <div id="latchRuleFileSection" hidden>
+                      <label class="form-label" for="latchRuleFileInput">选择文件</label>
+                      <input id="latchRuleFileInput" class="input" type="file" accept=".txt,.list,.conf" />
+                      <div class="site-settings-actions inline-actions">
+                        <button id="latchRuleUploadBtn" class="btn-secondary" type="button">上传文件</button>
+                      </div>
+                    </div>
+
+                    <div id="latchRuleStatus" class="status-text"></div>
+                  </div>
+
+                  <div>
+                    <div class="settings-section-heading">
+                      <div>
+                        <div class="settings-section-title">规则列表</div>
+                        <p class="settings-section-text">支持在线编辑和文件上传，内容变化时版本自动递增。</p>
+                      </div>
+                    </div>
+                    <ul id="latchRuleList" class="tag-list"></ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== Profiles ===== -->
+              <div class="latch-tab-panel" data-latch-panel="profiles" hidden>
+                <div class="site-admin-grid site-admin-grid-wide">
+                  <div class="site-settings-form">
+                    <div class="latch-form-title">
+                      <span class="badge"><span id="latchProfileFormTitle">添加配置</span></span>
+                    </div>
+
+                    <label class="form-label" for="latchProfileNameInput">名称</label>
+                    <input id="latchProfileNameInput" class="input" type="text" maxlength="80" placeholder="例如 工作 / 学习 / 社交" />
+
+                    <label class="form-label" for="latchProfileDescInput">备注</label>
+                    <input id="latchProfileDescInput" class="input" type="text" maxlength="200" placeholder="例如 日常工作使用" />
+
+                    <div class="settings-info-grid packtunnel-options-grid" style="margin-bottom:4px">
+                      <label class="form-checkbox" for="latchProfileEnabledInput">
+                        <input id="latchProfileEnabledInput" type="checkbox" checked />
+                        <span>Enabled</span>
+                      </label>
+                      <label class="form-checkbox" for="latchProfileShareableInput">
+                        <input id="latchProfileShareableInput" type="checkbox" />
+                        <span>Shareable</span>
+                      </label>
+                    </div>
+
+                    <div class="latch-profile-section">
+                      <div class="form-label" style="margin-bottom:8px">关联代理（可多选，可不选）</div>
+                      <div id="latchProfileProxyCheckboxes" class="latch-check-group"></div>
+                    </div>
+
+                    <div class="latch-profile-section">
+                      <div class="form-label" style="margin-bottom:8px">关联规则（选一条，可不选）</div>
+                      <div id="latchProfileRuleRadios" class="latch-check-group"></div>
+                    </div>
+
+                    <div class="site-settings-actions inline-actions">
+                      <button id="latchProfileResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
+                      <button id="latchProfileSubmitBtn" class="btn-secondary" type="button">保存配置</button>
+                    </div>
+                    <div id="latchProfileStatus" class="status-text"></div>
+                  </div>
+
+                  <div>
+                    <div class="settings-section-heading">
+                      <div>
+                        <div class="settings-section-title">配置列表</div>
+                        <p class="settings-section-text">Shareable + Enabled 的配置对已登录用户可见，含最新版本 proxy/rule。</p>
+                      </div>
+                    </div>
+                    <ul id="latchProfileList" class="tag-list"></ul>
+                  </div>
+                </div>
+              </div>
+
             </section>
 
           </div>

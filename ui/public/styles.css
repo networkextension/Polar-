@@ -2320,3 +2320,177 @@ textarea {
   border-color: var(--active-border);
   color: var(--accent);
 }
+
+/* ---------------------------------------------------------------------------
+   Latch service panel
+   --------------------------------------------------------------------------- */
+
+.latch-subtabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.latch-subtab-btn {
+  width: auto;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+  border: 1px solid var(--border);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.latch-subtab-btn:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--active-bg);
+  color: var(--accent);
+  border-color: var(--active-border);
+}
+
+.latch-subtab-btn.active {
+  background: var(--active-bg);
+  color: var(--accent);
+  border-color: var(--active-border);
+  box-shadow: 0 0 0 2px var(--active-shadow);
+  transform: none;
+}
+
+.latch-tab-panel {
+  display: grid;
+}
+
+.latch-tab-panel[hidden] {
+  display: none !important;
+}
+
+.latch-form-title {
+  margin-bottom: 14px;
+}
+
+.latch-config-textarea {
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  min-height: 180px;
+}
+
+.latch-rules-textarea {
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  min-height: 260px;
+}
+
+.latch-source-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.latch-source-btn {
+  width: auto;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--secondary-bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+  border: 1px solid var(--border);
+  transition: background 0.15s, color 0.15s;
+}
+
+.latch-source-btn:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--active-bg);
+  color: var(--accent);
+}
+
+.latch-source-btn.active {
+  background: var(--active-bg);
+  color: var(--accent);
+  border-color: var(--active-border);
+  transform: none;
+  box-shadow: none;
+}
+
+.latch-check-group {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.latch-check-group:empty::after {
+  content: "暂无数据";
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.latch-profile-section {
+  margin-bottom: 4px;
+}
+
+.latch-proxy-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--badge-bg);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  margin-right: 4px;
+}
+
+.latch-version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(34,197,94,0.12);
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.latch-sha-text {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: "SF Mono", ui-monospace, monospace;
+  opacity: 0.7;
+}
+
+.latch-item-flags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.latch-flag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.latch-flag.on {
+  color: var(--accent-2);
+  border-color: rgba(34,197,94,0.3);
+  background: rgba(34,197,94,0.08);
+}

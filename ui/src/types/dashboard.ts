@@ -275,3 +275,59 @@ export type PackTunnelRuleFile = {
 export type PackTunnelRuleResponse = ErrorResponse & {
   rule?: PackTunnelRuleFile;
 };
+
+// ---------------------------------------------------------------------------
+// Latch service
+// ---------------------------------------------------------------------------
+
+export type LatchProxyType = "ss" | "ss3" | "kcp_over_http" | "kcp_over_ss" | "kcp_over_ss3";
+
+export type LatchProxy = {
+  id: string;
+  group_id: string;
+  name: string;
+  type: LatchProxyType;
+  config: Record<string, unknown>;
+  sha1: string;
+  version: number;
+  created_at: string;
+};
+
+export type LatchRule = {
+  id: string;
+  group_id: string;
+  name: string;
+  content: string;
+  sha1: string;
+  version: number;
+  created_at: string;
+};
+
+export type LatchProfile = {
+  id: string;
+  name: string;
+  description: string;
+  proxy_group_ids: string[];
+  rule_group_id: string;
+  enabled: boolean;
+  shareable: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LatchProxyListResponse = ErrorResponse & {
+  proxies?: LatchProxy[];
+  proxy?: LatchProxy;
+  versions?: LatchProxy[];
+};
+
+export type LatchRuleListResponse = ErrorResponse & {
+  rules?: LatchRule[];
+  rule?: LatchRule;
+  versions?: LatchRule[];
+};
+
+export type LatchProfileListResponse = ErrorResponse & {
+  profiles?: LatchProfile[];
+  profile?: LatchProfile;
+};
