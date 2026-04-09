@@ -47,10 +47,14 @@ async function build() {
   await cp(publicDir, distDir, { recursive: true });
 
   const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+  const builtAt = new Date().toISOString();
+  const buildHash = Date.now().toString(36); // short cache-busting token
+
   const meta = {
     name: pkg.name,
     version: pkg.version,
-    builtAt: new Date().toISOString(),
+    builtAt,
+    buildHash,
     output: "dist",
     deployHint: "Copy the contents of ui/dist into your web server ui directory.",
   };
@@ -61,7 +65,14 @@ async function build() {
     "utf8"
   );
 
-  console.log("Built UI into ui/dist");
+  // Also write build-meta.json into public/ so the dev server can read it.
+  await writeFile(
+    path.join(publicDir, "build-meta.json"),
+    `${JSON.stringify(meta, null, 2)}\n`,
+    "utf8"
+  );
+
+  console.log(`Built UI into ui/dist (hash: ${buildHash})`);
 }
 
 if (process.argv.includes("--clean")) {
