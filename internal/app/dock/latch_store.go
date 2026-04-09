@@ -3,6 +3,7 @@ package dock
 import (
 	"crypto/sha1"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -611,7 +612,7 @@ func (a *stringArray) Scan(src any) error {
 }
 
 // Value implements driver.Valuer for text[] columns.
-func (a stringArray) Value() (any, error) {
+func (a stringArray) Value() (driver.Value, error) {
 	if len(a) == 0 {
 		return "{}", nil
 	}
