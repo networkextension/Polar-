@@ -8,49 +8,77 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="site-shell">
-    <div class="page-shell-wide">
-      <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="Site icon" />
-        <div class="site-brand-copy">
-          <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
-        </div>
-      </a>
-
-      <div class="dashboard">
-      <div class="dashboard-header">
-        <div>
-          <h1 data-i18n="editor.heading">Markdown Editor</h1>
-          <p id="welcomeText" data-i18n="editor.newEntry">New entry</p>
-        </div>
-        <button id="backBtn" class="btn-inline btn-secondary" type="button" data-i18n="editor.backToDashboard">Back to Dashboard</button>
-      </div>
-
-      <div id="alert" class="alert"></div>
-
-      <div class="panel">
-        <div class="toolbar">
-          <input id="titleInput" type="text" data-i18n-placeholder="editor.titlePlaceholder" placeholder="Title" />
-          <button id="saveBtn" class="btn-inline" type="button" data-i18n="editor.save">Save</button>
-        </div>
-        <div class="editor-options">
-          <label class="checkbox-label" for="publicToggle">
-            <input id="publicToggle" type="checkbox" />
-            <span data-i18n="editor.publicLabel">Public (others can view but not edit)</span>
-          </label>
-          <div id="publicHint" class="status-text" data-i18n="editor.publicByDefault">Visible only to you by default.</div>
-        </div>
-        <div class="grid">
-          <div>
-            <textarea id="contentInput" data-i18n-placeholder="editor.contentPlaceholder" placeholder="Enter Markdown content here..."></textarea>
-          </div>
-          <div>
-            <div class="badge" data-i18n="editor.previewBadge">Preview (original)</div>
-            <div id="preview" class="content-box" data-i18n="editor.noContent">No content</div>
+  <body class="lp-page">
+    <div class="lp-app">
+      <aside class="lp-sidebar">
+        <a class="lp-brand" href="/dashboard.html" data-site-brand>
+          <img data-site-icon alt="" />
+          <span class="lp-brand-name" data-site-name>Polar-</span>
+        </a>
+        <nav class="lp-nav">
+          <a class="lp-nav-item" href="/dashboard.html">
+            <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
+          </a>
+          <a class="lp-nav-item" href="/posts.html">
+            <span class="lp-nav-icon">◎</span><span>Posts</span>
+          </a>
+          <a class="lp-nav-item" href="/markdowns.html">
+            <span class="lp-nav-icon">◈</span><span>Markdowns</span>
+          </a>
+          <a class="lp-nav-item" href="/chat.html">
+            <span class="lp-nav-icon">◉</span><span>Chat</span>
+          </a>
+          <a class="lp-nav-item active" href="/editor.html">
+            <span class="lp-nav-icon">✎</span><span>Editor</span>
+          </a>
+          <a class="lp-nav-item" href="/latch.html">
+            <span class="lp-nav-icon">⚙</span><span>Latch</span>
+          </a>
+        </nav>
+        <div class="lp-sidebar-foot">
+          <div class="lp-foot-avatar" id="lpFootAvatar">U</div>
+          <div class="lp-foot-info">
+            <div class="lp-foot-name" id="lpFootName">—</div>
+            <div class="lp-foot-role" id="lpFootRole">—</div>
           </div>
         </div>
-      </div>
+      </aside>
+
+      <div class="lp-main">
+        <div class="lp-topbar">
+          <span class="lp-topbar-title" data-i18n="editor.heading">Markdown Editor</span>
+          <div class="lp-topbar-end">
+            <span id="welcomeText" class="lp-mode-badge" data-i18n="editor.newEntry">New entry</span>
+            <button id="saveBtn" class="lp-topbar-back" type="button" data-i18n="editor.save">Save</button>
+            <button id="backBtn" class="lp-topbar-back" type="button" data-i18n="editor.backToDashboard">Dashboard</button>
+          </div>
+        </div>
+
+        <div class="lp-content">
+          <div id="alert" class="alert"></div>
+
+          <div class="lp-section">
+            <div class="toolbar">
+              <input id="titleInput" type="text" data-i18n-placeholder="editor.titlePlaceholder" placeholder="Title" />
+            </div>
+            <div class="editor-options">
+              <label class="checkbox-label" for="publicToggle">
+                <input id="publicToggle" type="checkbox" />
+                <span data-i18n="editor.publicLabel">Public (others can view but not edit)</span>
+              </label>
+              <div id="publicHint" class="status-text" data-i18n="editor.publicByDefault">Visible only to you by default.</div>
+            </div>
+            <div class="grid">
+              <div>
+                <textarea id="contentInput" data-i18n-placeholder="editor.contentPlaceholder" placeholder="Enter Markdown content here..."></textarea>
+              </div>
+              <div>
+                <div class="badge" data-i18n="editor.previewBadge">Preview (original)</div>
+                <div id="preview" class="content-box" data-i18n="editor.noContent">No content</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

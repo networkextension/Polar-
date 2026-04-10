@@ -1,5 +1,5 @@
 import { fetchLatchProxies, createLatchProxy, updateLatchProxy, removeLatchProxy, fetchLatchProxyVersions, rollbackLatchProxy, fetchLatchRules, createLatchRule, createLatchRuleFromFile, updateLatchRule, uploadLatchRuleFile, removeLatchRule, fetchLatchRuleVersions, rollbackLatchRule, fetchLatchAdminProfiles, createLatchProfile, updateLatchProfile, removeLatchProfile, fetchLatchProfiles, } from "./api/dashboard.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, hydrateSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
 // ---------------------------------------------------------------------------
@@ -382,9 +382,7 @@ async function init() {
     const me = await res.json();
     isAdmin = me.role === "admin";
     latchWelcome.textContent = isAdmin ? "管理员模式" : "只读模式";
-    lpFootName.textContent = me.username || "—";
-    lpFootRole.textContent = isAdmin ? "Administrator" : "Member";
-    lpFootAvatar.textContent = (me.username || "U")[0].toUpperCase();
+    hydrateSidebarFoot(me.username, me.role);
     if (isAdmin) {
         latchTabProxies.hidden = false;
         latchTabRules.hidden = false;

@@ -5,7 +5,7 @@ import { resolveAvatar } from "./lib/avatar.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, hydrateSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const chatWelcome = byId("chatWelcome");
@@ -321,6 +321,7 @@ async function loadProfile() {
     }
     currentUserId = data.user_id;
     chatWelcome.textContent = t("chat.welcome", { username: data.username });
+    hydrateSidebarFoot(data.username, data.role);
 }
 function renderChatList(chats) {
     chatList.innerHTML = "";

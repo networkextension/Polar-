@@ -8,31 +8,56 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="site-shell">
-    <div class="page-shell-wide">
-      <a class="site-brand-banner" href="/" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="Site icon" />
-        <div class="site-brand-copy">
-          <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
-        </div>
-      </a>
-
-      <div class="posts-page">
-        <div class="dashboard-header">
-          <div>
-            <h1 data-i18n="markdowns.title">Public Markdowns</h1>
-            <p id="markdownsWelcome" data-i18n="markdowns.browse">Browse all publicly published documents</p>
+  <body class="lp-page">
+    <div class="lp-app">
+      <aside class="lp-sidebar">
+        <a class="lp-brand" href="/dashboard.html" data-site-brand>
+          <img data-site-icon alt="" />
+          <span class="lp-brand-name" data-site-name>Polar-</span>
+        </a>
+        <nav class="lp-nav">
+          <a class="lp-nav-item" href="/dashboard.html">
+            <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
+          </a>
+          <a class="lp-nav-item" href="/posts.html">
+            <span class="lp-nav-icon">◎</span><span>Posts</span>
+          </a>
+          <a class="lp-nav-item active" href="/markdowns.html">
+            <span class="lp-nav-icon">◈</span><span>Markdowns</span>
+          </a>
+          <a class="lp-nav-item" href="/chat.html">
+            <span class="lp-nav-icon">◉</span><span>Chat</span>
+          </a>
+          <a class="lp-nav-item" href="/editor.html">
+            <span class="lp-nav-icon">✎</span><span>Editor</span>
+          </a>
+          <a class="lp-nav-item" href="/latch.html">
+            <span class="lp-nav-icon">⚙</span><span>Latch</span>
+          </a>
+        </nav>
+        <div class="lp-sidebar-foot">
+          <div class="lp-foot-avatar" id="lpFootAvatar">U</div>
+          <div class="lp-foot-info">
+            <div class="lp-foot-name" id="lpFootName">—</div>
+            <div class="lp-foot-role" id="lpFootRole">—</div>
           </div>
-          <div class="header-actions">
-            <a class="btn-inline btn-secondary" href="/dashboard.html" data-i18n="markdowns.backToDashboard">Back to Dashboard</a>
+        </div>
+      </aside>
+
+      <div class="lp-main">
+        <div class="lp-topbar">
+          <span class="lp-topbar-title" data-i18n="markdowns.title">Public Markdowns</span>
+          <div class="lp-topbar-end">
+            <span id="markdownsWelcome" class="lp-mode-badge" data-i18n="markdowns.browse">Browse all publicly published documents</span>
+            <a class="lp-topbar-back" href="/dashboard.html" data-i18n="markdowns.backToDashboard">Dashboard</a>
           </div>
         </div>
 
-        <div class="posts-list">
-          <div class="badge" data-i18n="markdowns.latestBadge">Latest public documents</div>
-          <div id="markdownList" class="markdown-list"></div>
-          <button id="markdownLoadMoreBtn" class="btn-inline btn-secondary" type="button" data-i18n="markdowns.loadMore">Load more</button>
+        <div class="lp-content">
+          <div class="lp-section">
+            <div id="markdownList" class="lp-feed"></div>
+            <button id="markdownLoadMoreBtn" class="lp-manage-btn" type="button" style="margin-top:12px;" data-i18n="markdowns.loadMore">Load more</button>
+          </div>
         </div>
       </div>
     </div>
