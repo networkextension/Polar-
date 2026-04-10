@@ -2510,6 +2510,42 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; overflow-y: auto;
 }
+.lp-sidebar.lp-sidebar-wide { width: 260px; min-width: 260px; }
+
+/* Entry list inside sidebar */
+.lp-sidebar-entries {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+.lp-sidebar-entries-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px 8px; flex-shrink: 0;
+}
+.lp-sidebar-entries-body {
+  flex: 1; overflow-y: auto; padding: 0 8px 8px;
+}
+.lp-sidebar-entries-quick {
+  display: grid; gap: 4px; padding: 6px 4px 10px;
+}
+.lp-sidebar-entries-quick a {
+  display: block; padding: 7px 10px; border-radius: 6px;
+  font-size: 13px; color: var(--muted); text-decoration: none;
+  background: var(--surface); border: 1px solid var(--border);
+  transition: background .12s, color .12s;
+}
+.lp-sidebar-entries-quick a:hover { background: var(--surface-strong); color: var(--text); }
+
+/* Sidebar foot with action icons */
+.lp-sidebar-foot-actions {
+  display: flex; gap: 4px; margin-left: auto; flex-shrink: 0;
+}
+.lp-foot-icon-btn {
+  width: 26px; height: 26px; border-radius: 6px; border: none;
+  background: none; cursor: pointer; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; padding: 0; box-shadow: none; transition: background .12s, color .12s;
+}
+.lp-foot-icon-btn:hover { background: var(--surface-strong); color: var(--text); box-shadow: none; transform: none; }
 .lp-brand {
   display: flex; align-items: center; gap: 10px;
   padding: 18px 16px 16px; border-bottom: 1px solid var(--border);

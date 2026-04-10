@@ -10,11 +10,14 @@
   </head>
   <body class="lp-page">
     <div class="lp-app">
-      <aside class="lp-sidebar">
+
+      <!-- ── Sidebar (wide variant — entries live here) ── -->
+      <aside class="lp-sidebar lp-sidebar-wide" id="entryDrawer">
         <a class="lp-brand" href="/dashboard.html" data-site-brand>
           <img data-site-icon alt="" />
           <span class="lp-brand-name" data-site-name>Polar-</span>
         </a>
+
         <nav class="lp-nav">
           <a class="lp-nav-item active" href="/dashboard.html">
             <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
@@ -35,84 +38,70 @@
             <span class="lp-nav-icon">⚙</span><span>Latch</span>
           </a>
         </nav>
+
+        <!-- Markdown entries section -->
+        <div class="lp-sidebar-entries">
+          <div class="lp-sidebar-entries-head">
+            <span class="badge" data-i18n="dashboard.markdownEntries">Markdown entries</span>
+            <button id="addTagBtn" class="lp-manage-btn" type="button" hidden data-i18n="dashboard.newTag">New Tag</button>
+          </div>
+          <div class="lp-sidebar-entries-body">
+            <div class="lp-sidebar-entries-quick">
+              <a href="/chat.html" data-i18n="dashboard.privateChat">Chat</a>
+              <a href="/chat.html?user_id=system&username=system" data-i18n="dashboard.aiAssistant">AI Assistant</a>
+            </div>
+            <ul id="entryList" class="list"></ul>
+            <button id="loadMoreBtn" class="lp-manage-btn" type="button" style="width:100%;justify-content:center;margin-top:6px;" data-i18n="dashboard.loadMore">Load more</button>
+          </div>
+        </div>
+
+        <!-- Footer: user + actions -->
         <div class="lp-sidebar-foot">
           <div class="lp-foot-avatar" id="lpFootAvatar">U</div>
           <div class="lp-foot-info">
             <div class="lp-foot-name" id="lpFootName">—</div>
             <div class="lp-foot-role" id="lpFootRole">—</div>
           </div>
+          <div class="lp-sidebar-foot-actions">
+            <button class="lp-foot-icon-btn" type="button" data-open-settings-center data-settings-target="personalization" title="Settings">⚙</button>
+            <button id="logoutBtn" class="lp-foot-icon-btn" type="button" title="Log out">⏻</button>
+          </div>
         </div>
+
+        <!-- Hidden elements kept for JS references -->
+        <img id="settingsCardAvatar" hidden alt="" />
+        <span id="settingsCardName" hidden></span>
+        <span id="settingsCardMeta" hidden></span>
+        <span id="settingsCardRoleBadge" hidden></span>
+        <button id="openSiteAdminBtn" hidden type="button" data-settings-target="site"></button>
+        <button id="drawerToggleBtn" hidden type="button"></button>
+        <button id="drawerCloseBtn" hidden type="button"></button>
       </aside>
 
+      <!-- ── Main ── -->
       <div class="lp-main">
         <div class="lp-topbar">
           <span class="lp-topbar-title" data-i18n="dashboard.title">Dashboard</span>
           <div class="lp-topbar-end">
             <span id="welcomeText" class="lp-mode-badge" data-i18n="dashboard.loading">Loading...</span>
             <div id="dashboardRoleBadge" class="lp-mode-badge" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
-            <button class="lp-topbar-back" type="button" data-open-settings-center data-settings-target="personalization" data-i18n="dashboard.profileSettings">Settings</button>
-            <button id="newEntryBtn" class="lp-topbar-back" type="button" data-i18n="dashboard.newMarkdown">New Markdown</button>
+            <button id="newEntryBtn" class="lp-topbar-back" type="button" data-i18n="dashboard.newMarkdown">＋ New Markdown</button>
           </div>
         </div>
 
+        <!-- Full-width content preview -->
         <div class="lp-content" style="padding:0; overflow:hidden; flex:1; display:flex;">
-          <div class="lp-dash-layout" style="height:100%;">
-
-            <!-- Entry sidebar -->
-            <div class="lp-entry-sidebar" id="entryDrawer">
-              <div class="lp-entry-sidebar-head">
-                <span class="badge" data-i18n="dashboard.markdownEntries">Markdown entries</span>
-                <button id="drawerCloseBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.drawerClose">Collapse</button>
-              </div>
-              <div class="lp-entry-sidebar-body">
-                <div class="drawer-section">
-                  <div class="badge" data-i18n="dashboard.quickAccess">Quick access</div>
-                  <p class="drawer-help" data-i18n="dashboard.drawerHelp">Quick access to direct messages or AI assistant.</p>
-                  <a class="btn-secondary drawer-action-btn" href="/chat.html" data-i18n="dashboard.privateChat">Chat</a>
-                  <a class="btn-secondary drawer-action-btn" href="/chat.html?user_id=system&username=system" data-i18n="dashboard.aiAssistant">AI Assistant</a>
-                </div>
-
-                <button id="addTagBtn" class="btn-secondary group-action-btn" type="button" hidden data-i18n="dashboard.newTag">New Tag</button>
-
-                <ul id="entryList" class="list"></ul>
-                <button id="loadMoreBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.loadMore">Load more</button>
-              </div>
-              <div class="lp-entry-sidebar-foot">
-                <div class="group-card settings-entry-card">
-                  <div class="settings-entry-head">
-                    <img id="settingsCardAvatar" class="avatar avatar-sm" alt="User avatar" />
-                    <div class="settings-entry-copy">
-                      <div class="identity-line">
-                        <div id="settingsCardName" class="group-name" data-i18n="dashboard.loadingUser">Loading...</div>
-                        <div id="settingsCardRoleBadge" class="role-badge role-badge-admin role-badge-inline" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
-                      </div>
-                      <div id="settingsCardMeta" class="group-meta"></div>
-                    </div>
-                  </div>
-                  <div class="settings-entry-actions">
-                    <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="personalization" data-i18n="dashboard.profile">Profile</button>
-                    <button id="openSiteAdminBtn" class="btn-secondary group-action-btn" type="button" data-settings-target="site" data-i18n="dashboard.settingsCenter">Settings Center</button>
-                  </div>
-                  <button id="logoutBtn" class="btn-secondary group-action-btn" type="button" data-i18n="dashboard.logout">Log out</button>
-                </div>
+          <div class="lp-preview-main" style="border-radius:0; border:none; border-left:1px solid var(--border);">
+            <div class="lp-preview-head">
+              <span class="badge" data-i18n="dashboard.contentPreview">Content preview</span>
+              <div class="inline-actions">
+                <button id="editBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.editEntry">Edit</button>
+                <button id="deleteBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.deleteEntry">Delete</button>
               </div>
             </div>
-
-            <!-- Preview main -->
-            <div class="lp-preview-main">
-              <div class="lp-preview-head">
-                <span class="badge" data-i18n="dashboard.contentPreview">Content preview</span>
-                <div class="inline-actions">
-                  <button id="drawerToggleBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.drawerToggle">Entry list</button>
-                  <button id="editBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.editEntry">Edit</button>
-                  <button id="deleteBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.deleteEntry">Delete</button>
-                </div>
-              </div>
-              <div class="lp-preview-body">
-                <div id="entryContent" class="content-box" data-i18n="dashboard.selectEntry">Select an entry from the sidebar</div>
-              </div>
+            <div class="lp-preview-body">
+              <div id="entryContent" class="content-box" data-i18n="dashboard.selectEntry">Select an entry from the sidebar</div>
             </div>
-
           </div>
         </div>
       </div>
