@@ -646,6 +646,12 @@ async function loadTaskResults(postId) {
     })
         .join("");
     enhancePostVideos(container);
+    container.querySelectorAll(".post-images").forEach((group) => {
+        const srcs = Array.from(group.querySelectorAll("img")).map((img) => img.src);
+        group.querySelectorAll("img").forEach((img, idx) => {
+            img.addEventListener("click", () => openImageModal(srcs, idx));
+        });
+    });
 }
 async function loadPost() {
     const postId = getPostId();
