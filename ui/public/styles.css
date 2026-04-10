@@ -2501,7 +2501,7 @@ textarea {
 
 /* Layout */
 body.lp-page { background: var(--page-bg); padding: 0; display: block; }
-.lp-app { display: flex; min-height: 100vh; }
+.lp-app { display: flex; height: 100vh; overflow: hidden; }
 
 /* Sidebar */
 .lp-sidebar {
