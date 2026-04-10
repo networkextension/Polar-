@@ -255,9 +255,12 @@ function enhancePostVideos(container) {
     });
 }
 function enhancePostImages(container, images) {
-    container.querySelectorAll(".post-images img").forEach((imageEl, index) => {
-        imageEl.addEventListener("click", () => {
-            openImageModal(images, index);
+    const allImgs = Array.from(container.querySelectorAll(".post-images img"));
+    const gallery = images.length ? images : allImgs.map((el) => el.src);
+    allImgs.forEach((imageEl, index) => {
+        imageEl.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openImageModal(gallery, index);
         });
     });
 }
