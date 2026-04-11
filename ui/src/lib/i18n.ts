@@ -564,6 +564,16 @@ const en: Record<string, string> = {
   "dashboard.passkeyFailed": "Passkey registration failed",
   "dashboard.unknownTime": "Unknown time",
 
+  // Nav
+  "nav.dashboard": "Dashboard",
+  "nav.posts": "Posts",
+  "nav.markdowns": "Markdowns",
+  "nav.chat": "Chat",
+  "nav.editor": "Editor",
+  "nav.latch": "Latch",
+  "nav.userAdmin": "User Admin",
+  "nav.settings": "Settings",
+
   // Admin
   "admin.title": "User Management",
   "admin.topbarTitle": "Admin Center",
@@ -1157,6 +1167,16 @@ const zhCN: Record<string, string> = {
   "dashboard.passkeyFailed": "Passkey 绑定失败",
   "dashboard.unknownTime": "未知时间",
 
+  // Nav
+  "nav.dashboard": "Dashboard",
+  "nav.posts": "Posts",
+  "nav.markdowns": "Markdowns",
+  "nav.chat": "Chat",
+  "nav.editor": "Editor",
+  "nav.latch": "Latch",
+  "nav.userAdmin": "用户管理",
+  "nav.settings": "设置",
+
   // Admin
   "admin.title": "用户管理",
   "admin.topbarTitle": "管理员中心",
@@ -1241,6 +1261,9 @@ export function applyI18n(): void {
   });
   document.querySelectorAll<HTMLElement>("[data-i18n-title]").forEach((el) => {
     document.title = t(el.getAttribute("data-i18n-title")!);
+  });
+  document.querySelectorAll<HTMLElement>("[data-i18n-tooltip]").forEach((el) => {
+    el.title = t(el.getAttribute("data-i18n-tooltip")!);
   });
   document.documentElement.lang = getLang();
 }
