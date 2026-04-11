@@ -42,6 +42,17 @@ type User struct {
 	CreatedAt     time.Time  `json:"created_at"`
 }
 
+type AdminUserSummary struct {
+	ID         string     `json:"id"`
+	Username   string     `json:"username"`
+	Email      string     `json:"email"`
+	Role       string     `json:"role"`
+	IsOnline   bool       `json:"is_online"`
+	DeviceType string     `json:"device_type"`
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
 type Session struct {
 	ID         string
 	UserID     string
@@ -1045,6 +1056,103 @@ func (s *Server) listLoginRecords(userID string, limit int) ([]LoginRecord, erro
 		return nil, err
 	}
 	return records, nil
+}
+
+func (s *Server) listUsersForAdmin(query string, limit, offset int) ([]AdminUserSummary, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	filter := "%"
+	if trimmed := strings.TrimSpace(query); trimmed != "" {
+		filter = "%" + trimmed + "%"
+	}
+
+	var total int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*)
+		   FROM users
+		  WHERE id <> $1
+		    AND role <> 'admin'
+		    AND NOT EXISTS (
+		      SELECT 1
+		        FROM bot_users b
+		       WHERE b.bot_user_id = users.id
+		    )
+		    AND ($2 = '%' OR id ILIKE $2 OR username ILIKE $2 OR email ILIKE $2)`,
+		systemUserID,
+		filter,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.Query(
+		`SELECT id, username, email, role, is_online, last_active_device_type, last_seen_at, created_at
+		   FROM users
+		  WHERE id <> $1
+		    AND role <> 'admin'
+		    AND NOT EXISTS (
+		      SELECT 1
+		        FROM bot_users b
+		       WHERE b.bot_user_id = users.id
+		    )
+		    AND ($2 = '%' OR id ILIKE $2 OR username ILIKE $2 OR email ILIKE $2)
+		  ORDER BY created_at DESC, id DESC
+		  LIMIT $3 OFFSET $4`,
+		systemUserID,
+		filter,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]AdminUserSummary, 0, limit)
+	for rows.Next() {
+		var item AdminUserSummary
+		var lastSeenAt sql.NullTime
+		if err := rows.Scan(
+			&item.ID,
+			&item.Username,
+			&item.Email,
+			&item.Role,
+			&item.IsOnline,
+			&item.DeviceType,
+			&lastSeenAt,
+			&item.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		if lastSeenAt.Valid {
+			item.LastSeenAt = &lastSeenAt.Time
+		}
+		item.DeviceType = normalizeDeviceType(item.DeviceType)
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+func (s *Server) updateUserPasswordHash(userID, passwordHash string) (bool, error) {
+	result, err := s.db.Exec(`UPDATE users SET password_hash = $2 WHERE id = $1`, userID, passwordHash)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
 }
 
 func hashPassword(password string) (string, error) {

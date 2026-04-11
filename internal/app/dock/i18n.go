@@ -17,6 +17,7 @@ var messageCatalog = map[string]map[string]string{
 	"en": {
 		"common.invalid_input":            "Invalid input",
 		"common.server_error":             "Server error",
+		"common.not_found":                "Resource not found",
 		"auth.unauthorized":               "Not logged in or session expired",
 		"auth.forbidden":                  "Insufficient permissions",
 		"auth.already_logged_in":          "Already logged in",
@@ -47,6 +48,7 @@ var messageCatalog = map[string]map[string]string{
 	"zh-CN": {
 		"common.invalid_input":            "无效的输入数据",
 		"common.server_error":             "服务器错误",
+		"common.not_found":                "资源不存在",
 		"auth.unauthorized":               "未登录或会话已失效",
 		"auth.forbidden":                  "权限不足",
 		"auth.already_logged_in":          "当前已登录",

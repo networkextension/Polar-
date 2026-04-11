@@ -34,9 +34,9 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
-import { hydrateSiteBrand, renderSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
-import { t } from "./lib/i18n.js";
+import { t, getLang, setLang, applyI18n } from "./lib/i18n.js";
 import type {
   ApplePushCertificate,
   BotPayload,
@@ -66,6 +66,8 @@ const drawerBackdrop = byId<HTMLElement>("drawerBackdrop");
 const entryDrawer = byId<HTMLElement>("entryDrawer");
 const loginHistoryList = byId<HTMLUListElement>("loginHistoryList");
 const themeToggleBtn = byId<HTMLButtonElement>("themeToggleBtn");
+const languageToggleBtn = byId<HTMLButtonElement>("languageToggleBtn");
+const languageCurrentValue = byId<HTMLElement>("languageCurrentValue");
 const passkeyRegisterBtn = byId<HTMLButtonElement>("passkeyRegisterBtn");
 const passkeyStatus = byId<HTMLElement>("passkeyStatus");
 const passkeyList = byId<HTMLUListElement>("passkeyList");
@@ -223,6 +225,12 @@ function syncThemeButton(theme: ThemeName): void {
   themeCurrentValue.textContent = theme === "mono" ? t("dashboard.themeMonochrome") : t("dashboard.themeDefault");
 }
 
+function syncLanguageButton(): void {
+  const lang = getLang();
+  languageCurrentValue.textContent = lang === "zh-CN" ? t("dashboard.languageChinese") : t("dashboard.languageEnglish");
+  languageToggleBtn.textContent = lang === "zh-CN" ? t("dashboard.switchToEnglish") : t("dashboard.switchToChinese");
+}
+
 function switchSettingsSection(section: "profile" | "personalization" | "settings" | "system" | "bots" | "site"): void {
   activeSettingsSection = section;
   const titles: Record<typeof activeSettingsSection, { title: string; lead: string }> = {
@@ -239,8 +247,8 @@ function switchSettingsSection(section: "profile" | "personalization" | "setting
       lead: "",
     },
     system: {
-      title: "系统信息",
-      lead: "查看当前实例的版本、系统环境与程序所在分区的剩余容量。",
+      title: t("dashboard.systemTitle"),
+      lead: t("dashboard.systemLead"),
     },
     bots: {
       title: t("dashboard.botsManagementTitle"),
@@ -572,6 +580,7 @@ async function loadProfile(): Promise<void> {
   }
   userIcon.src = avatar;
   settingsCardAvatar.src = avatar;
+  renderSidebarFoot(data);
 }
 
 async function loadSiteAdminData(): Promise<void> {
@@ -1442,6 +1451,12 @@ themeToggleBtn.addEventListener("click", () => {
   syncThemeButton(nextTheme);
 });
 
+languageToggleBtn.addEventListener("click", () => {
+  setLang(getLang() === "en" ? "zh-CN" : "en");
+  applyI18n();
+  syncLanguageButton();
+});
+
 passkeyRegisterBtn.addEventListener("click", async () => {
   if (!window.PublicKeyCredential) {
     setStatusMessage(passkeyStatus, "当前浏览器不支持 Passkey。", "error");
@@ -1498,10 +1513,22 @@ sendEmailVerificationBtn.addEventListener("click", () => {
 const initialTheme = initStoredTheme();
 syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
+syncLanguageButton();
 switchSettingsSection(activeSettingsSection);
 
 void (async () => {
   await hydrateSiteBrand();
   await loadProfile();
   await Promise.all([loadEntries(true), loadLoginHistory(), loadPasskeys(), loadSiteAdminData()]);
+
+  // Open settings modal if redirected from another page with ?settings=
+  const settingsParam = new URLSearchParams(window.location.search).get("settings");
+  if (settingsParam) {
+    const validSections = ["profile", "personalization", "settings", "system", "bots", "site"] as const;
+    type Section = typeof validSections[number];
+    const section = validSections.includes(settingsParam as Section) ? (settingsParam as Section) : "personalization";
+    openSiteAdminModal(section);
+    // Clean the URL so refreshing doesn't reopen it
+    history.replaceState(null, "", window.location.pathname);
+  }
 })();

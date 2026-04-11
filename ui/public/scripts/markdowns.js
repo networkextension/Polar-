@@ -3,6 +3,7 @@ import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
 import { t } from "./lib/i18n.js";
+import { logout } from "./api/session.js";
 const markdownList = byId("markdownList");
 const markdownLoadMoreBtn = byId("markdownLoadMoreBtn");
 let nextOffset = 0;
@@ -66,3 +67,12 @@ markdownLoadMoreBtn.addEventListener("click", () => {
 });
 void hydrateSiteBrand();
 void loadMarkdowns(true);
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try {
+        await logout();
+    }
+    finally {
+        window.location.replace("/login.html");
+    }
+});

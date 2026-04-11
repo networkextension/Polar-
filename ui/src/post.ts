@@ -1,9 +1,10 @@
 import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
 import { t } from "./lib/i18n.js";
+import { logout } from "./api/session.js";
 
 const API_BASE = "";
 const postWelcome = byId<HTMLElement>("postWelcome");
@@ -381,6 +382,7 @@ async function loadProfile(): Promise<void> {
   currentUserId = data.user_id;
   currentUserRole = data.role || "user";
   postWelcome.textContent = t("post.welcome", { username: data.username });
+  renderSidebarFoot(data);
 }
 
 async function loadReplies(postId: number): Promise<void> {
@@ -893,3 +895,9 @@ async function init(): Promise<void> {
 }
 
 void init();
+
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  try { await logout(); } finally { window.location.replace("/login.html"); }
+});
+

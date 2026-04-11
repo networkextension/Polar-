@@ -8,86 +8,115 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body class="site-shell">
-    <div class="page-shell-wide">
-      <a class="site-brand-banner" href="/dashboard.html" data-site-brand>
-        <img class="site-brand-icon" data-site-icon alt="Site icon" />
-        <div class="site-brand-copy">
-          <div class="site-brand-name" data-site-name>Polar-</div>
-          <div class="site-brand-description" data-site-description data-i18n="brand.loading">Loading site info...</div>
-        </div>
-      </a>
+  <body class="lp-page">
+    <div class="lp-app">
 
-      <div class="dashboard">
-        <div class="dashboard-header">
-          <div>
-            <h1 data-i18n="dashboard.title">Dashboard</h1>
-            <p id="welcomeText" data-i18n="dashboard.loading">Loading user info...</p>
-            <div id="dashboardRoleBadge" class="role-badge role-badge-admin" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
+      <!-- ── Sidebar (wide variant — entries live here) ── -->
+      <aside class="lp-sidebar lp-sidebar-wide" id="entryDrawer">
+        <a class="lp-brand" href="/dashboard.html" data-site-brand>
+          <img data-site-icon alt="" />
+          <span class="lp-brand-name" data-site-name>Polar-</span>
+        </a>
+
+        <nav class="lp-nav">
+          <a class="lp-nav-item active" href="/dashboard.html">
+            <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
+          </a>
+          <a class="lp-nav-item" href="/posts.html">
+            <span class="lp-nav-icon">◎</span><span>Posts</span>
+          </a>
+          <a class="lp-nav-item" href="/markdowns.html">
+            <span class="lp-nav-icon">◈</span><span>Markdowns</span>
+          </a>
+          <a class="lp-nav-item" href="/chat.html">
+            <span class="lp-nav-icon">◉</span><span>Chat</span>
+          </a>
+          <a class="lp-nav-item" href="/editor.html">
+            <span class="lp-nav-icon">✎</span><span>Editor</span>
+          </a>
+          <a class="lp-nav-item" href="/latch.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">⚙</span><span data-i18n="nav.latch">Latch</span>
+          </a>
+          <a class="lp-nav-item" href="/bots.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">◉</span><span data-i18n="nav.bots">Bot Management</span>
+          </a>
+          <a class="lp-nav-item" href="/admin.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">☍</span><span data-i18n="nav.userAdmin">用户管理</span>
+          </a>
+        </nav>
+
+        <!-- Markdown entries section -->
+        <div class="lp-sidebar-entries">
+          <div class="lp-sidebar-entries-head">
+            <span class="badge" data-i18n="dashboard.markdownEntries">Markdown entries</span>
+            <button id="addTagBtn" class="lp-manage-btn" type="button" hidden data-i18n="dashboard.newTag">New Tag</button>
           </div>
-          <div class="header-actions">
-            <button id="drawerToggleBtn" class="btn-inline btn-secondary sidebar-toggle" type="button" data-i18n="dashboard.drawerToggle">Entry list</button>
-            <button class="btn-inline btn-secondary header-nav-link" type="button" data-open-settings-center data-settings-target="personalization" data-i18n="dashboard.profileSettings">Profile / Settings</button>
-            <button id="newEntryBtn" class="btn-inline btn-secondary header-nav-link" type="button" data-i18n="dashboard.newMarkdown">New Markdown</button>
-            <a class="btn-inline btn-secondary header-nav-link" href="/markdowns.html" data-i18n="dashboard.publicMarkdowns">Public Markdowns</a>
-            <a class="btn-inline btn-secondary header-nav-link" href="/posts.html" data-i18n="dashboard.posts">Posts</a>
-            <a class="btn-inline btn-secondary header-nav-link" href="/latch.html">Latch 服务</a>
+          <div class="lp-sidebar-entries-body">
+            <div class="lp-sidebar-entries-quick">
+              <a href="/chat.html" data-i18n="dashboard.privateChat">Chat</a>
+              <a href="/chat.html?user_id=system&username=system" data-i18n="dashboard.aiAssistant">AI Assistant</a>
+            </div>
+            <ul id="entryList" class="list"></ul>
+            <button id="loadMoreBtn" class="lp-manage-btn" type="button" style="width:100%;justify-content:center;margin-top:6px;" data-i18n="dashboard.loadMore">Load more</button>
           </div>
         </div>
 
-        <div class="drawer-layout">
-          <div id="drawerBackdrop" class="drawer-backdrop"></div>
-          <aside id="entryDrawer" class="panel entry-drawer">
-            <div class="drawer-header">
-              <div class="badge" data-i18n="dashboard.markdownEntries">Markdown entries</div>
-              <button id="drawerCloseBtn" class="btn-inline btn-secondary drawer-close" type="button" data-i18n="dashboard.drawerClose">Collapse</button>
-            </div>
-            <div class="drawer-body">
-              <div class="drawer-section">
-                <div class="badge" data-i18n="dashboard.quickAccess">Quick access</div>
-                <p class="drawer-help" data-i18n="dashboard.drawerHelp">Quick access to direct messages or AI assistant.</p>
-                <a class="btn-secondary drawer-action-btn" href="/chat.html" data-i18n="dashboard.privateChat">Chat</a>
-                <a class="btn-secondary drawer-action-btn" href="/chat.html?user_id=system&username=system" data-i18n="dashboard.aiAssistant">AI Assistant</a>
+        <!-- Footer: user + actions -->
+        <div class="lp-sidebar-foot">
+          <div class="lp-foot-avatar" id="lpFootAvatar">U</div>
+          <div class="lp-foot-info">
+            <div class="lp-foot-name" id="lpFootName">—</div>
+            <div class="lp-foot-role" id="lpFootRole">—</div>
+          </div>
+          <div class="lp-sidebar-foot-actions">
+            <button class="lp-foot-icon-btn" type="button" data-open-settings-center data-settings-target="personalization" title="Settings" data-i18n-tooltip="nav.settings">⚙</button>
+            <button id="logoutBtn" class="lp-foot-icon-btn" type="button" title="Log out">⏻</button>
+          </div>
+        </div>
+
+        <!-- Hidden elements kept for JS references -->
+        <img id="settingsCardAvatar" hidden alt="" />
+        <span id="settingsCardName" hidden></span>
+        <span id="settingsCardMeta" hidden></span>
+        <span id="settingsCardRoleBadge" hidden></span>
+        <button id="openSiteAdminBtn" hidden type="button" data-settings-target="site"></button>
+        <button id="drawerToggleBtn" hidden type="button"></button>
+        <button id="drawerCloseBtn" hidden type="button"></button>
+      </aside>
+
+      <!-- ── Main ── -->
+      <div class="lp-main">
+        <div class="lp-topbar">
+          <span class="lp-topbar-title" data-i18n="dashboard.title">Dashboard</span>
+          <div class="lp-topbar-end">
+            <span id="welcomeText" class="lp-mode-badge" data-i18n="dashboard.loading">Loading...</span>
+            <div id="dashboardRoleBadge" class="lp-mode-badge" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
+            <button id="newEntryBtn" class="lp-topbar-back" type="button" data-i18n="dashboard.newMarkdown">＋ New Markdown</button>
+          </div>
+        </div>
+
+        <!-- Full-width content preview -->
+        <div class="lp-content" style="padding:0; overflow:hidden; flex:1; display:flex;">
+          <div class="lp-preview-main" style="border-radius:0; border:none; border-left:1px solid var(--border);">
+            <div class="lp-preview-head">
+              <span class="badge" data-i18n="dashboard.contentPreview">Content preview</span>
+              <div class="inline-actions">
+                <button id="editBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.editEntry">Edit</button>
+                <button id="deleteBtn" class="lp-manage-btn" type="button" data-i18n="dashboard.deleteEntry">Delete</button>
               </div>
-
-              <button id="addTagBtn" class="btn-secondary group-action-btn" type="button" hidden data-i18n="dashboard.newTag">New Tag</button>
-
-              <ul id="entryList" class="list"></ul>
-              <button id="loadMoreBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.loadMore">Load more</button>
             </div>
-            <div class="drawer-footer">
-              <div class="group-card settings-entry-card">
-                <div class="settings-entry-head">
-                  <img id="settingsCardAvatar" class="avatar avatar-sm" alt="User avatar" />
-                  <div class="settings-entry-copy">
-                    <div class="identity-line">
-                      <div id="settingsCardName" class="group-name" data-i18n="dashboard.loadingUser">Loading...</div>
-                      <div id="settingsCardRoleBadge" class="role-badge role-badge-admin role-badge-inline" hidden data-i18n="dashboard.adminRoleBadge">Administrator</div>
-                    </div>
-                    <div id="settingsCardMeta" class="group-meta"></div>
-                  </div>
-                </div>
-                <div class="settings-entry-actions">
-                  <button class="btn-secondary group-action-btn" type="button" data-open-settings-center data-settings-target="personalization" data-i18n="dashboard.profile">Profile</button>
-                  <button id="openSiteAdminBtn" class="btn-secondary group-action-btn" type="button" data-settings-target="site" data-i18n="dashboard.settingsCenter">Settings Center</button>
-                </div>
-                <button id="logoutBtn" class="btn-secondary group-action-btn" type="button" data-i18n="dashboard.logout">Log out</button>
-              </div>
-            </div>
-          </aside>
-
-          <div class="panel drawer-main">
-            <div class="badge" data-i18n="dashboard.contentPreview">Content preview</div>
-            <div id="entryContent" class="content-box" data-i18n="dashboard.selectEntry">Select an entry from the sidebar</div>
-            <div class="toolbar" style="margin-top: 12px;">
-              <button id="editBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.editEntry">Edit</button>
-              <button id="deleteBtn" class="btn-inline" type="button" data-i18n="dashboard.deleteEntry">Delete</button>
+            <div class="lp-preview-body">
+              <div id="entryContent" class="content-box" data-i18n="dashboard.selectEntry">Select an entry from the sidebar</div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Backdrop for mobile drawer -->
+    <div id="drawerBackdrop" class="drawer-backdrop"></div>
+
+    <!-- Tag modal -->
     <div id="tagModal" class="modal" aria-hidden="true">
       <div class="modal-backdrop"></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="tagModalTitle">
@@ -116,6 +145,7 @@
       </div>
     </div>
 
+    <!-- Settings / site admin modal -->
     <div id="siteAdminModal" class="modal" aria-hidden="true">
       <div class="modal-backdrop"></div>
       <div class="modal-card modal-card-wide settings-center-card" role="dialog" aria-modal="true" aria-labelledby="siteAdminModalTitle">
@@ -138,17 +168,12 @@
               </button>
               <button class="settings-center-nav-btn" type="button" data-settings-nav="system">
                 <span class="settings-center-nav-icon">⌘</span>
-                <span>系统信息</span>
-              </button>
-              <button class="settings-center-nav-btn" type="button" data-settings-nav="bots">
-                <span class="settings-center-nav-icon">◉</span>
-                <span data-i18n="dashboard.navBots">Bot Management</span>
+                <span data-i18n="dashboard.navSystem">System Info</span>
               </button>
               <button class="settings-center-nav-btn" type="button" data-settings-nav="site" hidden>
                 <span class="settings-center-nav-icon">▣</span>
                 <span data-i18n="dashboard.navSite">Site Management</span>
               </button>
-
             </div>
           </aside>
 
@@ -320,8 +345,8 @@
                 <div class="settings-section-card">
                   <div class="settings-section-heading">
                     <div>
-                      <div class="settings-section-title">运行信息</div>
-                      <p class="settings-section-text">查看当前实例的版本、系统环境和程序所在分区剩余容量。</p>
+                      <div class="settings-section-title" data-i18n="dashboard.systemRunInfo">运行信息</div>
+                      <p class="settings-section-text" data-i18n="dashboard.systemRunInfoDesc">查看当前实例的版本、系统环境和程序所在分区剩余容量。</p>
                     </div>
                   </div>
                   <div class="settings-info-grid">
@@ -334,11 +359,11 @@
                       <strong id="settingsOS" class="settings-info-value">加载中...</strong>
                     </div>
                     <div class="settings-info-item">
-                      <span class="settings-info-label">CPU 架构</span>
+                      <span class="settings-info-label" data-i18n="dashboard.systemCpuArch">CPU 架构</span>
                       <strong id="settingsCPUArch" class="settings-info-value">加载中...</strong>
                     </div>
                     <div class="settings-info-item">
-                      <span class="settings-info-label">运行分区剩余容量</span>
+                      <span class="settings-info-label" data-i18n="dashboard.systemDiskCapacity">运行分区剩余容量</span>
                       <strong id="settingsPartitionCapacity" class="settings-info-value">加载中...</strong>
                       <span id="settingsPartitionPath" class="settings-info-meta"></span>
                     </div>
@@ -456,160 +481,10 @@
               </div>
             </section>
 
-            <!-- Latch section removed — moved to /latch.html -->
-
-            <!--
-              <div class="latch-tab-panel" data-latch-panel="proxies">
-                <div class="site-admin-grid site-admin-grid-wide">
-                  <div class="site-settings-form">
-                    <div class="latch-form-title">
-                      <span class="badge"><span id="latchProxyFormTitle">添加代理</span></span>
-                    </div>
-
-                    <label class="form-label" for="latchProxyNameInput">名称</label>
-                    <input id="latchProxyNameInput" class="input" type="text" maxlength="80" placeholder="例如 Tokyo-SS3" />
-
-                    <label class="form-label" for="latchProxyTypeSelect">类型</label>
-                    <select id="latchProxyTypeSelect" class="input">
-                      <option value="ss">ss</option>
-                      <option value="ss3">ss3</option>
-                      <option value="kcp_over_http">kcp_over_http</option>
-                      <option value="kcp_over_ss">kcp_over_ss</option>
-                      <option value="kcp_over_ss3">kcp_over_ss3</option>
-                    </select>
-
-                    <label class="form-label" for="latchProxyConfigInput">配置 JSON</label>
-                    <textarea id="latchProxyConfigInput" class="input textarea latch-config-textarea" rows="12"
-                      placeholder='{"server":"1.2.3.4","server_port":8388,"password":"secret","method":"aes-256-gcm"}'></textarea>
-
-                    <div class="site-settings-actions inline-actions">
-                      <button id="latchProxyResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                      <button id="latchProxySubmitBtn" class="btn-secondary" type="button">保存代理</button>
-                    </div>
-                    <div id="latchProxyStatus" class="status-text"></div>
-                  </div>
-
-                  <div>
-                    <div class="settings-section-heading">
-                      <div>
-                        <div class="settings-section-title">代理列表</div>
-                        <p class="settings-section-text">编辑内容变化时自动新建版本，SHA1 相同则不新建。</p>
-                      </div>
-                    </div>
-                    <ul id="latchProxyList" class="tag-list"></ul>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ===== Rules ===== -->
-              <div class="latch-tab-panel" data-latch-panel="rules" hidden>
-                <div class="site-admin-grid site-admin-grid-wide">
-                  <div class="site-settings-form">
-                    <div class="latch-form-title">
-                      <span class="badge"><span id="latchRuleFormTitle">添加规则</span></span>
-                    </div>
-
-                    <label class="form-label" for="latchRuleNameInput">名称</label>
-                    <input id="latchRuleNameInput" class="input" type="text" maxlength="80" placeholder="例如 广告过滤" />
-
-                    <div class="latch-source-tabs">
-                      <button id="latchRuleSourceInlineBtn" class="latch-source-btn active" type="button">在线编辑</button>
-                      <button id="latchRuleSourceFileBtn" class="latch-source-btn" type="button">上传文件</button>
-                    </div>
-
-                    <div id="latchRuleInlineSection">
-                      <label class="form-label" for="latchRuleContentInput">内容</label>
-                      <textarea id="latchRuleContentInput" class="input textarea latch-rules-textarea" rows="16"
-                        placeholder="# 每行一条规则&#10;DOMAIN-SUFFIX,example.com,PROXY&#10;IP-CIDR,192.168.0.0/16,DIRECT"></textarea>
-                      <div class="site-settings-actions inline-actions">
-                        <button id="latchRuleResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                        <button id="latchRuleSubmitBtn" class="btn-secondary" type="button">保存规则</button>
-                      </div>
-                    </div>
-
-                    <div id="latchRuleFileSection" hidden>
-                      <label class="form-label" for="latchRuleFileInput">选择文件</label>
-                      <input id="latchRuleFileInput" class="input" type="file" accept=".txt,.list,.conf" />
-                      <div class="site-settings-actions inline-actions">
-                        <button id="latchRuleUploadBtn" class="btn-secondary" type="button">上传文件</button>
-                      </div>
-                    </div>
-
-                    <div id="latchRuleStatus" class="status-text"></div>
-                  </div>
-
-                  <div>
-                    <div class="settings-section-heading">
-                      <div>
-                        <div class="settings-section-title">规则列表</div>
-                        <p class="settings-section-text">支持在线编辑和文件上传，内容变化时版本自动递增。</p>
-                      </div>
-                    </div>
-                    <ul id="latchRuleList" class="tag-list"></ul>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ===== Profiles ===== -->
-              <div class="latch-tab-panel" data-latch-panel="profiles" hidden>
-                <div class="site-admin-grid site-admin-grid-wide">
-                  <div class="site-settings-form">
-                    <div class="latch-form-title">
-                      <span class="badge"><span id="latchProfileFormTitle">添加配置</span></span>
-                    </div>
-
-                    <label class="form-label" for="latchProfileNameInput">名称</label>
-                    <input id="latchProfileNameInput" class="input" type="text" maxlength="80" placeholder="例如 工作 / 学习 / 社交" />
-
-                    <label class="form-label" for="latchProfileDescInput">备注</label>
-                    <input id="latchProfileDescInput" class="input" type="text" maxlength="200" placeholder="例如 日常工作使用" />
-
-                    <div class="settings-info-grid packtunnel-options-grid" style="margin-bottom:4px">
-                      <label class="form-checkbox" for="latchProfileEnabledInput">
-                        <input id="latchProfileEnabledInput" type="checkbox" checked />
-                        <span>Enabled</span>
-                      </label>
-                      <label class="form-checkbox" for="latchProfileShareableInput">
-                        <input id="latchProfileShareableInput" type="checkbox" />
-                        <span>Shareable</span>
-                      </label>
-                    </div>
-
-                    <div class="latch-profile-section">
-                      <div class="form-label" style="margin-bottom:8px">关联代理（可多选，可不选）</div>
-                      <div id="latchProfileProxyCheckboxes" class="latch-check-group"></div>
-                    </div>
-
-                    <div class="latch-profile-section">
-                      <div class="form-label" style="margin-bottom:8px">关联规则（选一条，可不选）</div>
-                      <div id="latchProfileRuleRadios" class="latch-check-group"></div>
-                    </div>
-
-                    <div class="site-settings-actions inline-actions">
-                      <button id="latchProfileResetBtn" class="btn-inline btn-secondary" type="button">清空</button>
-                      <button id="latchProfileSubmitBtn" class="btn-secondary" type="button">保存配置</button>
-                    </div>
-                    <div id="latchProfileStatus" class="status-text"></div>
-                  </div>
-
-                  <div>
-                    <div class="settings-section-heading">
-                      <div>
-                        <div class="settings-section-title">配置列表</div>
-                        <p class="settings-section-text">Shareable + Enabled 的配置对已登录用户可见，含最新版本 proxy/rule。</p>
-                      </div>
-                    </div>
-                    <ul id="latchProfileList" class="tag-list"></ul>
-                  </div>
-                </div>
-              </div>
-
-            -->
-
-          </div>
-        </div>
-      </div>
-    </div>
+          </div><!-- settings-center-main -->
+        </div><!-- settings-center-shell -->
+      </div><!-- modal-card -->
+    </div><!-- siteAdminModal -->
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script type="module" src="/scripts/dashboard.js"></script>

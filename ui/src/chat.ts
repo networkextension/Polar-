@@ -1,11 +1,11 @@
 import { createLLMThread, fetchChatLLMConfigs, fetchChats, fetchLLMThreads, fetchMessages, fetchSharedMarkdown, retryMessage, revokeMessage as revokeChatMessage, sendAttachment, sendMessage, startChat, switchLLMThreadConfig, updateLLMThread } from "./api/chat.js";
 import { requestJson } from "./api/http.js";
-import { fetchCurrentUser } from "./api/session.js";
+import { fetchCurrentUser, logout } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 import type { ChatEventPayload, ChatLLMConfig, ChatMessage, ChatMessageAttachment, ChatSummary, LLMThread } from "./types/chat.js";
@@ -344,6 +344,7 @@ async function loadProfile(): Promise<void> {
   }
   currentUserId = data.user_id;
   chatWelcome.textContent = t("chat.welcome", { username: data.username });
+  renderSidebarFoot(data);
 }
 
 function renderChatList(chats: ChatSummary[]): void {
@@ -562,15 +563,29 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
       const messageMeta = isBotReply
         ? `${msg.sender_username} · ${botModelMeta} · ${formatTime(msg.created_at)}${isFailedBotReply ? ` · ${t("chat.failed")}` : ""}`
         : `${msg.sender_username} · ${formatTime(msg.created_at)}`;
-      return `
-        <div class="message-item ${isMine ? "mine" : "other"}">
-          <div class="message-head">
-            <img class="avatar-xs" src="${avatar}" alt="${msg.sender_username}" />
-            <div class="message-meta">${messageMeta}</div>
+      if (isMine) {
+        return `
+          <div class="message-item mine">
+            <div class="message-head">
+              <img class="avatar-xs" src="${avatar}" alt="${msg.sender_username}" />
+              <div class="message-meta">${messageMeta}</div>
+            </div>
+            <div class="message-row">
+              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
+              ${revokeButton}
+            </div>
           </div>
-          <div class="message-row">
-            <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
-            ${revokeButton}
+        `;
+      }
+      return `
+        <div class="message-item other">
+          <img class="avatar-xs message-avatar" src="${avatar}" alt="${msg.sender_username}" />
+          <div class="message-body">
+            <div class="message-meta">${messageMeta}</div>
+            <div class="message-row">
+              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
+              ${revokeButton}
+            </div>
           </div>
         </div>
       `;
@@ -1154,3 +1169,9 @@ window.addEventListener("beforeunload", () => {
     sendPresence("leave_thread", activeThreadId);
   }
 });
+
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  try { await logout(); } finally { window.location.replace("/login.html"); }
+});
+

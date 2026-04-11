@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n-title="bots.title">Bot Management</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="lp-page">
+    <div class="lp-app">
+      <aside class="lp-sidebar lp-sidebar-wide">
+        <a class="lp-brand" href="/dashboard.html" data-site-brand>
+          <img data-site-icon alt="" />
+          <span class="lp-brand-name" data-site-name>Polar-</span>
+        </a>
+
+        <nav class="lp-nav">
+          <a class="lp-nav-item" href="/dashboard.html">
+            <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
+          </a>
+          <a class="lp-nav-item" href="/posts.html">
+            <span class="lp-nav-icon">◎</span><span>Posts</span>
+          </a>
+          <a class="lp-nav-item" href="/markdowns.html">
+            <span class="lp-nav-icon">◈</span><span>Markdowns</span>
+          </a>
+          <a class="lp-nav-item" href="/chat.html">
+            <span class="lp-nav-icon">◉</span><span>Chat</span>
+          </a>
+          <a class="lp-nav-item" href="/editor.html">
+            <span class="lp-nav-icon">✎</span><span>Editor</span>
+          </a>
+          <a class="lp-nav-item" href="/latch.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">⚙</span><span data-i18n="nav.latch">Latch</span>
+          </a>
+          <a class="lp-nav-item active" href="/bots.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">◉</span><span data-i18n="nav.bots">Bot Management</span>
+          </a>
+          <a class="lp-nav-item" href="/admin.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">☍</span><span data-i18n="nav.userAdmin">用户管理</span>
+          </a>
+        </nav>
+
+        <div class="lp-sidebar-foot">
+          <div class="lp-foot-avatar" id="lpFootAvatar">A</div>
+          <div class="lp-foot-info">
+            <div class="lp-foot-name" id="lpFootName">—</div>
+            <div class="lp-foot-role" id="lpFootRole">—</div>
+          </div>
+          <div class="lp-sidebar-foot-actions">
+            <button class="lp-foot-icon-btn" type="button" data-open-settings-center data-settings-target="personalization" title="Settings" data-i18n-tooltip="nav.settings">⚙</button>
+            <button id="logoutBtn" class="lp-foot-icon-btn" type="button" title="Log out">⏻</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="lp-main">
+        <div class="lp-topbar">
+          <span class="lp-topbar-title" data-i18n="bots.topbarTitle">Bot Management</span>
+          <div class="lp-topbar-end">
+            <span id="welcomeText" class="lp-mode-badge"></span>
+          </div>
+        </div>
+
+        <div class="lp-content" style="display:flex; flex-direction:column; gap:12px; padding:12px; overflow-y:auto;">
+
+          <!-- LLM Config section -->
+          <section class="lp-preview-main" style="min-height:0;">
+            <div class="lp-preview-head">
+              <span class="badge" data-i18n="dashboard.llmConfigBadge">LLM Config</span>
+              <div id="llmConfigStatus" class="status-text"></div>
+            </div>
+            <div class="lp-preview-body">
+              <div class="site-admin-grid site-admin-grid-wide">
+                <form id="llmConfigForm" class="site-settings-form">
+                  <label class="form-label" for="llmConfigNameInput" data-i18n="dashboard.llmConfigNameLabel">Config name</label>
+                  <input id="llmConfigNameInput" class="input" type="text" maxlength="60" data-i18n-placeholder="dashboard.llmConfigNamePlaceholder" placeholder="e.g. OpenAI production config" />
+
+                  <label class="form-label" for="llmConfigBaseUrlInput">Base URL</label>
+                  <input id="llmConfigBaseUrlInput" class="input" type="url" maxlength="300" placeholder="https://api.openai.com/v1/chat/completions" />
+
+                  <label class="form-label" for="llmConfigModelInput">Model</label>
+                  <input id="llmConfigModelInput" class="input" type="text" maxlength="120" placeholder="gpt-4.1-mini" />
+
+                  <label class="form-label" for="llmConfigApiKeyInput" data-i18n="dashboard.llmConfigApiKeyLabel">API Key</label>
+                  <input id="llmConfigApiKeyInput" class="input" type="password" maxlength="300" data-i18n-placeholder="dashboard.llmConfigApiKeyPlaceholder" placeholder="Recommended on create; leave empty when editing to keep current value" />
+
+                  <label class="form-label" for="llmConfigSystemPromptInput" data-i18n="dashboard.llmConfigSystemPromptLabel">Test Prompt (optional)</label>
+                  <textarea id="llmConfigSystemPromptInput" class="input textarea" rows="4" maxlength="5000" data-i18n-placeholder="dashboard.llmConfigSystemPromptPlaceholder" placeholder="Only for testing config connectivity, not used as Bot runtime prompt"></textarea>
+
+                  <label class="form-checkbox" for="llmConfigSharedInput">
+                    <input id="llmConfigSharedInput" type="checkbox" />
+                    <span data-i18n="dashboard.llmConfigSharedLabel">Share this LLM Config with other users</span>
+                  </label>
+
+                  <div class="site-settings-actions inline-actions">
+                    <button id="llmConfigResetBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.llmConfigClear">Clear</button>
+                    <button id="llmConfigTestBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.llmConfigTest">Test config</button>
+                    <button id="llmConfigSubmitBtn" class="btn-secondary" type="submit" data-i18n="dashboard.llmConfigSave">Save config</button>
+                  </div>
+                </form>
+                <ul id="llmConfigList" class="tag-list"></ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Bot User section -->
+          <section class="lp-preview-main" style="min-height:0;">
+            <div class="lp-preview-head">
+              <span class="badge" data-i18n="dashboard.botUserBadge">Bot User</span>
+              <div id="botUserStatus" class="status-text"></div>
+            </div>
+            <div class="lp-preview-body">
+              <div class="site-admin-grid site-admin-grid-wide">
+                <form id="botUserForm" class="site-settings-form">
+                  <label class="form-label" for="botUserNameInput" data-i18n="dashboard.botNameLabel">Bot name</label>
+                  <input id="botUserNameInput" class="input" type="text" maxlength="60" data-i18n-placeholder="dashboard.botNamePlaceholder" placeholder="e.g. Translation assistant" />
+
+                  <label class="form-label" for="botUserConfigSelect" data-i18n="dashboard.botConfigLabel">Bind config</label>
+                  <select id="botUserConfigSelect" class="input"></select>
+
+                  <label class="form-label" for="botUserDescriptionInput" data-i18n="dashboard.botDescriptionLabel">Bot description</label>
+                  <textarea id="botUserDescriptionInput" class="input textarea" rows="3" maxlength="500" data-i18n-placeholder="dashboard.botDescriptionPlaceholder" placeholder="Tell users what this Bot is good at"></textarea>
+
+                  <label class="form-label" for="botUserSystemPromptInput" data-i18n="dashboard.botSystemPromptLabel">Bot config prompt</label>
+                  <textarea id="botUserSystemPromptInput" class="input textarea" rows="5" maxlength="5000" data-i18n-placeholder="dashboard.botSystemPromptPlaceholder" placeholder="Define this Bot's persona, tone, boundaries, and behavior"></textarea>
+
+                  <div class="site-settings-actions site-settings-actions-split">
+                    <button id="botUserResetBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.botClear">Clear</button>
+                    <button id="botUserSubmitBtn" class="btn-secondary" type="submit" data-i18n="dashboard.botSave">Save Bot</button>
+                  </div>
+                </form>
+                <ul id="botUserList" class="tag-list"></ul>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script type="module" src="/scripts/bots.js"></script>
+  </body>
+</html>

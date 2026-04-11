@@ -1,8 +1,9 @@
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
+import { logout } from "./api/session.js";
 const API_BASE = "";
 const alertBox = byId("alert");
 const titleInput = byId("titleInput");
@@ -21,7 +22,10 @@ async function ensureLogin() {
     const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
     if (!res.ok) {
         window.location.href = "/login.html";
+        return;
     }
+    const data = await res.json();
+    renderSidebarFoot(data);
 }
 function getPublicUrl() {
     if (!entryId) {
@@ -134,3 +138,12 @@ backBtn.addEventListener("click", () => {
 void ensureLogin();
 void loadEntry();
 void hydrateSiteBrand();
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try {
+        await logout();
+    }
+    finally {
+        window.location.replace("/login.html");
+    }
+});

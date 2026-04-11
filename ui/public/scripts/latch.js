@@ -1,25 +1,54 @@
 import { fetchLatchProxies, createLatchProxy, updateLatchProxy, removeLatchProxy, fetchLatchProxyVersions, rollbackLatchProxy, fetchLatchRules, createLatchRule, createLatchRuleFromFile, updateLatchRule, uploadLatchRuleFile, removeLatchRule, fetchLatchRuleVersions, rollbackLatchRule, fetchLatchAdminProfiles, createLatchProfile, updateLatchProfile, removeLatchProfile, fetchLatchProfiles, } from "./api/dashboard.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
+import { logout } from "./api/session.js";
 // ---------------------------------------------------------------------------
-// DOM refs
+// DOM refs — layout
 // ---------------------------------------------------------------------------
+const lpOverlay = byId("lpOverlay");
 const latchWelcome = byId("latchWelcome");
+// Tabs / panels
 const latchTabProxies = byId("latchTabProxies");
 const latchTabRules = byId("latchTabRules");
 const latchSubtabBtns = document.querySelectorAll("[data-latch-tab]");
 const latchTabPanels = document.querySelectorAll("[data-latch-panel]");
-// Proxies
+// Sidebar nav
+const lpNavBtns = document.querySelectorAll("[data-lp-nav]");
+// Proxy section
+const latchProxyStatus = byId("latchProxyStatus");
+const latchProxyList = byId("latchProxyList"); // <tbody>
+const lpAddProxyBtn = byId("lpAddProxyBtn");
+const lpProxySearch = byId("lpProxySearch");
+// Rule section
+const latchRuleStatus = byId("latchRuleStatus");
+const latchRuleList = byId("latchRuleList"); // <tbody>
+const lpAddRuleBtn = byId("lpAddRuleBtn");
+const lpRuleSearch = byId("lpRuleSearch");
+// Profile section (admin)
+const latchProfileAdminGrid = byId("latchProfileAdminGrid");
+const latchProfileStatus = byId("latchProfileStatus");
+const latchProfileList = byId("latchProfileList"); // <tbody>
+const lpAddProfileBtn = byId("lpAddProfileBtn");
+// Profile section (user)
+const latchProfileUserView = byId("latchProfileUserView");
+const latchProfileUserList = byId("latchProfileUserList");
+// Advanced config quick-nav
+const lpGoRules = byId("lpGoRules");
+const lpGoRulesAlt = byId("lpGoRulesAlt");
+const lpGoProfiles = byId("lpGoProfiles");
+// Proxy slide panel
+const lpProxyPanel = byId("lpProxyPanel");
+const lpProxyClose = byId("lpProxyClose");
 const latchProxyFormTitle = byId("latchProxyFormTitle");
 const latchProxyNameInput = byId("latchProxyNameInput");
 const latchProxyTypeSelect = byId("latchProxyTypeSelect");
 const latchProxyConfigInput = byId("latchProxyConfigInput");
 const latchProxyResetBtn = byId("latchProxyResetBtn");
 const latchProxySubmitBtn = byId("latchProxySubmitBtn");
-const latchProxyStatus = byId("latchProxyStatus");
-const latchProxyList = byId("latchProxyList");
-// Rules
+// Rule slide panel
+const lpRulePanel = byId("lpRulePanel");
+const lpRuleClose = byId("lpRuleClose");
 const latchRuleFormTitle = byId("latchRuleFormTitle");
 const latchRuleNameInput = byId("latchRuleNameInput");
 const latchRuleSourceInlineBtn = byId("latchRuleSourceInlineBtn");
@@ -27,14 +56,13 @@ const latchRuleSourceFileBtn = byId("latchRuleSourceFileBtn");
 const latchRuleInlineSection = byId("latchRuleInlineSection");
 const latchRuleFileSection = byId("latchRuleFileSection");
 const latchRuleContentInput = byId("latchRuleContentInput");
-const latchRuleResetBtn = byId("latchRuleResetBtn");
-const latchRuleSubmitBtn = byId("latchRuleSubmitBtn");
 const latchRuleFileInput = byId("latchRuleFileInput");
 const latchRuleUploadBtn = byId("latchRuleUploadBtn");
-const latchRuleStatus = byId("latchRuleStatus");
-const latchRuleList = byId("latchRuleList");
-// Profiles — admin form
-const latchProfileAdminGrid = byId("latchProfileAdminGrid");
+const latchRuleResetBtn = byId("latchRuleResetBtn");
+const latchRuleSubmitBtn = byId("latchRuleSubmitBtn");
+// Profile slide panel
+const lpProfilePanel = byId("lpProfilePanel");
+const lpProfileClose = byId("lpProfileClose");
 const latchProfileFormTitle = byId("latchProfileFormTitle");
 const latchProfileNameInput = byId("latchProfileNameInput");
 const latchProfileDescInput = byId("latchProfileDescInput");
@@ -44,18 +72,13 @@ const latchProfileProxyCheckboxes = byId("latchProfileProxyCheckboxes");
 const latchProfileRuleRadios = byId("latchProfileRuleRadios");
 const latchProfileResetBtn = byId("latchProfileResetBtn");
 const latchProfileSubmitBtn = byId("latchProfileSubmitBtn");
-const latchProfileStatus = byId("latchProfileStatus");
-const latchProfileList = byId("latchProfileList");
-// Profiles — user read-only view
-const latchProfileUserView = byId("latchProfileUserView");
-const latchProfileUserList = byId("latchProfileUserList");
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 let isAdmin = false;
-let editingLatchProxyGroupId = null;
-let editingLatchRuleGroupId = null;
-let editingLatchProfileId = null;
+let editingProxyGroupId = null;
+let editingRuleGroupId = null;
+let editingProfileId = null;
 let currentLatchProxies = [];
 let currentLatchRules = [];
 let currentLatchProfiles = [];
@@ -66,102 +89,142 @@ function setStatus(el, msg, kind = "default") {
     el.textContent = msg;
     el.className = "status-text" + (kind === "success" ? " status-success" : kind === "error" ? " status-error" : "");
 }
+function proxyTypeIcon(type) {
+    if (type === "ss")
+        return `<div class="lp-type-icon ss">SS</div>`;
+    if (type === "ss3")
+        return `<div class="lp-type-icon ss3">S3</div>`;
+    if (type.startsWith("kcp"))
+        return `<div class="lp-type-icon kcp">KCP</div>`;
+    return `<div class="lp-type-icon def">PX</div>`;
+}
+// ---------------------------------------------------------------------------
+// Panel helpers
+// ---------------------------------------------------------------------------
+function openPanel(panel) {
+    panel.classList.add("open");
+    lpOverlay.classList.add("open");
+}
+function closeAllPanels() {
+    [lpProxyPanel, lpRulePanel, lpProfilePanel].forEach((p) => p.classList.remove("open"));
+    lpOverlay.classList.remove("open");
+}
 // ---------------------------------------------------------------------------
 // Tab switching
 // ---------------------------------------------------------------------------
 function switchTab(tab) {
     latchSubtabBtns.forEach((btn) => btn.classList.toggle("active", btn.dataset.latchTab === tab));
     latchTabPanels.forEach((panel) => { panel.hidden = panel.dataset.latchPanel !== tab; });
+    // Sync sidebar nav
+    lpNavBtns.forEach((btn) => {
+        const nav = btn.dataset.lpNav || "";
+        btn.classList.toggle("active", nav === tab || (nav === "dashboard" && tab === "proxies"));
+    });
 }
 // ---------------------------------------------------------------------------
-// Proxy helpers (admin)
+// Proxy helpers
 // ---------------------------------------------------------------------------
 function resetProxyForm() {
-    editingLatchProxyGroupId = null;
+    editingProxyGroupId = null;
     latchProxyNameInput.value = "";
     latchProxyTypeSelect.value = "ss";
     latchProxyConfigInput.value = "";
-    latchProxyFormTitle.textContent = "添加代理";
+    latchProxyFormTitle.textContent = "Add Proxy";
     latchProxySubmitBtn.textContent = "保存代理";
     setStatus(latchProxyStatus, "");
 }
 function renderProxies(proxies) {
     if (!proxies.length) {
-        latchProxyList.innerHTML = '<li class="tag-item tag-item-empty">暂无代理。</li>';
+        latchProxyList.innerHTML = `<tr><td colspan="4"><div class="lp-empty">暂无代理。点击「Add Proxy」开始添加。</div></td></tr>`;
         return;
     }
     latchProxyList.innerHTML = proxies.map((p) => `
-    <li class="tag-item" data-latch-proxy-gid="${p.group_id}">
-      <div class="tag-item-main">
-        <div class="tag-item-header">
-          <strong>${p.name}</strong>
-          <span class="latch-proxy-chip">${p.type}</span>
-          <span class="latch-version-badge">v${p.version}</span>
+    <tr data-latch-proxy-gid="${p.group_id}">
+      <td>
+        <div class="lp-type-cell">
+          ${proxyTypeIcon(p.type)}
+          <div>
+            <div class="lp-row-name">${p.name}</div>
+            <div class="lp-row-meta">${p.type}</div>
+          </div>
         </div>
-        <div class="tag-item-meta latch-sha-text">SHA1 ${p.sha1.slice(0, 12)}…</div>
-        <div class="tag-item-desc">${new Date(p.created_at).toLocaleString()}</div>
-      </div>
-      <div class="tag-item-actions">
-        <button class="btn-inline btn-secondary" type="button" data-action="versions">版本</button>
-        <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
-        <button class="btn-inline" type="button" data-action="delete">删除</button>
-      </div>
-    </li>`).join("");
+      </td>
+      <td><span class="lp-status lp-status-active">Active</span></td>
+      <td>
+        <span class="lp-ver">v${p.version}</span>
+        <div class="lp-row-meta" style="margin-top:3px;">${p.sha1.slice(0, 12)}…</div>
+      </td>
+      <td>
+        <div class="lp-actions">
+          <button class="lp-act" type="button" title="版本历史" data-action="versions">⏱</button>
+          <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
+          <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
+        </div>
+      </td>
+    </tr>`).join("");
 }
 function fillProxyForm(proxy) {
-    editingLatchProxyGroupId = proxy.group_id;
+    editingProxyGroupId = proxy.group_id;
     latchProxyNameInput.value = proxy.name;
     latchProxyTypeSelect.value = proxy.type;
     latchProxyConfigInput.value = JSON.stringify(proxy.config ?? {}, null, 2);
-    latchProxyFormTitle.textContent = "编辑代理";
+    latchProxyFormTitle.textContent = "Edit Proxy";
     latchProxySubmitBtn.textContent = "更新代理";
     setStatus(latchProxyStatus, "");
+    openPanel(lpProxyPanel);
 }
 // ---------------------------------------------------------------------------
-// Rule helpers (admin)
+// Rule helpers
 // ---------------------------------------------------------------------------
 function resetRuleForm() {
-    editingLatchRuleGroupId = null;
+    editingRuleGroupId = null;
     latchRuleNameInput.value = "";
     latchRuleContentInput.value = "";
     latchRuleFileInput.value = "";
-    latchRuleFormTitle.textContent = "添加规则";
+    latchRuleFormTitle.textContent = "Add Rule";
     latchRuleSubmitBtn.textContent = "保存规则";
+    // reset to inline tab
+    latchRuleInlineSection.hidden = false;
+    latchRuleFileSection.hidden = true;
+    latchRuleSourceInlineBtn.classList.add("active");
+    latchRuleSourceFileBtn.classList.remove("active");
     setStatus(latchRuleStatus, "");
 }
 function renderRules(rules) {
     if (!rules.length) {
-        latchRuleList.innerHTML = '<li class="tag-item tag-item-empty">暂无规则。</li>';
+        latchRuleList.innerHTML = `<tr><td colspan="5"><div class="lp-empty">暂无规则。</div></td></tr>`;
         return;
     }
     latchRuleList.innerHTML = rules.map((r) => `
-    <li class="tag-item" data-latch-rule-gid="${r.group_id}">
-      <div class="tag-item-main">
-        <div class="tag-item-header">
-          <strong>${r.name}</strong>
-          <span class="latch-version-badge">v${r.version}</span>
+    <tr data-latch-rule-gid="${r.group_id}">
+      <td>
+        <div class="lp-row-name">${r.name}</div>
+        <div class="lp-row-meta" style="font-family:inherit;">${r.sha1.slice(0, 12)}…</div>
+      </td>
+      <td>${r.content.split("\n").filter((l) => l.trim()).length} 行</td>
+      <td><span class="lp-ver">v${r.version}</span></td>
+      <td style="font-size:12px;color:#aaa;">${new Date(r.created_at).toLocaleDateString()}</td>
+      <td>
+        <div class="lp-actions">
+          <button class="lp-act" type="button" title="版本历史" data-action="versions">⏱</button>
+          <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
+          <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
         </div>
-        <div class="tag-item-meta latch-sha-text">SHA1 ${r.sha1.slice(0, 12)}…</div>
-        <div class="tag-item-desc">${r.content.split("\n").length} 行 · ${new Date(r.created_at).toLocaleString()}</div>
-      </div>
-      <div class="tag-item-actions">
-        <button class="btn-inline btn-secondary" type="button" data-action="versions">版本</button>
-        <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
-        <button class="btn-inline" type="button" data-action="delete">删除</button>
-      </div>
-    </li>`).join("");
+      </td>
+    </tr>`).join("");
 }
 function fillRuleForm(rule) {
-    editingLatchRuleGroupId = rule.group_id;
+    editingRuleGroupId = rule.group_id;
     latchRuleNameInput.value = rule.name;
     latchRuleContentInput.value = rule.content;
-    latchRuleFormTitle.textContent = "编辑规则";
+    latchRuleFormTitle.textContent = "Edit Rule";
     latchRuleSubmitBtn.textContent = "更新规则";
     latchRuleInlineSection.hidden = false;
     latchRuleFileSection.hidden = true;
     latchRuleSourceInlineBtn.classList.add("active");
     latchRuleSourceFileBtn.classList.remove("active");
     setStatus(latchRuleStatus, "");
+    openPanel(lpRulePanel);
 }
 // ---------------------------------------------------------------------------
 // Profile helpers — admin
@@ -169,28 +232,28 @@ function fillRuleForm(rule) {
 function syncProfileSelectors(proxies, rules) {
     latchProfileProxyCheckboxes.innerHTML = proxies.length
         ? proxies.map((p) => `
-        <label class="form-checkbox">
+        <label class="lp-check-label" style="padding:4px 0;">
           <input type="checkbox" value="${p.group_id}" />
-          <span>${p.name} <span class="latch-proxy-chip">${p.type}</span></span>
+          <span>${p.name} <span class="lp-proxy-chip">${p.type}</span></span>
         </label>`).join("")
-        : '<span style="color:var(--muted);font-size:13px">暂无代理</span>';
+        : '<span style="color:var(--muted,#aaa);font-size:13px;padding:4px;">暂无代理</span>';
     latchProfileRuleRadios.innerHTML = `
-    <label class="form-checkbox">
+    <label class="lp-check-label" style="padding:4px 0;">
       <input type="radio" name="latch_rule" value="" checked />
-      <span style="color:var(--muted)">不使用规则</span>
+      <span style="color:#aaa;">不使用规则</span>
     </label>` + rules.map((r) => `
-    <label class="form-checkbox">
+    <label class="lp-check-label" style="padding:4px 0;">
       <input type="radio" name="latch_rule" value="${r.group_id}" />
-      <span>${r.name} <span class="latch-version-badge">v${r.version}</span></span>
+      <span>${r.name} <span class="lp-ver">v${r.version}</span></span>
     </label>`).join("");
 }
 function resetProfileForm() {
-    editingLatchProfileId = null;
+    editingProfileId = null;
     latchProfileNameInput.value = "";
     latchProfileDescInput.value = "";
     latchProfileEnabledInput.checked = true;
     latchProfileShareableInput.checked = false;
-    latchProfileFormTitle.textContent = "添加配置";
+    latchProfileFormTitle.textContent = "Add Profile";
     latchProfileSubmitBtn.textContent = "保存配置";
     setStatus(latchProfileStatus, "");
     latchProfileProxyCheckboxes.querySelectorAll("input[type=checkbox]").forEach((cb) => { cb.checked = false; });
@@ -200,41 +263,43 @@ function resetProfileForm() {
 }
 function renderAdminProfiles(profiles, proxies, rules) {
     if (!profiles.length) {
-        latchProfileList.innerHTML = '<li class="tag-item tag-item-empty">暂无配置。</li>';
+        latchProfileList.innerHTML = `<tr><td colspan="5"><div class="lp-empty">暂无配置。</div></td></tr>`;
         return;
     }
     const proxyMap = new Map(proxies.map((p) => [p.group_id, p]));
     const ruleMap = new Map(rules.map((r) => [r.group_id, r]));
     latchProfileList.innerHTML = profiles.map((prof) => {
-        const proxyChips = prof.proxy_group_ids
+        const chips = prof.proxy_group_ids
             .map((gid) => proxyMap.get(gid))
             .filter(Boolean)
-            .map((p) => `<span class="latch-proxy-chip">${p.name}</span>`)
-            .join("") || '<span style="color:var(--muted);font-size:12px">无代理</span>';
+            .map((p) => `<span class="lp-proxy-chip">${p.name}</span>`)
+            .join("") || `<span style="color:#bbb;font-size:12px;">—</span>`;
         const ruleLabel = prof.rule_group_id && ruleMap.get(prof.rule_group_id)
-            ? `<span class="latch-version-badge">${ruleMap.get(prof.rule_group_id).name}</span>`
-            : '<span style="color:var(--muted);font-size:12px">无规则</span>';
+            ? `<span class="lp-ver">${ruleMap.get(prof.rule_group_id).name}</span>`
+            : `<span style="color:#bbb;font-size:12px;">—</span>`;
         return `
-      <li class="tag-item" data-latch-profile-id="${prof.id}">
-        <div class="tag-item-main">
-          <div class="tag-item-header">
-            <strong>${prof.name}</strong>
-            ${prof.enabled ? '<span class="latch-flag on">enabled</span>' : '<span class="latch-flag">disabled</span>'}
-            ${prof.shareable ? '<span class="latch-flag on">shareable</span>' : '<span class="latch-flag">private</span>'}
+      <tr data-latch-profile-id="${prof.id}">
+        <td>
+          <div class="lp-row-name">${prof.name}</div>
+          ${prof.description ? `<div class="lp-row-meta" style="font-family:inherit;">${prof.description}</div>` : ""}
+        </td>
+        <td>${chips}</td>
+        <td>${ruleLabel}</td>
+        <td>
+          ${prof.enabled ? '<span class="lp-flag on">enabled</span>' : '<span class="lp-flag">disabled</span>'}
+          ${prof.shareable ? '<span class="lp-flag on">shared</span>' : '<span class="lp-flag">private</span>'}
+        </td>
+        <td>
+          <div class="lp-actions">
+            <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
+            <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
           </div>
-          ${prof.description ? `<div class="tag-item-meta">${prof.description}</div>` : ""}
-          <div class="latch-item-flags">${proxyChips}</div>
-          <div class="tag-item-desc">规则：${ruleLabel}</div>
-        </div>
-        <div class="tag-item-actions">
-          <button class="btn-inline btn-secondary" type="button" data-action="edit">编辑</button>
-          <button class="btn-inline" type="button" data-action="delete">删除</button>
-        </div>
-      </li>`;
+        </td>
+      </tr>`;
     }).join("");
 }
 function fillProfileForm(prof) {
-    editingLatchProfileId = prof.id;
+    editingProfileId = prof.id;
     latchProfileNameInput.value = prof.name;
     latchProfileDescInput.value = prof.description || "";
     latchProfileEnabledInput.checked = prof.enabled;
@@ -245,36 +310,37 @@ function fillProfileForm(prof) {
     latchProfileRuleRadios.querySelectorAll("input[type=radio]").forEach((r) => {
         r.checked = r.value === (prof.rule_group_id || "");
     });
-    latchProfileFormTitle.textContent = "编辑配置";
+    latchProfileFormTitle.textContent = "Edit Profile";
     latchProfileSubmitBtn.textContent = "更新配置";
     setStatus(latchProfileStatus, "");
+    openPanel(lpProfilePanel);
 }
 // ---------------------------------------------------------------------------
 // Profile helpers — user read-only
 // ---------------------------------------------------------------------------
 function renderUserProfiles(profiles) {
     if (!profiles.length) {
-        latchProfileUserList.innerHTML = '<li class="tag-item tag-item-empty">暂无可用配置。</li>';
+        latchProfileUserList.innerHTML = `<div class="lp-empty">暂无可用配置。</div>`;
         return;
     }
     latchProfileUserList.innerHTML = profiles.map((prof) => {
-        const proxyChips = (prof.proxies || [])
-            .map((p) => `<span class="latch-proxy-chip">${p.name} <span style="opacity:.6">${p.type}</span></span>`)
-            .join("") || '<span style="color:var(--muted);font-size:12px">无代理</span>';
+        const chips = (prof.proxies || [])
+            .map((p) => `<span class="lp-proxy-chip">${p.name} <span style="opacity:.6;">${p.type}</span></span>`)
+            .join("") || `<span style="color:#bbb;font-size:12px;">无代理</span>`;
         const ruleLabel = prof.rule
-            ? `<span class="latch-version-badge">${prof.rule.name} v${prof.rule.version}</span>`
-            : '<span style="color:var(--muted);font-size:12px">无规则</span>';
+            ? `<span class="lp-ver">${prof.rule.name} v${prof.rule.version}</span>`
+            : `<span style="color:#bbb;font-size:12px;">无规则</span>`;
         return `
-      <li class="tag-item">
-        <div class="tag-item-main">
-          <div class="tag-item-header">
-            <strong>${prof.name}</strong>
-          </div>
-          ${prof.description ? `<div class="tag-item-meta">${prof.description}</div>` : ""}
-          <div class="latch-item-flags">${proxyChips}</div>
-          <div class="tag-item-desc">规则：${ruleLabel}</div>
+      <div class="lp-user-card">
+        <div class="lp-user-card-name">${prof.name}</div>
+        ${prof.description ? `<div class="lp-user-card-desc">${prof.description}</div>` : ""}
+        <div class="lp-user-card-row">
+          <span style="color:#aaa;font-size:12px;">代理：</span>${chips}
         </div>
-      </li>`;
+        <div class="lp-user-card-row">
+          <span style="color:#aaa;font-size:12px;">规则：</span>${ruleLabel}
+        </div>
+      </div>`;
     }).join("");
 }
 // ---------------------------------------------------------------------------
@@ -300,7 +366,7 @@ async function loadUserData() {
     renderUserProfiles(profiles);
 }
 // ---------------------------------------------------------------------------
-// Init — auth check + role-based UI setup
+// Init
 // ---------------------------------------------------------------------------
 async function init() {
     initStoredTheme();
@@ -314,8 +380,8 @@ async function init() {
     const me = await res.json();
     isAdmin = me.role === "admin";
     latchWelcome.textContent = isAdmin ? "管理员模式" : "只读模式";
+    renderSidebarFoot(me);
     if (isAdmin) {
-        // Show all tabs; default to proxies
         latchTabProxies.hidden = false;
         latchTabRules.hidden = false;
         latchProfileAdminGrid.hidden = false;
@@ -325,7 +391,6 @@ async function init() {
         wireAdminEvents();
     }
     else {
-        // Hide proxy/rule tabs, jump straight to profiles (read-only)
         latchTabProxies.hidden = true;
         latchTabRules.hidden = true;
         latchProfileAdminGrid.hidden = true;
@@ -338,11 +403,43 @@ async function init() {
 // Admin event handlers
 // ---------------------------------------------------------------------------
 function wireAdminEvents() {
-    // Sub-tab switching
+    // Tabs
     latchSubtabBtns.forEach((btn) => {
         btn.addEventListener("click", () => switchTab(btn.dataset.latchTab || "proxies"));
     });
-    // — Proxy —
+    // Sidebar nav quick-switch
+    lpNavBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const nav = btn.dataset.lpNav || "";
+            if (nav === "proxies" || nav === "dashboard") {
+                switchTab("proxies");
+                return;
+            }
+            if (nav === "rules") {
+                switchTab("rules");
+                return;
+            }
+            if (nav === "profiles") {
+                switchTab("profiles");
+                return;
+            }
+        });
+    });
+    // Advanced card shortcuts
+    lpGoRules.addEventListener("click", () => switchTab("rules"));
+    lpGoRulesAlt.addEventListener("click", () => switchTab("rules"));
+    lpGoProfiles.addEventListener("click", () => switchTab("profiles"));
+    // Overlay / close
+    lpOverlay.addEventListener("click", closeAllPanels);
+    lpProxyClose.addEventListener("click", closeAllPanels);
+    lpRuleClose.addEventListener("click", closeAllPanels);
+    lpProfileClose.addEventListener("click", closeAllPanels);
+    // — Proxy panel —
+    lpAddProxyBtn.addEventListener("click", () => {
+        resetProxyForm();
+        openPanel(lpProxyPanel);
+        latchProxyNameInput.focus();
+    });
     latchProxyResetBtn.addEventListener("click", resetProxyForm);
     latchProxySubmitBtn.addEventListener("click", async () => {
         const name = latchProxyNameInput.value.trim();
@@ -363,16 +460,17 @@ function wireAdminEvents() {
             }
         }
         latchProxySubmitBtn.disabled = true;
-        setStatus(latchProxyStatus, editingLatchProxyGroupId ? "正在更新…" : "正在创建…");
+        setStatus(latchProxyStatus, editingProxyGroupId ? "正在更新…" : "正在创建…");
         try {
-            const { response, data } = editingLatchProxyGroupId
-                ? await updateLatchProxy(editingLatchProxyGroupId, { name, type, config })
+            const { response, data } = editingProxyGroupId
+                ? await updateLatchProxy(editingProxyGroupId, { name, type, config })
                 : await createLatchProxy({ name, type, config });
             if (!response.ok) {
                 setStatus(latchProxyStatus, data.error || "保存失败", "error");
                 return;
             }
             setStatus(latchProxyStatus, data.message || "已保存", "success");
+            closeAllPanels();
             resetProxyForm();
             await loadAdminData();
         }
@@ -383,18 +481,26 @@ function wireAdminEvents() {
             latchProxySubmitBtn.disabled = false;
         }
     });
+    // Search filter
+    lpProxySearch.addEventListener("input", () => {
+        const q = lpProxySearch.value.trim().toLowerCase();
+        latchProxyList.querySelectorAll("tr[data-latch-proxy-gid]").forEach((row) => {
+            const text = row.textContent?.toLowerCase() || "";
+            row.hidden = !!q && !text.includes(q);
+        });
+    });
     latchProxyList.addEventListener("click", async (e) => {
         const btn = e.target.closest("button[data-action]");
         if (!btn)
             return;
-        const gid = btn.closest("[data-latch-proxy-gid]")?.dataset.latchProxyGid || "";
+        const row = btn.closest("[data-latch-proxy-gid]");
+        const gid = row?.dataset.latchProxyGid || "";
         const proxy = currentLatchProxies.find((p) => p.group_id === gid);
         if (!proxy)
             return;
         const action = btn.dataset.action;
         if (action === "edit") {
             fillProxyForm(proxy);
-            latchProxyNameInput.focus();
             return;
         }
         if (action === "versions") {
@@ -437,8 +543,10 @@ function wireAdminEvents() {
                     setStatus(latchProxyStatus, data.error || "删除失败", "error");
                     return;
                 }
-                if (editingLatchProxyGroupId === gid)
+                if (editingProxyGroupId === gid) {
+                    closeAllPanels();
                     resetProxyForm();
+                }
                 setStatus(latchProxyStatus, data.message || "已删除", "success");
                 await loadAdminData();
             }
@@ -447,7 +555,12 @@ function wireAdminEvents() {
             }
         }
     });
-    // — Rule source toggle —
+    // — Rule panel —
+    lpAddRuleBtn.addEventListener("click", () => {
+        resetRuleForm();
+        openPanel(lpRulePanel);
+        latchRuleNameInput.focus();
+    });
     latchRuleSourceInlineBtn.addEventListener("click", () => {
         latchRuleInlineSection.hidden = false;
         latchRuleFileSection.hidden = true;
@@ -460,7 +573,6 @@ function wireAdminEvents() {
         latchRuleSourceInlineBtn.classList.remove("active");
         latchRuleSourceFileBtn.classList.add("active");
     });
-    // — Rule —
     latchRuleResetBtn.addEventListener("click", resetRuleForm);
     latchRuleSubmitBtn.addEventListener("click", async () => {
         const name = latchRuleNameInput.value.trim();
@@ -470,16 +582,17 @@ function wireAdminEvents() {
             return;
         }
         latchRuleSubmitBtn.disabled = true;
-        setStatus(latchRuleStatus, editingLatchRuleGroupId ? "正在更新…" : "正在创建…");
+        setStatus(latchRuleStatus, editingRuleGroupId ? "正在更新…" : "正在创建…");
         try {
-            const { response, data } = editingLatchRuleGroupId
-                ? await updateLatchRule(editingLatchRuleGroupId, { name, content })
+            const { response, data } = editingRuleGroupId
+                ? await updateLatchRule(editingRuleGroupId, { name, content })
                 : await createLatchRule({ name, content });
             if (!response.ok) {
                 setStatus(latchRuleStatus, data.error || "保存失败", "error");
                 return;
             }
             setStatus(latchRuleStatus, data.message || "已保存", "success");
+            closeAllPanels();
             resetRuleForm();
             await loadAdminData();
         }
@@ -504,14 +617,15 @@ function wireAdminEvents() {
         latchRuleUploadBtn.disabled = true;
         setStatus(latchRuleStatus, "正在上传…");
         try {
-            const { response, data } = editingLatchRuleGroupId
-                ? await uploadLatchRuleFile(editingLatchRuleGroupId, fd)
+            const { response, data } = editingRuleGroupId
+                ? await uploadLatchRuleFile(editingRuleGroupId, fd)
                 : await createLatchRuleFromFile(fd);
             if (!response.ok) {
                 setStatus(latchRuleStatus, data.error || "上传失败", "error");
                 return;
             }
             setStatus(latchRuleStatus, data.message || "上传成功", "success");
+            closeAllPanels();
             resetRuleForm();
             await loadAdminData();
         }
@@ -522,18 +636,24 @@ function wireAdminEvents() {
             latchRuleUploadBtn.disabled = false;
         }
     });
+    lpRuleSearch.addEventListener("input", () => {
+        const q = lpRuleSearch.value.trim().toLowerCase();
+        latchRuleList.querySelectorAll("tr[data-latch-rule-gid]").forEach((row) => {
+            row.hidden = !!q && !(row.textContent?.toLowerCase().includes(q));
+        });
+    });
     latchRuleList.addEventListener("click", async (e) => {
         const btn = e.target.closest("button[data-action]");
         if (!btn)
             return;
-        const gid = btn.closest("[data-latch-rule-gid]")?.dataset.latchRuleGid || "";
+        const row = btn.closest("[data-latch-rule-gid]");
+        const gid = row?.dataset.latchRuleGid || "";
         const rule = currentLatchRules.find((r) => r.group_id === gid);
         if (!rule)
             return;
         const action = btn.dataset.action;
         if (action === "edit") {
             fillRuleForm(rule);
-            latchRuleNameInput.focus();
             return;
         }
         if (action === "versions") {
@@ -576,8 +696,10 @@ function wireAdminEvents() {
                     setStatus(latchRuleStatus, data.error || "删除失败", "error");
                     return;
                 }
-                if (editingLatchRuleGroupId === gid)
+                if (editingRuleGroupId === gid) {
+                    closeAllPanels();
                     resetRuleForm();
+                }
                 setStatus(latchRuleStatus, data.message || "已删除", "success");
                 await loadAdminData();
             }
@@ -586,7 +708,12 @@ function wireAdminEvents() {
             }
         }
     });
-    // — Profile —
+    // — Profile panel —
+    lpAddProfileBtn.addEventListener("click", () => {
+        resetProfileForm();
+        openPanel(lpProfilePanel);
+        latchProfileNameInput.focus();
+    });
     latchProfileResetBtn.addEventListener("click", resetProfileForm);
     latchProfileSubmitBtn.addEventListener("click", async () => {
         const name = latchProfileNameInput.value.trim();
@@ -605,16 +732,17 @@ function wireAdminEvents() {
             shareable: latchProfileShareableInput.checked,
         };
         latchProfileSubmitBtn.disabled = true;
-        setStatus(latchProfileStatus, editingLatchProfileId ? "正在更新…" : "正在创建…");
+        setStatus(latchProfileStatus, editingProfileId ? "正在更新…" : "正在创建…");
         try {
-            const { response, data } = editingLatchProfileId
-                ? await updateLatchProfile(editingLatchProfileId, payload)
+            const { response, data } = editingProfileId
+                ? await updateLatchProfile(editingProfileId, payload)
                 : await createLatchProfile(payload);
             if (!response.ok) {
                 setStatus(latchProfileStatus, data.error || "保存失败", "error");
                 return;
             }
             setStatus(latchProfileStatus, data.message || "已保存", "success");
+            closeAllPanels();
             resetProfileForm();
             await loadAdminData();
         }
@@ -629,14 +757,14 @@ function wireAdminEvents() {
         const btn = e.target.closest("button[data-action]");
         if (!btn)
             return;
-        const id = btn.closest("[data-latch-profile-id]")?.dataset.latchProfileId || "";
+        const row = btn.closest("[data-latch-profile-id]");
+        const id = row?.dataset.latchProfileId || "";
         const prof = currentLatchProfiles.find((p) => p.id === id);
         if (!prof)
             return;
         const action = btn.dataset.action;
         if (action === "edit") {
             fillProfileForm(prof);
-            latchProfileNameInput.focus();
             return;
         }
         if (action === "delete") {
@@ -648,8 +776,10 @@ function wireAdminEvents() {
                     setStatus(latchProfileStatus, data.error || "删除失败", "error");
                     return;
                 }
-                if (editingLatchProfileId === id)
+                if (editingProfileId === id) {
+                    closeAllPanels();
                     resetProfileForm();
+                }
                 setStatus(latchProfileStatus, data.message || "已删除", "success");
                 await loadAdminData();
             }
@@ -660,3 +790,12 @@ function wireAdminEvents() {
     });
 }
 init();
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try {
+        await logout();
+    }
+    finally {
+        window.location.replace("/login.html");
+    }
+});
