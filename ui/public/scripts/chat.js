@@ -525,15 +525,29 @@ function renderMessages(messages, scrollToBottom = false) {
         const messageMeta = isBotReply
             ? `${msg.sender_username} · ${botModelMeta} · ${formatTime(msg.created_at)}${isFailedBotReply ? ` · ${t("chat.failed")}` : ""}`
             : `${msg.sender_username} · ${formatTime(msg.created_at)}`;
-        return `
-        <div class="message-item ${isMine ? "mine" : "other"}">
-          <div class="message-head">
-            <img class="avatar-xs" src="${avatar}" alt="${msg.sender_username}" />
-            <div class="message-meta">${messageMeta}</div>
+        if (isMine) {
+            return `
+          <div class="message-item mine">
+            <div class="message-head">
+              <img class="avatar-xs" src="${avatar}" alt="${msg.sender_username}" />
+              <div class="message-meta">${messageMeta}</div>
+            </div>
+            <div class="message-row">
+              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
+              ${revokeButton}
+            </div>
           </div>
-          <div class="message-row">
-            <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
-            ${revokeButton}
+        `;
+        }
+        return `
+        <div class="message-item other">
+          <img class="avatar-xs message-avatar" src="${avatar}" alt="${msg.sender_username}" />
+          <div class="message-body">
+            <div class="message-meta">${messageMeta}</div>
+            <div class="message-row">
+              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
+              ${revokeButton}
+            </div>
           </div>
         </div>
       `;
