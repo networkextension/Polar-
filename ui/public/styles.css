@@ -1,43 +1,45 @@
+/* ── Prometheus dark (default) ─────────────────────────────────────── */
 :root {
-  --bg: #0f172a;
-  --card: #0b1224;
-  --muted: #94a3b8;
-  --text: #e2e8f0;
-  --accent: #38bdf8;
-  --accent-2: #22c55e;
-  --danger: #ef4444;
-  --page-bg: radial-gradient(circle at 10% 20%, #1e293b 0%, #0f172a 55%);
-  --surface: rgba(15, 23, 42, 0.6);
-  --surface-strong: rgba(30, 41, 59, 0.7);
-  --border: rgba(148, 163, 184, 0.2);
-  --badge-bg: rgba(56, 189, 248, 0.15);
-  --active-bg: rgba(56, 189, 248, 0.2);
-  --active-border: rgba(56, 189, 248, 0.35);
-  --active-shadow: rgba(14, 165, 233, 0.18);
-  --secondary-bg: rgba(148, 163, 184, 0.2);
-  --secondary-shadow: rgba(148, 163, 184, 0.2);
-  --overlay: rgba(2, 6, 23, 0.55);
+  --bg:             #191d21;
+  --card:           #212529;
+  --muted:          #6c757d;
+  --text:           #d3d3d3;
+  --accent:         #e6522c;
+  --accent-2:       #28a745;
+  --danger:         #dc3545;
+  --page-bg:        #191d21;
+  --surface:        #1e2227;
+  --surface-strong: #282d32;
+  --border:         #343a40;
+  --badge-bg:       rgba(230, 82, 44, 0.14);
+  --active-bg:      rgba(230, 82, 44, 0.18);
+  --active-border:  rgba(230, 82, 44, 0.45);
+  --active-shadow:  rgba(230, 82, 44, 0.14);
+  --secondary-bg:   rgba(108, 117, 125, 0.18);
+  --secondary-shadow: rgba(0, 0, 0, 0.25);
+  --overlay:        rgba(0, 0, 0, 0.65);
 }
 
+/* ── Mono / light ───────────────────────────────────────────────────── */
 :root[data-theme="mono"] {
-  --bg: #f4f4f4;
-  --card: #ffffff;
-  --muted: #5f5f5f;
-  --text: #111111;
-  --accent: #111111;
-  --accent-2: #444444;
-  --danger: #111111;
-  --page-bg: linear-gradient(180deg, #ffffff 0%, #ececec 100%);
-  --surface: rgba(255, 255, 255, 0.92);
+  --bg:             #f4f4f4;
+  --card:           #ffffff;
+  --muted:          #5f5f5f;
+  --text:           #111111;
+  --accent:         #e6522c;
+  --accent-2:       #28a745;
+  --danger:         #dc3545;
+  --page-bg:        linear-gradient(180deg, #ffffff 0%, #ececec 100%);
+  --surface:        rgba(255, 255, 255, 0.92);
   --surface-strong: rgba(240, 240, 240, 0.96);
-  --border: rgba(17, 17, 17, 0.14);
-  --badge-bg: rgba(17, 17, 17, 0.08);
-  --active-bg: rgba(17, 17, 17, 0.1);
-  --active-border: rgba(17, 17, 17, 0.2);
-  --active-shadow: rgba(17, 17, 17, 0.1);
-  --secondary-bg: rgba(17, 17, 17, 0.08);
+  --border:         rgba(17, 17, 17, 0.14);
+  --badge-bg:       rgba(230, 82, 44, 0.08);
+  --active-bg:      rgba(230, 82, 44, 0.1);
+  --active-border:  rgba(230, 82, 44, 0.3);
+  --active-shadow:  rgba(230, 82, 44, 0.08);
+  --secondary-bg:   rgba(17, 17, 17, 0.08);
   --secondary-shadow: rgba(17, 17, 17, 0.12);
-  --overlay: rgba(17, 17, 17, 0.18);
+  --overlay:        rgba(17, 17, 17, 0.18);
 }
 
 * {
@@ -51,7 +53,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "SF Mono", "Fira Code", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--page-bg);
   color: var(--text);
   display: flex;
@@ -95,7 +97,7 @@ body.modal-open {
   background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
   border: 1px solid var(--border);
   border-radius: 18px;
-  box-shadow: 0 16px 36px rgba(2, 6, 23, 0.2);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
 }
 
 .site-brand-icon {
@@ -104,7 +106,7 @@ body.modal-open {
   border-radius: 16px;
   object-fit: cover;
   border: 1px solid var(--border);
-  background: rgba(56, 189, 248, 0.14);
+  background: rgba(230, 82, 44, 0.14);
   flex-shrink: 0;
 }
 
@@ -132,7 +134,7 @@ body.modal-open {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 28px;
-  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.6);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
 
 :root[data-theme="mono"] .card,
@@ -188,7 +190,7 @@ button {
 
 button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(56, 189, 248, 0.3);
+  box-shadow: 0 10px 20px rgba(230, 82, 44, 0.25);
 }
 
 .btn-inline {
@@ -381,7 +383,7 @@ button:hover {
   border-radius: 24px;
   object-fit: cover;
   border: 1px solid var(--border);
-  background: rgba(56, 189, 248, 0.15);
+  background: rgba(230, 82, 44, 0.14);
 }
 
 .site-icon-tools {
@@ -670,7 +672,7 @@ button:hover {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: rgba(56, 189, 248, 0.2);
+  background: rgba(230, 82, 44, 0.18);
   border: 1px solid var(--border);
   object-fit: cover;
 }
@@ -1170,7 +1172,7 @@ button:hover {
 .video-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(2, 6, 23, 0.8);
+  background: rgba(0, 0, 0, 0.8);
 }
 
 .video-modal-content {
@@ -1210,7 +1212,7 @@ button:hover {
 .image-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(2, 6, 23, 0.88);
+  background: rgba(0, 0, 0, 0.82);
 }
 
 .image-modal-content {
@@ -2001,7 +2003,7 @@ textarea {
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--border);
-  background: rgba(56, 189, 248, 0.2);
+  background: rgba(230, 82, 44, 0.18);
 }
 
 .avatar-xs {
@@ -2010,7 +2012,7 @@ textarea {
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--border);
-  background: rgba(56, 189, 248, 0.2);
+  background: rgba(230, 82, 44, 0.18);
   flex-shrink: 0;
 }
 
@@ -2684,7 +2686,7 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700; flex-shrink: 0; letter-spacing: -.5px;
 }
-.lp-type-icon.ss  { background: rgba(2, 132, 199, 0.15); color: #38bdf8; }
+.lp-type-icon.ss  { background: rgba(230, 82, 44, 0.12); color: #e6522c; }
 .lp-type-icon.ss3 { background: rgba(219, 39, 119, 0.12); color: #f472b6; }
 .lp-type-icon.kcp { background: rgba(234, 88, 12, 0.12); color: #fb923c; }
 .lp-type-icon.def { background: rgba(22, 163, 74, 0.12); color: var(--accent-2); }
