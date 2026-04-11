@@ -150,6 +150,98 @@
 - `ios`
 - `android`
 
+## 管理员用户管理
+
+以下接口均需要管理员权限（`role=admin`），普通用户调用会返回 `403`。
+
+### 查询用户
+
+**GET** `/api/admin/users?q=&limit=20&offset=0`
+
+说明：
+
+- `q` 可选，支持按 `user_id / username / email` 模糊查询
+- `limit` 默认 `20`，最大 `100`
+- `offset` 默认 `0`
+- 返回结果默认排除系统用户、管理员用户与 Bot 用户
+
+成功响应：
+
+```json
+{
+  "users": [
+    {
+      "id": "u_123",
+      "username": "alice",
+      "email": "alice@example.com",
+      "role": "user",
+      "is_online": false,
+      "device_type": "browser",
+      "last_seen_at": "2026-04-11T06:30:00Z",
+      "created_at": "2026-04-01T01:00:00Z"
+    }
+  ],
+  "total": 1,
+  "has_more": false,
+  "next_offset": 0
+}
+```
+
+### 查看指定用户登录记录
+
+**GET** `/api/admin/users/:id/login-history?limit=30`
+
+说明：
+
+- `:id` 为目标用户 ID
+- `limit` 默认 `20`
+
+成功响应：
+
+```json
+{
+  "records": [
+    {
+      "id": 1,
+      "user_id": "u_123",
+      "ip_address": "127.0.0.1",
+      "country": "China",
+      "region": "Shanghai",
+      "city": "Shanghai",
+      "login_method": "password",
+      "device_type": "browser",
+      "logged_in_at": "2026-03-22T08:00:00Z"
+    }
+  ]
+}
+```
+
+### 管理员重置用户密码
+
+**PUT** `/api/admin/users/:id/password`
+
+请求体：
+
+```json
+{
+  "new_password": "newpassword123"
+}
+```
+
+说明：
+
+- `new_password` 至少 6 位
+- 成功后会直接更新目标用户密码哈希
+
+成功响应：
+
+```json
+{
+  "message": "密码已更新",
+  "user_id": "u_123"
+}
+```
+
 ## Passkey 登录
 
 说明：

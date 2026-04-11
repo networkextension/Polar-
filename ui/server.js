@@ -26,7 +26,7 @@ function getBuildHash() {
 const BUILD_HASH = getBuildHash();
 
 // Serve HTML pages with no-cache headers and inject ?v= into asset URLs.
-const HTML_PAGES = ["login", "register", "dashboard", "editor", "chat", "posts", "markdowns", "latch"];
+const HTML_PAGES = ["login", "register", "dashboard", "editor", "chat", "posts", "markdowns", "latch", "admin"];
 
 function serveHtml(name) {
   return (req, res) => {
@@ -52,6 +52,7 @@ app.get("/login", (req, res) => res.redirect("/login.html"));
 app.get("/register", (req, res) => res.redirect("/register.html"));
 app.get("/dashboard", (req, res) => res.redirect("/dashboard.html"));
 app.get("/editor", (req, res) => res.redirect("/editor.html"));
+app.get("/admin", (req, res) => res.redirect("/admin.html"));
 
 for (const name of HTML_PAGES) {
   app.get(`/${name}.html`, serveHtml(name));
