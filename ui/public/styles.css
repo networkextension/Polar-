@@ -2514,6 +2514,7 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
   background: var(--card); border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  transition: width .18s ease, min-width .18s ease, border-color .18s ease;
 }
 .lp-sidebar.lp-sidebar-wide { width: 260px; min-width: 260px; }
 
@@ -2843,6 +2844,22 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
 
 /* Empty state */
 .lp-empty { text-align: center; padding: 36px; color: var(--muted); font-size: 14px; }
+
+/* Sidebar toggle button */
+.lp-sidebar-toggle {
+  width: 32px; height: 32px; border-radius: 6px; border: none;
+  background: none; cursor: pointer; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0; padding: 0;
+  transition: background .12s, color .12s; box-shadow: none;
+  margin-right: 4px;
+}
+.lp-sidebar-toggle:hover { background: var(--surface-strong); color: var(--text); box-shadow: none; transform: none; }
+
+/* Collapsed sidebar */
+.lp-app.sidebar-collapsed .lp-sidebar {
+  width: 0; min-width: 0; overflow: hidden; border-right: none;
+}
 
 /* Responsive */
 @media (max-width: 860px) {
