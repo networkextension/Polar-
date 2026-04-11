@@ -14,6 +14,7 @@ import { logout, fetchCurrentUser } from "./api/session.js";
 import { byId } from "./lib/dom.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { t } from "./lib/i18n.js";
+import { renderMarkdown } from "./lib/marked.js";
 import type { BotPayload, BotUser, LLMConfig, LLMConfigPayload } from "./types/dashboard.js";
 
 // ── LLM Config DOM ──────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ let editingLLMConfigId: number | null = null;
 let editingBotUserId: number | null = null;
 let pendingDeleteLLMConfigId: number | null = null;
 let pendingDeleteBotId: number | null = null;
+let expandedBotId: number | null = null;
 let currentLLMConfigs: LLMConfig[] = [];
 let currentAvailableLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
@@ -129,24 +131,34 @@ function renderBotUserList(bots: BotUser[]): void {
   botUserList.innerHTML = bots
     .map((bot) => {
       const isPending = pendingDeleteBotId === bot.id;
+      const isExpanded = expandedBotId === bot.id;
       const actions = isPending
         ? `<button class="btn-inline" type="button" data-action="confirm-delete">${t("common.confirmDelete")}</button>
            <button class="btn-inline btn-secondary" type="button" data-action="cancel-delete">${t("common.cancel")}</button>`
-        : `<button class="btn-inline btn-secondary" type="button" data-action="chat">${t("dashboard.chat")}</button>
+        : `<button class="btn-inline btn-secondary" type="button" data-action="toggle-expand">${isExpanded ? "▲" : "▼"}</button>
+           <button class="btn-inline btn-secondary" type="button" data-action="chat">${t("dashboard.chat")}</button>
            <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
            <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>`;
+
+      const descHtml = bot.description ? renderMarkdown(bot.description) : "";
+      const promptHtml = bot.system_prompt ? renderMarkdown(bot.system_prompt) : "";
+      const expandPanel = isExpanded ? `
+        <div class="bot-expand-panel">
+          ${descHtml ? `<div class="bot-expand-section"><div class="bot-expand-label">${t("dashboard.botDescriptionLabel")}</div><div class="content-box bot-expand-content">${descHtml}</div></div>` : ""}
+          ${promptHtml ? `<div class="bot-expand-section"><div class="bot-expand-label">${t("dashboard.botSystemPromptLabel")}</div><div class="content-box bot-expand-content">${promptHtml}</div></div>` : ""}
+        </div>` : "";
+
       return `
-        <li class="tag-item${isPending ? " tag-item-pending-delete" : ""}" data-bot-user-id="${bot.id}">
+        <li class="tag-item${isPending ? " tag-item-pending-delete" : ""}${isExpanded ? " tag-item-expanded" : ""}" data-bot-user-id="${bot.id}">
           <div class="tag-item-main">
             <div class="tag-item-header">
               <strong>${bot.name}</strong>
               <span class="tag-chip">${bot.config_name}</span>
             </div>
             <div class="tag-item-meta">${t("dashboard.botUserId", { id: bot.bot_user_id })}</div>
-            <div class="tag-item-desc">${bot.description || t("dashboard.noDescription")}</div>
-            <div class="tag-item-meta">${bot.system_prompt ? t("dashboard.botPromptPreview", { preview: bot.system_prompt.slice(0, 60) + (bot.system_prompt.length > 60 ? "…" : "") }) : t("dashboard.noBotPrompt")}</div>
           </div>
           <div class="tag-item-actions">${actions}</div>
+          ${expandPanel}
         </li>
       `;
     })
@@ -360,6 +372,11 @@ botUserList.addEventListener("click", async (event) => {
   if (!bot) return;
 
   const action = button.dataset.action;
+  if (action === "toggle-expand") {
+    expandedBotId = expandedBotId === bot.id ? null : bot.id;
+    renderBotUserList(currentBotUsers);
+    return;
+  }
   if (action === "chat") {
     window.location.href = `/chat.html?user_id=${encodeURIComponent(bot.bot_user_id)}&username=${encodeURIComponent(bot.name)}`;
     return;
