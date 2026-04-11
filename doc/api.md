@@ -152,26 +152,43 @@
 
 ## 管理员用户管理
 
-以下接口均需要管理员权限（`role=admin`），普通用户调用会返回 `403`。
+以下接口均需要管理员权限（`role=admin`）。未登录返回 `401`，非管理员返回 `403`。
 
-### 查询用户
+前端入口页面：`/admin.html`
 
-**GET** `/api/admin/users?q=&limit=20&offset=0`
+---
 
-说明：
+### 查询用户列表
 
-- `q` 可选，支持按 `user_id / username / email` 模糊查询
-- `limit` 默认 `20`，最大 `100`
-- `offset` 默认 `0`
-- 返回结果默认排除系统用户、管理员用户与 Bot 用户
+**GET** `/api/admin/users`
 
-成功响应：
+权限：管理员
+
+#### 查询参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `q` | string | — | 可选。对 `id`、`username`、`email` 做不区分大小写的模糊匹配（`ILIKE %q%`） |
+| `limit` | int | `20` | 每页条数，最大 `100`，超出自动截断为 `100` |
+| `offset` | int | `0` | 跳过的条数，用于分页 |
+
+#### 过滤规则
+
+返回结果**自动排除**以下用户，无法通过参数关闭：
+
+- 系统用户（内部 `system` ID）
+- 管理员用户（`role = admin`）
+- Bot 用户（在 `bot_users` 表中存在关联的账号）
+
+结果按 `created_at DESC, id DESC` 排序。
+
+#### 成功响应 `200`
 
 ```json
 {
   "users": [
     {
-      "id": "u_123",
+      "id": "u_abc123",
       "username": "alice",
       "email": "alice@example.com",
       "role": "user",
@@ -181,46 +198,119 @@
       "created_at": "2026-04-01T01:00:00Z"
     }
   ],
-  "total": 1,
-  "has_more": false,
-  "next_offset": 0
+  "total": 42,
+  "has_more": true,
+  "next_offset": 20
 }
 ```
 
-### 查看指定用户登录记录
+#### 响应字段说明
 
-**GET** `/api/admin/users/:id/login-history?limit=30`
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `users` | array | 当前页用户列表 |
+| `users[].id` | string | 用户 ID |
+| `users[].username` | string | 用户名 |
+| `users[].email` | string | 邮箱 |
+| `users[].role` | string | 角色，当前可为 `user` |
+| `users[].is_online` | bool | 是否有活跃 WebSocket 连接 |
+| `users[].device_type` | string | 最近活跃设备类型：`browser` / `ios` / `android` |
+| `users[].last_seen_at` | string\|null | ISO 8601 时间戳，无记录时省略 |
+| `users[].created_at` | string | ISO 8601 注册时间 |
+| `total` | int | 符合过滤条件的用户总数（不受 `limit` 影响） |
+| `has_more` | bool | 是否还有更多数据 |
+| `next_offset` | int | 下一页的 `offset` 值；`has_more=false` 时为 `0` |
 
-说明：
+#### 错误响应
 
-- `:id` 为目标用户 ID
-- `limit` 默认 `20`
+| 状态码 | 说明 |
+|--------|------|
+| `400` | `limit` 或 `offset` 不合法（非整数或负数） |
+| `401` | 未登录 |
+| `403` | 非管理员 |
+| `500` | 数据库查询失败 |
 
-成功响应：
+---
+
+### 查看指定用户的登录记录
+
+**GET** `/api/admin/users/:id/login-history`
+
+权限：管理员
+
+#### 路径参数
+
+| 参数 | 说明 |
+|------|------|
+| `:id` | 目标用户 ID |
+
+#### 查询参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `limit` | int | `20` | 返回最近 N 条记录，按登录时间倒序 |
+
+#### 成功响应 `200`
 
 ```json
 {
   "records": [
     {
       "id": 1,
-      "user_id": "u_123",
-      "ip_address": "127.0.0.1",
+      "user_id": "u_abc123",
+      "ip_address": "203.0.113.5",
       "country": "China",
       "region": "Shanghai",
       "city": "Shanghai",
       "login_method": "password",
       "device_type": "browser",
-      "logged_in_at": "2026-03-22T08:00:00Z"
+      "logged_in_at": "2026-04-11T08:00:00Z"
     }
   ]
 }
 ```
 
-### 管理员重置用户密码
+#### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `records[].id` | int | 记录 ID |
+| `records[].user_id` | string | 用户 ID |
+| `records[].ip_address` | string | 登录 IP；地址未能解析时可能为空 |
+| `records[].country` | string | 国家；GeoLite2 不可用时为空 |
+| `records[].region` | string | 省/州；GeoLite2 不可用时为空 |
+| `records[].city` | string | 城市；GeoLite2 不可用时为空 |
+| `records[].login_method` | string | `password` / `register` / `passkey` |
+| `records[].device_type` | string | `browser` / `ios` / `android` |
+| `records[].logged_in_at` | string | ISO 8601 登录时间 |
+
+#### 错误响应
+
+| 状态码 | 说明 |
+|--------|------|
+| `400` | `:id` 为空或 `limit` 不合法 |
+| `401` | 未登录 |
+| `403` | 非管理员 |
+| `404` | 目标用户不存在 |
+| `500` | 数据库查询失败 |
+
+---
+
+### 重置用户密码
 
 **PUT** `/api/admin/users/:id/password`
 
-请求体：
+权限：管理员
+
+管理员直接覆盖目标用户的密码哈希，无需原密码确认，操作立即生效。目标用户的现有 Session 不会被同步作废（如需强制下线，需另行实现 Session 清理逻辑）。
+
+#### 路径参数
+
+| 参数 | 说明 |
+|------|------|
+| `:id` | 目标用户 ID |
+
+#### 请求体
 
 ```json
 {
@@ -228,19 +318,28 @@
 }
 ```
 
-说明：
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `new_password` | string | 是 | 新密码，最少 6 个字符 |
 
-- `new_password` 至少 6 位
-- 成功后会直接更新目标用户密码哈希
-
-成功响应：
+#### 成功响应 `200`
 
 ```json
 {
   "message": "密码已更新",
-  "user_id": "u_123"
+  "user_id": "u_abc123"
 }
 ```
+
+#### 错误响应
+
+| 状态码 | 说明 |
+|--------|------|
+| `400` | 请求体格式错误，或 `new_password` 少于 6 位 |
+| `401` | 未登录 |
+| `403` | 非管理员 |
+| `404` | 目标用户不存在 |
+| `500` | 密码哈希生成失败或数据库写入失败 |
 
 ## Passkey 登录
 
