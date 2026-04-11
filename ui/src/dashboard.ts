@@ -58,7 +58,6 @@ const entryContent = byId<HTMLElement>("entryContent");
 const logoutBtn = byId<HTMLButtonElement>("logoutBtn");
 const newEntryBtn = byId<HTMLButtonElement>("newEntryBtn");
 const loadMoreBtn = byId<HTMLButtonElement>("loadMoreBtn");
-const adminPageNavItem = byId<HTMLAnchorElement>("adminPageNavItem");
 const editBtn = byId<HTMLButtonElement>("editBtn");
 const deleteBtn = byId<HTMLButtonElement>("deleteBtn");
 const drawerToggleBtn = byId<HTMLButtonElement>("drawerToggleBtn");
@@ -560,7 +559,6 @@ async function loadProfile(): Promise<void> {
   addTagBtn.disabled = !isAdmin;
   addTagBtn.textContent = isAdmin ? t("dashboard.newTag") : t("dashboard.adminOnlyTag");
   addTagBtn.hidden = !isAdmin;
-  adminPageNavItem.hidden = !isAdmin;
   siteAdminPanel.hidden = !isAdmin;
   settingsNavButtons.forEach((button) => {
     if (button.dataset.settingsNav === "site") {

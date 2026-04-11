@@ -101,6 +101,10 @@ export function renderSidebarFoot(user) {
             avatarEl.textContent = avatar;
         }
     }
+    const isAdmin = user?.role === "admin";
+    document.querySelectorAll("[data-admin-nav]").forEach((el) => {
+        el.hidden = !isAdmin;
+    });
 }
 export async function hydrateSidebarFoot() {
     const hasFoot = document.getElementById("lpFootName") || document.getElementById("lpFootRole") || document.getElementById("lpFootAvatar");

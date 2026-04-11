@@ -124,6 +124,11 @@ export function renderSidebarFoot(user?: SidebarUser): void {
       avatarEl.textContent = avatar;
     }
   }
+
+  const isAdmin = user?.role === "admin";
+  document.querySelectorAll<HTMLElement>("[data-admin-nav]").forEach((el) => {
+    el.hidden = !isAdmin;
+  });
 }
 
 export async function hydrateSidebarFoot(): Promise<void> {
