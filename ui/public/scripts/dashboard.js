@@ -186,8 +186,8 @@ function switchSettingsSection(section) {
             lead: "",
         },
         system: {
-            title: "系统信息",
-            lead: "查看当前实例的版本、系统环境与程序所在分区的剩余容量。",
+            title: t("dashboard.systemTitle"),
+            lead: t("dashboard.systemLead"),
         },
         bots: {
             title: t("dashboard.botsManagementTitle"),
