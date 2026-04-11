@@ -4,3 +4,8 @@ ui/node_modules/
 ui/dist/
 .DS_Store
 .cache/
+.claude/
+diary/
+dock/
+doc/memo.md
+doc/posts.json
