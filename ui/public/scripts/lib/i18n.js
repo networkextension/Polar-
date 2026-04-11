@@ -563,6 +563,7 @@ const en = {
     "nav.chat": "Chat",
     "nav.editor": "Editor",
     "nav.latch": "Latch",
+    "nav.bots": "Bot Management",
     "nav.userAdmin": "User Admin",
     "nav.settings": "Settings",
     // Admin
@@ -1158,6 +1159,7 @@ const zhCN = {
     "nav.chat": "Chat",
     "nav.editor": "Editor",
     "nav.latch": "Latch",
+    "nav.bots": "Bot 管理",
     "nav.userAdmin": "用户管理",
     "nav.settings": "设置",
     // Admin

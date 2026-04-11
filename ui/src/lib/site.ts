@@ -51,6 +51,21 @@ export function renderSiteBrand(site?: SiteSettings): void {
 
 const SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
 
+export function initSettingsButton(): void {
+  // On the dashboard, dashboard.ts handles [data-open-settings-center] directly.
+  // On every other page, redirect to dashboard with ?settings= so the modal opens there.
+  const isDashboard = window.location.pathname.endsWith("/dashboard.html") || window.location.pathname === "/";
+  if (isDashboard) {
+    return;
+  }
+  document.querySelectorAll<HTMLElement>("[data-open-settings-center]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.settingsTarget || "personalization";
+      window.location.href = `/dashboard.html?settings=${encodeURIComponent(target)}`;
+    });
+  });
+}
+
 export function initSidebarToggle(): void {
   const topbar = document.querySelector<HTMLElement>(".lp-topbar");
   const app = document.querySelector<HTMLElement>(".lp-app");
@@ -75,6 +90,7 @@ export function initSidebarToggle(): void {
 export async function hydrateSiteBrand(): Promise<void> {
   applyI18n();
   initSidebarToggle();
+  initSettingsButton();
   await hydrateSidebarFoot();
 
   if (!document.querySelector("[data-site-brand]")) {

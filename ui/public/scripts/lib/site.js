@@ -32,6 +32,20 @@ export function renderSiteBrand(site) {
     });
 }
 const SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
+export function initSettingsButton() {
+    // On the dashboard, dashboard.ts handles [data-open-settings-center] directly.
+    // On every other page, redirect to dashboard with ?settings= so the modal opens there.
+    const isDashboard = window.location.pathname.endsWith("/dashboard.html") || window.location.pathname === "/";
+    if (isDashboard) {
+        return;
+    }
+    document.querySelectorAll("[data-open-settings-center]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const target = btn.dataset.settingsTarget || "personalization";
+            window.location.href = `/dashboard.html?settings=${encodeURIComponent(target)}`;
+        });
+    });
+}
 export function initSidebarToggle() {
     const topbar = document.querySelector(".lp-topbar");
     const app = document.querySelector(".lp-app");
@@ -55,6 +69,7 @@ export function initSidebarToggle() {
 export async function hydrateSiteBrand() {
     applyI18n();
     initSidebarToggle();
+    initSettingsButton();
     await hydrateSidebarFoot();
     if (!document.querySelector("[data-site-brand]")) {
         return;

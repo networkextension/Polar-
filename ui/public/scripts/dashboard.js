@@ -1311,4 +1311,13 @@ void (async () => {
     await hydrateSiteBrand();
     await loadProfile();
     await Promise.all([loadEntries(true), loadLoginHistory(), loadPasskeys(), loadSiteAdminData()]);
+    // Open settings modal if redirected from another page with ?settings=
+    const settingsParam = new URLSearchParams(window.location.search).get("settings");
+    if (settingsParam) {
+        const validSections = ["profile", "personalization", "settings", "system", "bots", "site"];
+        const section = validSections.includes(settingsParam) ? settingsParam : "personalization";
+        openSiteAdminModal(section);
+        // Clean the URL so refreshing doesn't reopen it
+        history.replaceState(null, "", window.location.pathname);
+    }
 })();

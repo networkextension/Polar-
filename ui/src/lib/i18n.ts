@@ -578,6 +578,7 @@ const en: Record<string, string> = {
   "nav.chat": "Chat",
   "nav.editor": "Editor",
   "nav.latch": "Latch",
+  "nav.bots": "Bot Management",
   "nav.userAdmin": "User Admin",
   "nav.settings": "Settings",
 
@@ -1188,6 +1189,7 @@ const zhCN: Record<string, string> = {
   "nav.chat": "Chat",
   "nav.editor": "Editor",
   "nav.latch": "Latch",
+  "nav.bots": "Bot 管理",
   "nav.userAdmin": "用户管理",
   "nav.settings": "设置",
 
