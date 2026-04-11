@@ -457,6 +457,11 @@ button:hover {
   background: var(--surface);
 }
 
+.tag-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .tag-item-empty {
   color: var(--muted);
   justify-content: center;

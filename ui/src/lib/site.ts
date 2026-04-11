@@ -7,6 +7,12 @@ type SiteSettings = {
   icon_url?: string;
 };
 
+type SidebarUser = {
+  username?: string;
+  role?: string;
+  icon_url?: string;
+};
+
 const fallbackSite: Required<SiteSettings> = {
   name: "Polar-",
   description: "AI-assisted product prototyping workspace",
@@ -60,5 +66,55 @@ export async function hydrateSiteBrand(): Promise<void> {
     renderSiteBrand(data.site);
   } catch {
     renderSiteBrand();
+  }
+}
+
+export function renderSidebarFoot(user?: SidebarUser): void {
+  const nameEl = document.getElementById("lpFootName");
+  const roleEl = document.getElementById("lpFootRole");
+  const avatarEl = document.getElementById("lpFootAvatar");
+
+  if (!nameEl && !roleEl && !avatarEl) {
+    return;
+  }
+
+  const username = (user?.username || "").trim();
+  if (nameEl) {
+    nameEl.textContent = username || "—";
+  }
+  if (roleEl) {
+    roleEl.textContent = user?.role === "admin" ? "Administrator" : "Member";
+  }
+  if (avatarEl) {
+    const avatar = username ? username.slice(0, 1).toUpperCase() : "U";
+    if (user?.icon_url) {
+      avatarEl.style.backgroundImage = `url(${user.icon_url})`;
+      avatarEl.style.backgroundSize = "cover";
+      avatarEl.style.backgroundPosition = "center";
+      avatarEl.textContent = "";
+    } else {
+      avatarEl.style.backgroundImage = "";
+      avatarEl.style.backgroundSize = "";
+      avatarEl.style.backgroundPosition = "";
+      avatarEl.textContent = avatar;
+    }
+  }
+}
+
+export async function hydrateSidebarFoot(): Promise<void> {
+  const hasFoot = document.getElementById("lpFootName") || document.getElementById("lpFootRole") || document.getElementById("lpFootAvatar");
+  if (!hasFoot) {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/me", { credentials: "include" });
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    renderSidebarFoot(data);
+  } catch {
+    // Keep static placeholders on network failure.
   }
 }

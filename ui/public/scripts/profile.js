@@ -3,7 +3,7 @@ import { uploadUserIcon } from "./api/dashboard.js";
 import { fetchCurrentUser, sendEmailVerification } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
 import { byId } from "./lib/dom.js";
-import { hydrateSiteBrand, hydrateSidebarFoot } from "./lib/site.js";
+import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const profileWelcome = byId("profileWelcome");
@@ -39,7 +39,6 @@ async function loadCurrentUser() {
     currentUserId = data.user_id;
     currentUserEmail = data.email || "";
     currentUserEmailVerified = Boolean(data.email_verified);
-    hydrateSidebarFoot(data.username, data.role);
 }
 function renderProfileCard(profile) {
     const avatar = resolveAvatar(profile.username, profile.icon_url, 120);

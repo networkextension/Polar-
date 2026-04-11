@@ -5,7 +5,7 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
-import { hydrateSiteBrand, hydrateSidebarFoot, renderSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const welcomeText = byId("welcomeText");
@@ -14,6 +14,7 @@ const entryContent = byId("entryContent");
 const logoutBtn = byId("logoutBtn");
 const newEntryBtn = byId("newEntryBtn");
 const loadMoreBtn = byId("loadMoreBtn");
+const adminPageNavItem = byId("adminPageNavItem");
 const editBtn = byId("editBtn");
 const deleteBtn = byId("deleteBtn");
 const drawerToggleBtn = byId("drawerToggleBtn");
@@ -463,7 +464,6 @@ async function loadProfile() {
     }
     isAdmin = data.role === "admin";
     welcomeText.textContent = t("dashboard.welcome", { username: data.username });
-    hydrateSidebarFoot(data.username, data.role);
     dashboardRoleBadge.hidden = !isAdmin;
     settingsCardName.textContent = data.username || t("dashboard.currentUser");
     settingsCardMeta.textContent = isAdmin ? t("dashboard.adminMeta") : t("dashboard.userMeta");
@@ -476,6 +476,7 @@ async function loadProfile() {
     addTagBtn.disabled = !isAdmin;
     addTagBtn.textContent = isAdmin ? t("dashboard.newTag") : t("dashboard.adminOnlyTag");
     addTagBtn.hidden = !isAdmin;
+    adminPageNavItem.hidden = !isAdmin;
     siteAdminPanel.hidden = !isAdmin;
     settingsNavButtons.forEach((button) => {
         if (button.dataset.settingsNav === "site") {

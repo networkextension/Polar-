@@ -1,6 +1,6 @@
 import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
-import { hydrateSiteBrand, hydrateSidebarFoot } from "./lib/site.js";
+import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
 import { t } from "./lib/i18n.js";
@@ -255,12 +255,9 @@ function enhancePostVideos(container) {
     });
 }
 function enhancePostImages(container, images) {
-    const allImgs = Array.from(container.querySelectorAll(".post-images img"));
-    const gallery = images.length ? images : allImgs.map((el) => el.src);
-    allImgs.forEach((imageEl, index) => {
-        imageEl.addEventListener("click", (e) => {
-            e.stopPropagation();
-            openImageModal(gallery, index);
+    container.querySelectorAll(".post-images img").forEach((imageEl, index) => {
+        imageEl.addEventListener("click", () => {
+            openImageModal(images, index);
         });
     });
 }
@@ -274,7 +271,6 @@ async function loadProfile() {
     currentUserId = data.user_id;
     currentUserRole = data.role || "user";
     postWelcome.textContent = t("post.welcome", { username: data.username });
-    hydrateSidebarFoot(data.username, data.role);
 }
 async function loadReplies(postId) {
     const replyList = document.getElementById("replyList");
@@ -649,12 +645,6 @@ async function loadTaskResults(postId) {
     })
         .join("");
     enhancePostVideos(container);
-    container.querySelectorAll(".post-images").forEach((group) => {
-        const srcs = Array.from(group.querySelectorAll("img")).map((img) => img.src);
-        group.querySelectorAll("img").forEach((img, idx) => {
-            img.addEventListener("click", () => openImageModal(srcs, idx));
-        });
-    });
 }
 async function loadPost() {
     const postId = getPostId();

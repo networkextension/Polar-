@@ -1,6 +1,6 @@
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand, hydrateSidebarFoot } from "./lib/site.js";
+import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const API_BASE = "";
@@ -21,10 +21,7 @@ async function ensureLogin() {
     const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
     if (!res.ok) {
         window.location.href = "/login.html";
-        return;
     }
-    const data = await res.json();
-    hydrateSidebarFoot(data.username, data.role);
 }
 function getPublicUrl() {
     if (!entryId) {

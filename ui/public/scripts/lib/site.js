@@ -31,14 +31,6 @@ export function renderSiteBrand(site) {
         }
     });
 }
-export function hydrateSidebarFoot(username, role) {
-    const avatar = document.getElementById("lpFootAvatar");
-    const nameEl = document.getElementById("lpFootName");
-    const roleEl = document.getElementById("lpFootRole");
-    if (avatar) avatar.textContent = (username || "U")[0].toUpperCase();
-    if (nameEl) nameEl.textContent = username || "—";
-    if (roleEl) roleEl.textContent = role === "admin" ? "Administrator" : "Member";
-}
 export async function hydrateSiteBrand() {
     applyI18n();
     if (!document.querySelector("[data-site-brand]")) {
