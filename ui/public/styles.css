@@ -2074,6 +2074,10 @@ textarea {
   gap: 8px;
 }
 
+.message-item.other .message-row {
+  margin-left: 36px; /* avatar(28) + gap(8) — align bubble with username */
+}
+
 .message-row:hover .message-revoke {
   opacity: 1;
 }
