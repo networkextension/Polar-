@@ -19,7 +19,7 @@ import {
   removeLatchProfile,
   fetchLatchProfiles,
 } from "./api/dashboard.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
 import type {
@@ -35,9 +35,6 @@ import type {
 
 const lpOverlay       = byId<HTMLElement>("lpOverlay");
 const latchWelcome    = byId<HTMLElement>("latchWelcome");
-const lpFootAvatar    = byId<HTMLElement>("lpFootAvatar");
-const lpFootName      = byId<HTMLElement>("lpFootName");
-const lpFootRole      = byId<HTMLElement>("lpFootRole");
 
 // Tabs / panels
 const latchTabProxies  = byId<HTMLButtonElement>("latchTabProxies");
@@ -446,9 +443,7 @@ async function init(): Promise<void> {
   isAdmin = me.role === "admin";
 
   latchWelcome.textContent = isAdmin ? "管理员模式" : "只读模式";
-  lpFootName.textContent = me.username || "—";
-  lpFootRole.textContent = isAdmin ? "Administrator" : "Member";
-  lpFootAvatar.textContent = (me.username || "U")[0].toUpperCase();
+  renderSidebarFoot(me);
 
   if (isAdmin) {
     latchTabProxies.hidden = false;

@@ -75,7 +75,7 @@ export function initSidebarToggle(): void {
 export async function hydrateSiteBrand(): Promise<void> {
   applyI18n();
   initSidebarToggle();
-  void hydrateSidebarFoot();
+  await hydrateSidebarFoot();
 
   if (!document.querySelector("[data-site-brand]")) {
     return;

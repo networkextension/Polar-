@@ -55,7 +55,7 @@ export function initSidebarToggle() {
 export async function hydrateSiteBrand() {
     applyI18n();
     initSidebarToggle();
-    void hydrateSidebarFoot();
+    await hydrateSidebarFoot();
     if (!document.querySelector("[data-site-brand]")) {
         return;
     }

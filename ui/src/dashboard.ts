@@ -34,7 +34,7 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
-import { hydrateSiteBrand, renderSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 import type {
@@ -574,6 +574,7 @@ async function loadProfile(): Promise<void> {
   }
   userIcon.src = avatar;
   settingsCardAvatar.src = avatar;
+  renderSidebarFoot(data);
 }
 
 async function loadSiteAdminData(): Promise<void> {

@@ -5,7 +5,7 @@ import { resolveAvatar } from "./lib/avatar.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 import type { ChatEventPayload, ChatLLMConfig, ChatMessage, ChatMessageAttachment, ChatSummary, LLMThread } from "./types/chat.js";
@@ -344,6 +344,7 @@ async function loadProfile(): Promise<void> {
   }
   currentUserId = data.user_id;
   chatWelcome.textContent = t("chat.welcome", { username: data.username });
+  renderSidebarFoot(data);
 }
 
 function renderChatList(chats: ChatSummary[]): void {

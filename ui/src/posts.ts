@@ -1,6 +1,6 @@
 import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
 import { t } from "./lib/i18n.js";
@@ -263,6 +263,7 @@ async function loadProfile(): Promise<void> {
   currentUserId = data.user_id;
   currentUserRole = data.role || "user";
   postWelcome.textContent = t("posts.welcome", { username: data.username });
+  renderSidebarFoot(data);
 }
 
 function createPostCard(post: Post): HTMLElement {

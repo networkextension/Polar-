@@ -1,5 +1,5 @@
 import { fetchLatchProxies, createLatchProxy, updateLatchProxy, removeLatchProxy, fetchLatchProxyVersions, rollbackLatchProxy, fetchLatchRules, createLatchRule, createLatchRuleFromFile, updateLatchRule, uploadLatchRuleFile, removeLatchRule, fetchLatchRuleVersions, rollbackLatchRule, fetchLatchAdminProfiles, createLatchProfile, updateLatchProfile, removeLatchProfile, fetchLatchProfiles, } from "./api/dashboard.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
 // ---------------------------------------------------------------------------
@@ -7,9 +7,6 @@ import { byId } from "./lib/dom.js";
 // ---------------------------------------------------------------------------
 const lpOverlay = byId("lpOverlay");
 const latchWelcome = byId("latchWelcome");
-const lpFootAvatar = byId("lpFootAvatar");
-const lpFootName = byId("lpFootName");
-const lpFootRole = byId("lpFootRole");
 // Tabs / panels
 const latchTabProxies = byId("latchTabProxies");
 const latchTabRules = byId("latchTabRules");
@@ -382,9 +379,7 @@ async function init() {
     const me = await res.json();
     isAdmin = me.role === "admin";
     latchWelcome.textContent = isAdmin ? "管理员模式" : "只读模式";
-    lpFootName.textContent = me.username || "—";
-    lpFootRole.textContent = isAdmin ? "Administrator" : "Member";
-    lpFootAvatar.textContent = (me.username || "U")[0].toUpperCase();
+    renderSidebarFoot(me);
     if (isAdmin) {
         latchTabProxies.hidden = false;
         latchTabRules.hidden = false;

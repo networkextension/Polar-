@@ -1,6 +1,6 @@
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 
@@ -25,7 +25,10 @@ async function ensureLogin(): Promise<void> {
   const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
   if (!res.ok) {
     window.location.href = "/login.html";
+    return;
   }
+  const data = await res.json();
+  renderSidebarFoot(data);
 }
 
 function getPublicUrl(): string {
