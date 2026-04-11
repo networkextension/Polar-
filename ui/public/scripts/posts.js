@@ -18,6 +18,13 @@ let currentUserId = "";
 let currentUserRole = "user";
 let videoModal = null;
 let videoModalPlayer = null;
+let imageModal = null;
+let imageModalViewer = null;
+let imageModalCounter = null;
+let imageModalPrevBtn = null;
+let imageModalNextBtn = null;
+let currentImageGallery = [];
+let currentImageIndex = 0;
 let currentPostTypeFilter = "all";
 let currentTagFilter = null;
 let currentTags = [];
@@ -89,6 +96,110 @@ async function loadTags() {
     renderTypeFilters();
     renderTagFilters();
     updateListBadge();
+}
+function ensureImageModal() {
+    if (imageModal) {
+        return;
+    }
+    const modal = document.createElement("div");
+    modal.className = "image-modal";
+    modal.innerHTML = `
+    <div class="image-modal-backdrop"></div>
+    <div class="image-modal-content">
+      <div class="image-modal-toolbar">
+        <div class="image-modal-counter">1 / 1</div>
+        <button class="image-modal-close btn-inline btn-secondary" type="button">${t("common.close")}</button>
+      </div>
+      <div class="image-modal-stage">
+        <button class="image-modal-nav image-modal-prev btn-inline btn-secondary" type="button" aria-label="${t("post.prevImage")}">${t("post.prevImage")}</button>
+        <img class="image-modal-viewer" alt="post image preview" />
+        <button class="image-modal-nav image-modal-next btn-inline btn-secondary" type="button" aria-label="${t("post.nextImage")}">${t("post.nextImage")}</button>
+      </div>
+    </div>
+  `;
+    document.body.appendChild(modal);
+    imageModal = modal;
+    imageModalViewer = query(modal, ".image-modal-viewer");
+    imageModalCounter = query(modal, ".image-modal-counter");
+    imageModalPrevBtn = query(modal, ".image-modal-prev");
+    imageModalNextBtn = query(modal, ".image-modal-next");
+    const close = () => {
+        if (!imageModal || !imageModalViewer) {
+            return;
+        }
+        imageModal.classList.remove("open");
+        imageModalViewer.removeAttribute("src");
+        currentImageGallery = [];
+        currentImageIndex = 0;
+    };
+    query(modal, ".image-modal-backdrop").addEventListener("click", close);
+    query(modal, ".image-modal-close").addEventListener("click", close);
+    imageModalPrevBtn.addEventListener("click", () => stepImageModal(-1));
+    imageModalNextBtn.addEventListener("click", () => stepImageModal(1));
+    document.addEventListener("keydown", (event) => {
+        if (!imageModal?.classList.contains("open")) {
+            return;
+        }
+        if (event.key === "Escape") {
+            close();
+            return;
+        }
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            stepImageModal(-1);
+            return;
+        }
+        if (event.key === "ArrowRight") {
+            event.preventDefault();
+            stepImageModal(1);
+        }
+    });
+}
+function renderImageModal() {
+    if (!imageModal || !imageModalViewer || !imageModalCounter || !imageModalPrevBtn || !imageModalNextBtn) {
+        return;
+    }
+    if (!currentImageGallery.length) {
+        imageModal.classList.remove("open");
+        return;
+    }
+    currentImageIndex = (currentImageIndex + currentImageGallery.length) % currentImageGallery.length;
+    imageModalViewer.src = currentImageGallery[currentImageIndex];
+    imageModalCounter.textContent = `${currentImageIndex + 1} / ${currentImageGallery.length}`;
+    const multiple = currentImageGallery.length > 1;
+    imageModalPrevBtn.disabled = !multiple;
+    imageModalNextBtn.disabled = !multiple;
+}
+function openImageModal(images, index) {
+    if (!images.length) {
+        return;
+    }
+    ensureImageModal();
+    if (!imageModal) {
+        return;
+    }
+    currentImageGallery = images;
+    currentImageIndex = index;
+    renderImageModal();
+    imageModal.classList.add("open");
+}
+function stepImageModal(step) {
+    if (!currentImageGallery.length) {
+        return;
+    }
+    currentImageIndex += step;
+    renderImageModal();
+}
+function enhancePostImages(container) {
+    container.querySelectorAll(".post-images img").forEach((imageEl) => {
+        imageEl.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const siblings = Array.from(imageEl.closest(".post-images").querySelectorAll("img"));
+            const gallery = siblings.map((el) => el.dataset.original || el.src);
+            const index = siblings.indexOf(imageEl);
+            openImageModal(gallery, index);
+        });
+    });
 }
 function ensureVideoModal() {
     if (videoModal) {
@@ -194,8 +305,10 @@ async function loadProfile() {
 function createPostCard(post) {
     const card = document.createElement("div");
     card.className = "post-card panel";
-    const images = normalizePostImages(post, "small")
-        .map((url) => `<img src="${url}" alt="post image" loading="lazy" />`)
+    const smallImages = normalizePostImages(post, "small");
+    const origImages = normalizePostImages(post, "original");
+    const images = smallImages
+        .map((url, i) => `<img src="${url}" data-original="${origImages[i] ?? url}" alt="post image" loading="lazy" />`)
         .join("");
     const videos = normalizeVideoItems(post)
         .map((item) => `
@@ -239,13 +352,18 @@ function createPostCard(post) {
       <button class="btn-inline btn-secondary like-btn" type="button">
         ${post.liked_by_me ? t("posts.liked") : t("posts.like")} · ${post.like_count}
       </button>
-      <a class="btn-inline btn-secondary" href="/post.html?id=${post.id}">${t("posts.viewDetails")}</a>
+      <button class="btn-inline btn-secondary view-details-btn" type="button" data-post-id="${post.id}">${t("posts.viewDetails")}</button>
       ${canDelete ? `<button class="btn-inline btn-secondary delete-post-btn" type="button">${t("posts.deletePost")}</button>` : ""}
     </div>
   `;
     const likeBtn = query(card, ".like-btn");
+    const viewBtn = query(card, ".view-details-btn");
     const deleteBtn = card.querySelector(".delete-post-btn");
     enhancePostVideos(card);
+    enhancePostImages(card);
+    viewBtn.addEventListener("click", () => {
+        window.location.href = `/post.html?id=${post.id}`;
+    });
     likeBtn.addEventListener("click", async () => {
         const method = post.liked_by_me ? "DELETE" : "POST";
         const res = await fetch(`${API_BASE}/api/posts/${post.id}/like`, {
@@ -259,24 +377,49 @@ function createPostCard(post) {
         post.like_count += post.liked_by_me ? 1 : -1;
         likeBtn.textContent = `${post.liked_by_me ? t("posts.liked") : t("posts.like")} · ${post.like_count}`;
     });
-    deleteBtn?.addEventListener("click", async () => {
-        if (!window.confirm(t("posts.confirmDelete"))) {
-            return;
-        }
-        deleteBtn.disabled = true;
-        const res = await fetch(`${API_BASE}/api/posts/${post.id}`, {
-            method: "DELETE",
-            credentials: "include",
+    if (deleteBtn) {
+        let pendingDelete = false;
+        const actionsDiv = query(card, ".post-actions");
+        const renderDeleteActions = () => {
+            if (pendingDelete) {
+                deleteBtn.textContent = t("common.confirmDelete");
+                deleteBtn.classList.add("btn-danger");
+                if (!actionsDiv.querySelector(".cancel-delete-btn")) {
+                    const cancelBtn = document.createElement("button");
+                    cancelBtn.className = "btn-inline btn-secondary cancel-delete-btn";
+                    cancelBtn.type = "button";
+                    cancelBtn.textContent = t("common.cancel");
+                    cancelBtn.addEventListener("click", () => {
+                        pendingDelete = false;
+                        cancelBtn.remove();
+                        deleteBtn.textContent = t("posts.deletePost");
+                        deleteBtn.classList.remove("btn-danger");
+                    });
+                    actionsDiv.appendChild(cancelBtn);
+                }
+            }
+        };
+        deleteBtn.addEventListener("click", async () => {
+            if (!pendingDelete) {
+                pendingDelete = true;
+                renderDeleteActions();
+                return;
+            }
+            deleteBtn.disabled = true;
+            const res = await fetch(`${API_BASE}/api/posts/${post.id}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+            if (!res.ok) {
+                deleteBtn.disabled = false;
+                return;
+            }
+            card.remove();
+            if (!postList.querySelector(".post-card")) {
+                postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
+            }
         });
-        if (!res.ok) {
-            deleteBtn.disabled = false;
-            return;
-        }
-        card.remove();
-        if (!postList.querySelector(".post-card")) {
-            postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
-        }
-    });
+    }
     return card;
 }
 async function loadPosts(reset = false) {
