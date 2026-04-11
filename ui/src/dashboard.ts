@@ -36,7 +36,7 @@ import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
 import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
-import { t } from "./lib/i18n.js";
+import { t, getLang, setLang, applyI18n } from "./lib/i18n.js";
 import type {
   ApplePushCertificate,
   BotPayload,
@@ -66,6 +66,8 @@ const drawerBackdrop = byId<HTMLElement>("drawerBackdrop");
 const entryDrawer = byId<HTMLElement>("entryDrawer");
 const loginHistoryList = byId<HTMLUListElement>("loginHistoryList");
 const themeToggleBtn = byId<HTMLButtonElement>("themeToggleBtn");
+const languageToggleBtn = byId<HTMLButtonElement>("languageToggleBtn");
+const languageCurrentValue = byId<HTMLElement>("languageCurrentValue");
 const passkeyRegisterBtn = byId<HTMLButtonElement>("passkeyRegisterBtn");
 const passkeyStatus = byId<HTMLElement>("passkeyStatus");
 const passkeyList = byId<HTMLUListElement>("passkeyList");
@@ -221,6 +223,12 @@ function setActiveEntryItem(): void {
 function syncThemeButton(theme: ThemeName): void {
   themeToggleBtn.textContent = theme === "mono" ? t("dashboard.switchToDefault") : t("dashboard.switchToMonochrome");
   themeCurrentValue.textContent = theme === "mono" ? t("dashboard.themeMonochrome") : t("dashboard.themeDefault");
+}
+
+function syncLanguageButton(): void {
+  const lang = getLang();
+  languageCurrentValue.textContent = lang === "zh-CN" ? t("dashboard.languageChinese") : t("dashboard.languageEnglish");
+  languageToggleBtn.textContent = lang === "zh-CN" ? t("dashboard.switchToEnglish") : t("dashboard.switchToChinese");
 }
 
 function switchSettingsSection(section: "profile" | "personalization" | "settings" | "system" | "bots" | "site"): void {
@@ -1443,6 +1451,12 @@ themeToggleBtn.addEventListener("click", () => {
   syncThemeButton(nextTheme);
 });
 
+languageToggleBtn.addEventListener("click", () => {
+  setLang(getLang() === "en" ? "zh-CN" : "en");
+  applyI18n();
+  syncLanguageButton();
+});
+
 passkeyRegisterBtn.addEventListener("click", async () => {
   if (!window.PublicKeyCredential) {
     setStatusMessage(passkeyStatus, "当前浏览器不支持 Passkey。", "error");
@@ -1499,6 +1513,7 @@ sendEmailVerificationBtn.addEventListener("click", () => {
 const initialTheme = initStoredTheme();
 syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
+syncLanguageButton();
 switchSettingsSection(activeSettingsSection);
 
 void (async () => {

@@ -7,7 +7,7 @@ import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
 import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme } from "./lib/theme.js";
-import { t } from "./lib/i18n.js";
+import { t, getLang, setLang, applyI18n } from "./lib/i18n.js";
 const welcomeText = byId("welcomeText");
 const entryList = byId("entryList");
 const entryContent = byId("entryContent");
@@ -22,6 +22,8 @@ const drawerBackdrop = byId("drawerBackdrop");
 const entryDrawer = byId("entryDrawer");
 const loginHistoryList = byId("loginHistoryList");
 const themeToggleBtn = byId("themeToggleBtn");
+const languageToggleBtn = byId("languageToggleBtn");
+const languageCurrentValue = byId("languageCurrentValue");
 const passkeyRegisterBtn = byId("passkeyRegisterBtn");
 const passkeyStatus = byId("passkeyStatus");
 const passkeyList = byId("passkeyList");
@@ -169,6 +171,11 @@ function setActiveEntryItem() {
 function syncThemeButton(theme) {
     themeToggleBtn.textContent = theme === "mono" ? t("dashboard.switchToDefault") : t("dashboard.switchToMonochrome");
     themeCurrentValue.textContent = theme === "mono" ? t("dashboard.themeMonochrome") : t("dashboard.themeDefault");
+}
+function syncLanguageButton() {
+    const lang = getLang();
+    languageCurrentValue.textContent = lang === "zh-CN" ? t("dashboard.languageChinese") : t("dashboard.languageEnglish");
+    languageToggleBtn.textContent = lang === "zh-CN" ? t("dashboard.switchToEnglish") : t("dashboard.switchToChinese");
 }
 function switchSettingsSection(section) {
     activeSettingsSection = section;
@@ -1263,6 +1270,11 @@ themeToggleBtn.addEventListener("click", () => {
     const nextTheme = applyTheme(currentTheme === "mono" ? "default" : "mono", true);
     syncThemeButton(nextTheme);
 });
+languageToggleBtn.addEventListener("click", () => {
+    setLang(getLang() === "en" ? "zh-CN" : "en");
+    applyI18n();
+    syncLanguageButton();
+});
 passkeyRegisterBtn.addEventListener("click", async () => {
     if (!window.PublicKeyCredential) {
         setStatusMessage(passkeyStatus, "当前浏览器不支持 Passkey。", "error");
@@ -1306,6 +1318,7 @@ sendEmailVerificationBtn.addEventListener("click", () => {
 const initialTheme = initStoredTheme();
 syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
+syncLanguageButton();
 switchSettingsSection(activeSettingsSection);
 void (async () => {
     await hydrateSiteBrand();
