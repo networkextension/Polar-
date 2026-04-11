@@ -1,5 +1,5 @@
 import { resolveAvatar } from "./lib/avatar.js";
-import { hydrateSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, hydrateCurrentUserFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
 import { t } from "./lib/i18n.js";
@@ -65,4 +65,5 @@ markdownLoadMoreBtn.addEventListener("click", () => {
     void loadMarkdowns(false);
 });
 void hydrateSiteBrand();
+void hydrateCurrentUserFoot();
 void loadMarkdowns(true);

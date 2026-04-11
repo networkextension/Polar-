@@ -39,6 +39,22 @@ export function hydrateSidebarFoot(username, role) {
     if (nameEl) nameEl.textContent = username || "—";
     if (roleEl) roleEl.textContent = role === "admin" ? "Administrator" : "Member";
 }
+export async function hydrateCurrentUserFoot() {
+    if (!document.getElementById("lpFootName")) {
+        return;
+    }
+    try {
+        const res = await fetch("/api/me", { credentials: "include" });
+        if (!res.ok) {
+            return;
+        }
+        const data = await res.json();
+        hydrateSidebarFoot(data.username, data.role);
+    }
+    catch {
+        // not logged in or network error — leave placeholder
+    }
+}
 export async function hydrateSiteBrand() {
     applyI18n();
     if (!document.querySelector("[data-site-brand]")) {
