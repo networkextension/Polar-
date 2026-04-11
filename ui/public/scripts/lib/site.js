@@ -39,6 +39,29 @@ export function hydrateSidebarFoot(username, role) {
     if (nameEl) nameEl.textContent = username || "—";
     if (roleEl) roleEl.textContent = role === "admin" ? "Administrator" : "Member";
 }
+const SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
+export function initSidebarToggle() {
+    const topbar = document.querySelector(".lp-topbar");
+    const app = document.querySelector(".lp-app");
+    if (!topbar || !app) {
+        return;
+    }
+    // restore persisted state
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") {
+        app.classList.add("sidebar-collapsed");
+    }
+    // inject toggle button as first child of topbar
+    const btn = document.createElement("button");
+    btn.className = "lp-sidebar-toggle";
+    btn.title = "Toggle sidebar";
+    btn.setAttribute("aria-label", "Toggle sidebar");
+    btn.textContent = "☰";
+    btn.addEventListener("click", () => {
+        const collapsed = app.classList.toggle("sidebar-collapsed");
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+    });
+    topbar.insertBefore(btn, topbar.firstChild);
+}
 export async function hydrateCurrentUserFoot() {
     if (!document.getElementById("lpFootName")) {
         return;
@@ -57,6 +80,7 @@ export async function hydrateCurrentUserFoot() {
 }
 export async function hydrateSiteBrand() {
     applyI18n();
+    initSidebarToggle();
     if (!document.querySelector("[data-site-brand]")) {
         return;
     }
