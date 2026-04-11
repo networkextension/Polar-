@@ -17,6 +17,7 @@ const en = {
     "common.close": "Close",
     "device.browser": "Browser",
     "common.cancel": "Cancel",
+    "common.confirmDelete": "Confirm Delete",
     "common.uploading": "Uploading...",
     "common.send": "Send",
     "common.submit": "Submit",
@@ -565,6 +566,8 @@ const en = {
     "nav.latch": "Latch",
     "nav.bots": "Bot Management",
     "nav.userAdmin": "User Admin",
+    "bots.title": "Bot Management",
+    "bots.topbarTitle": "Bot Management",
     "nav.settings": "Settings",
     // Admin
     "admin.title": "User Management",
@@ -625,6 +628,7 @@ const zhCN = {
     "common.close": "关闭",
     "device.browser": "浏览器",
     "common.cancel": "取消",
+    "common.confirmDelete": "确认删除",
     "common.uploading": "正在上传...",
     "common.send": "发送",
     "common.submit": "提交",
@@ -1161,6 +1165,8 @@ const zhCN = {
     "nav.latch": "Latch",
     "nav.bots": "Bot 管理",
     "nav.userAdmin": "用户管理",
+    "bots.title": "Bot 管理",
+    "bots.topbarTitle": "Bot 管理",
     "nav.settings": "设置",
     // Admin
     "admin.title": "用户管理",

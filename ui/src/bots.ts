@@ -1,0 +1,414 @@
+import {
+  createBotUser,
+  createLLMConfig,
+  fetchAvailableLLMConfigs,
+  fetchBotUsers,
+  fetchLLMConfigs,
+  removeBotUser,
+  removeLLMConfig,
+  testLLMConfig,
+  updateBotUser,
+  updateLLMConfig,
+} from "./api/dashboard.js";
+import { logout, fetchCurrentUser } from "./api/session.js";
+import { byId } from "./lib/dom.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
+import { t } from "./lib/i18n.js";
+import type { BotPayload, BotUser, LLMConfig, LLMConfigPayload } from "./types/dashboard.js";
+
+// ── LLM Config DOM ──────────────────────────────────────────────────────────
+const llmConfigForm = byId<HTMLFormElement>("llmConfigForm");
+const llmConfigNameInput = byId<HTMLInputElement>("llmConfigNameInput");
+const llmConfigBaseUrlInput = byId<HTMLInputElement>("llmConfigBaseUrlInput");
+const llmConfigModelInput = byId<HTMLInputElement>("llmConfigModelInput");
+const llmConfigApiKeyInput = byId<HTMLInputElement>("llmConfigApiKeyInput");
+const llmConfigSystemPromptInput = byId<HTMLTextAreaElement>("llmConfigSystemPromptInput");
+const llmConfigSharedInput = byId<HTMLInputElement>("llmConfigSharedInput");
+const llmConfigResetBtn = byId<HTMLButtonElement>("llmConfigResetBtn");
+const llmConfigTestBtn = byId<HTMLButtonElement>("llmConfigTestBtn");
+const llmConfigSubmitBtn = byId<HTMLButtonElement>("llmConfigSubmitBtn");
+const llmConfigStatus = byId<HTMLElement>("llmConfigStatus");
+const llmConfigList = byId<HTMLUListElement>("llmConfigList");
+
+// ── Bot User DOM ─────────────────────────────────────────────────────────────
+const botUserForm = byId<HTMLFormElement>("botUserForm");
+const botUserNameInput = byId<HTMLInputElement>("botUserNameInput");
+const botUserConfigSelect = byId<HTMLSelectElement>("botUserConfigSelect");
+const botUserDescriptionInput = byId<HTMLTextAreaElement>("botUserDescriptionInput");
+const botUserSystemPromptInput = byId<HTMLTextAreaElement>("botUserSystemPromptInput");
+const botUserResetBtn = byId<HTMLButtonElement>("botUserResetBtn");
+const botUserSubmitBtn = byId<HTMLButtonElement>("botUserSubmitBtn");
+const botUserStatus = byId<HTMLElement>("botUserStatus");
+const botUserList = byId<HTMLUListElement>("botUserList");
+
+const welcomeText = byId<HTMLElement>("welcomeText");
+const logoutBtn = byId<HTMLButtonElement>("logoutBtn");
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let editingLLMConfigId: number | null = null;
+let editingBotUserId: number | null = null;
+let pendingDeleteLLMConfigId: number | null = null;
+let pendingDeleteBotId: number | null = null;
+let currentLLMConfigs: LLMConfig[] = [];
+let currentAvailableLLMConfigs: LLMConfig[] = [];
+let currentBotUsers: BotUser[] = [];
+
+// ── LLM Config ────────────────────────────────────────────────────────────────
+function resetLLMConfigForm(): void {
+  editingLLMConfigId = null;
+  llmConfigForm.reset();
+  llmConfigApiKeyInput.value = "";
+  llmConfigStatus.textContent = "";
+  llmConfigSubmitBtn.textContent = t("dashboard.saveConfigBtn");
+}
+
+function renderLLMConfigList(configs: LLMConfig[]): void {
+  if (!configs.length) {
+    llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noLLMConfigs")}</li>`;
+    return;
+  }
+
+  llmConfigList.innerHTML = configs
+    .map((config) => {
+      const isPending = pendingDeleteLLMConfigId === config.id;
+      const actions = isPending
+        ? `<button class="btn-inline" type="button" data-action="confirm-delete">${t("common.confirmDelete")}</button>
+           <button class="btn-inline btn-secondary" type="button" data-action="cancel-delete">${t("common.cancel")}</button>`
+        : `<button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+           <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>`;
+      return `
+        <li class="tag-item${isPending ? " tag-item-pending-delete" : ""}" data-llm-config-id="${config.id}">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${config.name}</strong>
+              <span class="tag-chip">${config.model}</span>
+              ${config.has_api_key ? `<span class="tag-chip">${t("dashboard.keySaved")}</span>` : `<span class="tag-chip">${t("dashboard.noKey")}</span>`}
+              ${config.shared ? `<span class="tag-chip">${t("dashboard.shared")}</span>` : `<span class="tag-chip">${t("dashboard.private")}</span>`}
+            </div>
+            <div class="tag-item-meta">${config.base_url}</div>
+            <div class="tag-item-desc">${config.system_prompt || t("dashboard.noSystemPrompt")}</div>
+          </div>
+          <div class="tag-item-actions">${actions}</div>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+// ── Bot User ──────────────────────────────────────────────────────────────────
+function resetBotUserForm(): void {
+  editingBotUserId = null;
+  botUserForm.reset();
+  botUserStatus.textContent = "";
+  botUserSubmitBtn.textContent = t("dashboard.saveBotBtn");
+}
+
+function syncBotConfigOptions(configs: LLMConfig[]): void {
+  if (!configs.length) {
+    botUserConfigSelect.innerHTML = `<option value="">${t("dashboard.createLLMConfigFirst")}</option>`;
+    botUserConfigSelect.disabled = true;
+    botUserSubmitBtn.disabled = true;
+    return;
+  }
+  const currentValue = editingBotUserId ? botUserConfigSelect.value : "";
+  botUserConfigSelect.innerHTML = configs
+    .map((config) => `<option value="${config.id}">${config.name} · ${config.model}</option>`)
+    .join("");
+  if (currentValue && configs.some((config) => String(config.id) === currentValue)) {
+    botUserConfigSelect.value = currentValue;
+  }
+  botUserConfigSelect.disabled = false;
+  botUserSubmitBtn.disabled = false;
+}
+
+function renderBotUserList(bots: BotUser[]): void {
+  if (!bots.length) {
+    botUserList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noBots")}</li>`;
+    return;
+  }
+  botUserList.innerHTML = bots
+    .map((bot) => {
+      const isPending = pendingDeleteBotId === bot.id;
+      const actions = isPending
+        ? `<button class="btn-inline" type="button" data-action="confirm-delete">${t("common.confirmDelete")}</button>
+           <button class="btn-inline btn-secondary" type="button" data-action="cancel-delete">${t("common.cancel")}</button>`
+        : `<button class="btn-inline btn-secondary" type="button" data-action="chat">${t("dashboard.chat")}</button>
+           <button class="btn-inline btn-secondary" type="button" data-action="edit">${t("common.edit")}</button>
+           <button class="btn-inline" type="button" data-action="delete">${t("common.delete")}</button>`;
+      return `
+        <li class="tag-item${isPending ? " tag-item-pending-delete" : ""}" data-bot-user-id="${bot.id}">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${bot.name}</strong>
+              <span class="tag-chip">${bot.config_name}</span>
+            </div>
+            <div class="tag-item-meta">${t("dashboard.botUserId", { id: bot.bot_user_id })}</div>
+            <div class="tag-item-desc">${bot.description || t("dashboard.noDescription")}</div>
+            <div class="tag-item-meta">${bot.system_prompt ? t("dashboard.botPromptPreview", { preview: bot.system_prompt.slice(0, 60) + (bot.system_prompt.length > 60 ? "…" : "") }) : t("dashboard.noBotPrompt")}</div>
+          </div>
+          <div class="tag-item-actions">${actions}</div>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+async function loadData(): Promise<void> {
+  const [ownResult, availableResult, botResult] = await Promise.all([
+    fetchLLMConfigs(),
+    fetchAvailableLLMConfigs(),
+    fetchBotUsers(),
+  ]);
+
+  if (ownResult.response.ok) {
+    currentLLMConfigs = ownResult.data.configs || [];
+    renderLLMConfigList(currentLLMConfigs);
+  } else {
+    llmConfigStatus.textContent = ownResult.data.error || t("dashboard.llmConfigLoadFailed");
+    llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.llmConfigLoadFailed")}</li>`;
+  }
+
+  if (availableResult.response.ok) {
+    currentAvailableLLMConfigs = availableResult.data.configs || [];
+  } else {
+    currentAvailableLLMConfigs = [];
+  }
+  syncBotConfigOptions(currentAvailableLLMConfigs);
+
+  if (botResult.response.ok) {
+    currentBotUsers = botResult.data.bots || [];
+    renderBotUserList(currentBotUsers);
+  } else {
+    botUserStatus.textContent = botResult.data.error || t("dashboard.botListLoadFailed");
+    botUserList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.botListLoadFailed")}</li>`;
+  }
+}
+
+async function bootstrap(): Promise<void> {
+  await hydrateSiteBrand();
+
+  const { response, data } = await fetchCurrentUser();
+  if (!response.ok) {
+    window.location.replace("/login.html");
+    return;
+  }
+
+  welcomeText.textContent = data.username || "";
+  renderSidebarFoot(data);
+
+  await loadData();
+}
+
+// ── Event handlers ────────────────────────────────────────────────────────────
+llmConfigResetBtn.addEventListener("click", () => {
+  resetLLMConfigForm();
+});
+
+llmConfigTestBtn.addEventListener("click", async () => {
+  const payload: LLMConfigPayload = {
+    name: llmConfigNameInput.value.trim(),
+    base_url: llmConfigBaseUrlInput.value.trim(),
+    model: llmConfigModelInput.value.trim(),
+    api_key: llmConfigApiKeyInput.value.trim(),
+    system_prompt: llmConfigSystemPromptInput.value.trim(),
+    shared: llmConfigSharedInput.checked,
+  };
+  if (!payload.name || !payload.base_url || !payload.model) {
+    llmConfigStatus.textContent = t("dashboard.llmConfigMissingFields");
+    return;
+  }
+  llmConfigTestBtn.disabled = true;
+  llmConfigSubmitBtn.disabled = true;
+  llmConfigStatus.textContent = t("dashboard.llmConfigTesting");
+  try {
+    const { response, data } = await testLLMConfig(payload);
+    llmConfigStatus.textContent = response.ok
+      ? data.message || t("dashboard.llmTestSuccess")
+      : data.error || t("dashboard.llmTestFailed");
+  } catch {
+    llmConfigStatus.textContent = t("common.networkErrorRetry");
+  } finally {
+    llmConfigTestBtn.disabled = false;
+    llmConfigSubmitBtn.disabled = false;
+  }
+});
+
+llmConfigForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload: LLMConfigPayload = {
+    name: llmConfigNameInput.value.trim(),
+    base_url: llmConfigBaseUrlInput.value.trim(),
+    model: llmConfigModelInput.value.trim(),
+    api_key: llmConfigApiKeyInput.value.trim(),
+    system_prompt: llmConfigSystemPromptInput.value.trim(),
+    shared: llmConfigSharedInput.checked,
+  };
+  if (!payload.name || !payload.base_url || !payload.model) {
+    llmConfigStatus.textContent = t("dashboard.llmConfigMissingFields");
+    return;
+  }
+  llmConfigSubmitBtn.disabled = true;
+  llmConfigStatus.textContent = editingLLMConfigId ? t("dashboard.llmConfigSaving") : t("dashboard.llmConfigCreating");
+  try {
+    const { response, data } = editingLLMConfigId
+      ? await updateLLMConfig(editingLLMConfigId, { ...payload, update_api_key: payload.api_key !== "" })
+      : await createLLMConfig(payload);
+    if (!response.ok) {
+      llmConfigStatus.textContent = data.error || t("common.saveFailed");
+      return;
+    }
+    llmConfigStatus.textContent = editingLLMConfigId ? t("dashboard.llmConfigUpdated") : t("dashboard.llmConfigCreated");
+    resetLLMConfigForm();
+    await loadData();
+  } catch {
+    llmConfigStatus.textContent = t("common.networkErrorRetry");
+  } finally {
+    llmConfigSubmitBtn.disabled = false;
+  }
+});
+
+llmConfigList.addEventListener("click", async (event) => {
+  const target = event.target as HTMLElement;
+  const button = target.closest<HTMLButtonElement>("button[data-action]");
+  if (!button) return;
+  const item = button.closest<HTMLElement>("[data-llm-config-id]");
+  const configID = Number(item?.dataset.llmConfigId || 0);
+  const config = currentLLMConfigs.find((entry) => entry.id === configID);
+  if (!config) return;
+
+  const action = button.dataset.action;
+  if (action === "edit") {
+    editingLLMConfigId = config.id;
+    llmConfigNameInput.value = config.name;
+    llmConfigBaseUrlInput.value = config.base_url;
+    llmConfigModelInput.value = config.model;
+    llmConfigApiKeyInput.value = "";
+    llmConfigSystemPromptInput.value = config.system_prompt || "";
+    llmConfigSharedInput.checked = config.shared;
+    llmConfigSubmitBtn.textContent = t("dashboard.updateConfig");
+    llmConfigStatus.textContent = config.has_api_key ? t("dashboard.apiKeySaved") : "";
+    llmConfigNameInput.focus();
+    return;
+  }
+  if (action === "delete") {
+    pendingDeleteLLMConfigId = config.id;
+    renderLLMConfigList(currentLLMConfigs);
+    return;
+  }
+  if (action === "cancel-delete") {
+    pendingDeleteLLMConfigId = null;
+    renderLLMConfigList(currentLLMConfigs);
+    return;
+  }
+  if (action === "confirm-delete") {
+    pendingDeleteLLMConfigId = null;
+    const { response, data } = await removeLLMConfig(config.id);
+    if (!response.ok) {
+      llmConfigStatus.textContent = data.error || t("common.deleteFailed");
+      renderLLMConfigList(currentLLMConfigs);
+      return;
+    }
+    llmConfigStatus.textContent = t("dashboard.configDeleted", { name: config.name });
+    resetLLMConfigForm();
+    await loadData();
+  }
+});
+
+botUserResetBtn.addEventListener("click", () => {
+  resetBotUserForm();
+});
+
+botUserForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload: BotPayload = {
+    name: botUserNameInput.value.trim(),
+    description: botUserDescriptionInput.value.trim(),
+    system_prompt: botUserSystemPromptInput.value.trim(),
+    llm_config_id: Number(botUserConfigSelect.value || 0),
+  };
+  if (!payload.name || payload.llm_config_id <= 0) {
+    botUserStatus.textContent = t("dashboard.botMissingFields");
+    return;
+  }
+  botUserSubmitBtn.disabled = true;
+  botUserStatus.textContent = editingBotUserId ? t("dashboard.botSaving") : t("dashboard.botCreating");
+  try {
+    const { response, data } = editingBotUserId
+      ? await updateBotUser(editingBotUserId, payload)
+      : await createBotUser(payload);
+    if (!response.ok) {
+      botUserStatus.textContent = data.error || t("common.saveFailed");
+      return;
+    }
+    botUserStatus.textContent = editingBotUserId ? t("dashboard.botUpdated") : t("dashboard.botCreated");
+    resetBotUserForm();
+    await loadData();
+  } catch {
+    botUserStatus.textContent = t("common.networkErrorRetry");
+  } finally {
+    botUserSubmitBtn.disabled = false;
+  }
+});
+
+botUserList.addEventListener("click", async (event) => {
+  const target = event.target as HTMLElement;
+  const button = target.closest<HTMLButtonElement>("button[data-action]");
+  if (!button) return;
+  const item = button.closest<HTMLElement>("[data-bot-user-id]");
+  const botID = Number(item?.dataset.botUserId || 0);
+  const bot = currentBotUsers.find((entry) => entry.id === botID);
+  if (!bot) return;
+
+  const action = button.dataset.action;
+  if (action === "chat") {
+    window.location.href = `/chat.html?user_id=${encodeURIComponent(bot.bot_user_id)}&username=${encodeURIComponent(bot.name)}`;
+    return;
+  }
+  if (action === "edit") {
+    editingBotUserId = bot.id;
+    botUserNameInput.value = bot.name;
+    botUserDescriptionInput.value = bot.description || "";
+    botUserSystemPromptInput.value = bot.system_prompt || "";
+    botUserConfigSelect.value = String(bot.llm_config_id);
+    botUserSubmitBtn.textContent = t("dashboard.updateBot");
+    botUserStatus.textContent = "";
+    botUserNameInput.focus();
+    return;
+  }
+  if (action === "delete") {
+    pendingDeleteBotId = bot.id;
+    renderBotUserList(currentBotUsers);
+    return;
+  }
+  if (action === "cancel-delete") {
+    pendingDeleteBotId = null;
+    renderBotUserList(currentBotUsers);
+    return;
+  }
+  if (action === "confirm-delete") {
+    pendingDeleteBotId = null;
+    const { response, data } = await removeBotUser(bot.id);
+    if (!response.ok) {
+      botUserStatus.textContent = data.error || t("common.deleteFailed");
+      renderBotUserList(currentBotUsers);
+      return;
+    }
+    botUserStatus.textContent = t("dashboard.botDeleted", { name: bot.name });
+    resetBotUserForm();
+    await loadData();
+  }
+});
+
+logoutBtn.addEventListener("click", async () => {
+  logoutBtn.disabled = true;
+  try {
+    const response = await logout();
+    if (response.ok) {
+      window.location.replace("/login.html");
+    }
+  } finally {
+    logoutBtn.disabled = false;
+  }
+});
+
+void bootstrap();
