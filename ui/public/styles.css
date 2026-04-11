@@ -765,7 +765,7 @@ button:hover {
 }
 
 .settings-center-nav {
-  padding: 24px 16px;
+  padding: 16px 12px;
   background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
   border-right: 1px solid var(--border);
   overflow-y: auto;
@@ -790,8 +790,8 @@ button:hover {
 }
 
 .settings-center-nav-title {
-  margin: 24px 8px 18px;
-  font-size: 12px;
+  margin: 12px 8px 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   color: var(--muted);
@@ -806,11 +806,12 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text);
+  font-size: 13px;
   box-shadow: none;
 }
 
@@ -829,14 +830,15 @@ button:hover {
 
 .settings-center-main {
   min-height: 0;
-  padding: 28px 32px 32px;
+  padding: 20px 24px 24px;
   overflow-y: auto;
+  font-size: 13px;
 }
 
 .settings-center-header {
-  padding-bottom: 18px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 22px;
+  margin-bottom: 14px;
 }
 
 .settings-center-lead {
@@ -856,8 +858,8 @@ button:hover {
 
 .settings-section-card {
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 20px;
+  border-radius: 12px;
+  padding: 14px 16px;
   background: color-mix(in srgb, var(--surface) 90%, transparent);
 }
 
@@ -878,7 +880,7 @@ button:hover {
 }
 
 .settings-profile-name {
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text);
 }
@@ -903,8 +905,8 @@ button:hover {
 
 .settings-section-title,
 .settings-row-title {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text);
 }
 
@@ -946,7 +948,8 @@ button:hover {
 }
 
 .settings-info-value {
-  font-size: 18px;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.4;
   color: var(--text);
   word-break: break-word;
