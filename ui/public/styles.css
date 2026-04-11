@@ -1479,11 +1479,12 @@ button:hover {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
   background: var(--surface-strong);
   cursor: pointer;
+  font-size: 13px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
