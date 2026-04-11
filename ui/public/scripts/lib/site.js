@@ -31,8 +31,54 @@ export function renderSiteBrand(site) {
         }
     });
 }
+export function hydrateSidebarFoot(username, role) {
+    const avatar = document.getElementById("lpFootAvatar");
+    const nameEl = document.getElementById("lpFootName");
+    const roleEl = document.getElementById("lpFootRole");
+    if (avatar) avatar.textContent = (username || "U")[0].toUpperCase();
+    if (nameEl) nameEl.textContent = username || "—";
+    if (roleEl) roleEl.textContent = role === "admin" ? "Administrator" : "Member";
+}
+const SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
+export function initSidebarToggle() {
+    const topbar = document.querySelector(".lp-topbar");
+    const app = document.querySelector(".lp-app");
+    if (!topbar || !app) {
+        return;
+    }
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") {
+        app.classList.add("sidebar-collapsed");
+    }
+    const btn = document.createElement("button");
+    btn.className = "lp-sidebar-toggle";
+    btn.title = "Toggle sidebar";
+    btn.setAttribute("aria-label", "Toggle sidebar");
+    btn.textContent = "☰";
+    btn.addEventListener("click", () => {
+        const collapsed = app.classList.toggle("sidebar-collapsed");
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+    });
+    topbar.insertBefore(btn, topbar.firstChild);
+}
+export async function hydrateCurrentUserFoot() {
+    if (!document.getElementById("lpFootName")) {
+        return;
+    }
+    try {
+        const res = await fetch("/api/me", { credentials: "include" });
+        if (!res.ok) {
+            return;
+        }
+        const data = await res.json();
+        hydrateSidebarFoot(data.username, data.role);
+    }
+    catch {
+        // not logged in or network error — leave placeholder
+    }
+}
 export async function hydrateSiteBrand() {
     applyI18n();
+    initSidebarToggle();
     if (!document.querySelector("[data-site-brand]")) {
         return;
     }
