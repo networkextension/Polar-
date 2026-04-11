@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>用户管理</title>
+    <title data-i18n="admin.title">用户管理</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
@@ -32,8 +32,11 @@
           <a class="lp-nav-item" href="/editor.html">
             <span class="lp-nav-icon">✎</span><span>Editor</span>
           </a>
-          <a class="lp-nav-item active" href="/admin.html">
-            <span class="lp-nav-icon">☍</span><span>用户管理</span>
+          <a class="lp-nav-item" href="/latch.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">⚙</span><span>Latch</span>
+          </a>
+          <a class="lp-nav-item active" href="/admin.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">☍</span><span data-i18n="admin.title">用户管理</span>
           </a>
         </nav>
 
@@ -51,55 +54,55 @@
 
       <div class="lp-main">
         <div class="lp-topbar">
-          <span class="lp-topbar-title">管理员中心</span>
+          <span class="lp-topbar-title" data-i18n="admin.topbarTitle">管理员中心</span>
           <div class="lp-topbar-end">
-            <span id="welcomeText" class="lp-mode-badge">加载中...</span>
+            <span id="welcomeText" class="lp-mode-badge" data-i18n="admin.loading">加载中...</span>
           </div>
         </div>
 
         <div class="lp-content" style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px;">
           <section class="lp-preview-main" style="min-height: 0;">
             <div class="lp-preview-head">
-              <span class="badge">用户查询</span>
-              <span id="userCount" class="lp-mode-badge">用户总数: -</span>
+              <span class="badge" data-i18n="admin.userQuery">用户查询</span>
+              <span id="userCount" class="lp-mode-badge" data-i18n="admin.userCountDash">用户总数: -</span>
             </div>
             <div class="lp-preview-body">
               <div class="toolbar" style="margin-bottom: 12px;">
-                <input id="searchInput" class="input" type="text" placeholder="按用户名 / 邮箱 / 用户ID 搜索" />
-                <button id="searchBtn" class="btn-inline btn-secondary" type="button">搜索</button>
-                <button id="resetBtn" class="btn-inline btn-secondary" type="button">重置</button>
+                <input id="searchInput" class="input" type="text" data-i18n-placeholder="admin.searchPlaceholder" placeholder="按用户名 / 邮箱 / 用户ID 搜索" />
+                <button id="searchBtn" class="btn-inline btn-secondary" type="button" data-i18n="admin.search">搜索</button>
+                <button id="resetBtn" class="btn-inline btn-secondary" type="button" data-i18n="admin.reset">重置</button>
               </div>
               <ul id="userList" class="meta-list"></ul>
               <div class="toolbar" style="margin-top: 8px; justify-content: space-between;">
-                <button id="prevPageBtn" class="btn-inline btn-secondary" type="button">上一页</button>
-                <span id="pageInfo" class="meta-subtitle">第 1 页</span>
-                <button id="nextPageBtn" class="btn-inline btn-secondary" type="button">下一页</button>
+                <button id="prevPageBtn" class="btn-inline btn-secondary" type="button" data-i18n="admin.prevPage">上一页</button>
+                <span id="pageInfo" class="meta-subtitle" data-i18n="admin.pageInfoDash">第 - 页</span>
+                <button id="nextPageBtn" class="btn-inline btn-secondary" type="button" data-i18n="admin.nextPage">下一页</button>
               </div>
             </div>
           </section>
 
           <section class="lp-preview-main" style="min-height: 0;">
             <div class="lp-preview-head">
-              <span class="badge">账号管理</span>
+              <span class="badge" data-i18n="admin.accountManagement">账号管理</span>
             </div>
             <div class="lp-preview-body">
               <div class="settings-section-card" style="margin-bottom: 12px;">
-                <div id="selectedUserTitle" class="meta-title">请选择左侧用户</div>
+                <div id="selectedUserTitle" class="meta-title" data-i18n="admin.selectUser">请选择左侧用户</div>
                 <div id="selectedUserMeta" class="meta-subtitle">-</div>
               </div>
 
               <div class="settings-section-card" style="margin-bottom: 12px;">
-                <div class="settings-section-title">修改密码</div>
+                <div class="settings-section-title" data-i18n="admin.changePassword">修改密码</div>
                 <div class="toolbar" style="margin-top: 8px; flex-direction: column; align-items: stretch;">
-                  <input id="newPassword" class="input" type="password" placeholder="新密码（至少6位）" />
-                  <input id="confirmPassword" class="input" type="password" placeholder="确认新密码" />
-                  <button id="updatePasswordBtn" class="btn-inline btn-secondary" type="button">更新密码</button>
+                  <input id="newPassword" class="input" type="password" data-i18n-placeholder="admin.newPasswordPlaceholder" placeholder="新密码（至少6位）" />
+                  <input id="confirmPassword" class="input" type="password" data-i18n-placeholder="admin.confirmPasswordPlaceholder" placeholder="确认新密码" />
+                  <button id="updatePasswordBtn" class="btn-inline btn-secondary" type="button" data-i18n="admin.updatePassword">更新密码</button>
                 </div>
                 <div id="passwordStatus" class="status-text"></div>
               </div>
 
               <div class="settings-section-card">
-                <div class="settings-section-title">登录信息查看</div>
+                <div class="settings-section-title" data-i18n="admin.loginHistory">登录信息查看</div>
                 <ul id="loginHistoryList" class="meta-list" style="margin-top: 8px;"></ul>
               </div>
             </div>

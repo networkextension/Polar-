@@ -1,14 +1,10 @@
 import { fetchAdminUserLoginHistory, fetchAdminUsers, updateAdminUserPassword } from "./api/admin.js";
 import { logout, fetchCurrentUser } from "./api/session.js";
-import { fetchSiteSettings } from "./api/dashboard.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
-import { makeDefaultAvatar } from "./lib/avatar.js";
-import { hydrateSiteBrand, renderSiteBrand } from "./lib/site.js";
+import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
+import { t } from "./lib/i18n.js";
 const welcomeText = byId("welcomeText");
-const footAvatar = byId("lpFootAvatar");
-const footName = byId("lpFootName");
-const footRole = byId("lpFootRole");
 const logoutBtn = byId("logoutBtn");
 const searchInput = byId("searchInput");
 const searchBtn = byId("searchBtn");
@@ -31,38 +27,23 @@ let currentPage = 1;
 let totalUsers = 0;
 let users = [];
 let selectedUserID = "";
-function setFootUser(username, role, iconURL) {
-    footName.textContent = username || "管理员";
-    footRole.textContent = role === "admin" ? "Administrator" : "Member";
-    if (iconURL) {
-        footAvatar.style.backgroundImage = `url(${iconURL})`;
-        footAvatar.style.backgroundSize = "cover";
-        footAvatar.style.backgroundPosition = "center";
-        footAvatar.textContent = "";
-        return;
-    }
-    footAvatar.style.backgroundImage = "";
-    footAvatar.textContent = (username || "A").slice(0, 1).toUpperCase();
-}
 function formatLocation(record) {
     const parts = [record.city, record.region, record.country].filter(Boolean);
-    return parts.length > 0 ? parts.join(", ") : "未知位置";
+    return parts.length > 0 ? parts.join(", ") : t("admin.unknownLocation");
 }
 function formatLoginMethod(method) {
-    if (method === "passkey") {
-        return "Passkey";
-    }
-    if (method === "register") {
-        return "注册";
-    }
-    return "密码";
+    if (method === "passkey")
+        return t("admin.loginMethodPasskey");
+    if (method === "register")
+        return t("admin.loginMethodRegister");
+    return t("admin.loginMethodPassword");
 }
 function renderUserList(reset = false) {
     if (reset) {
         userList.innerHTML = "";
     }
     if (!users.length) {
-        userList.innerHTML = `<li class="tag-item tag-item-empty">没有匹配用户</li>`;
+        userList.innerHTML = `<li class="tag-item tag-item-empty">${t("admin.noMatchingUsers")}</li>`;
         return;
     }
     userList.innerHTML = users
@@ -74,11 +55,11 @@ function renderUserList(reset = false) {
             <div class="tag-item-header">
               <strong>${user.username}</strong>
               <span class="tag-chip">${user.role}</span>
-              ${user.is_online ? `<span class="tag-chip">online</span>` : ""}
+              ${user.is_online ? `<span class="tag-chip">${t("admin.online")}</span>` : ""}
             </div>
             <div class="tag-item-meta">${user.email}</div>
             <div class="tag-item-desc">ID: ${user.id}</div>
-            <div class="tag-item-meta">创建时间: ${createdAt}</div>
+            <div class="tag-item-meta">${t("admin.createdAt", { time: createdAt })}</div>
           </div>
         </li>
       `;
@@ -87,7 +68,7 @@ function renderUserList(reset = false) {
 }
 function renderLoginHistory(records) {
     if (!records.length) {
-        loginHistoryList.innerHTML = "<li>暂无登录记录</li>";
+        loginHistoryList.innerHTML = `<li>${t("admin.noLoginHistory")}</li>`;
         return;
     }
     loginHistoryList.innerHTML = records
@@ -95,7 +76,7 @@ function renderLoginHistory(records) {
         const time = new Date(record.logged_in_at).toLocaleString();
         return `
         <li>
-          <div class="meta-title">${record.ip_address || "未知 IP"} · ${formatLoginMethod(record.login_method)} · ${formatDeviceType(record.device_type, (k) => k)}</div>
+          <div class="meta-title">${record.ip_address || t("admin.unknownIp")} · ${formatLoginMethod(record.login_method)} · ${formatDeviceType(record.device_type, (k) => k)}</div>
           <div class="meta-subtitle">${formatLocation(record)}</div>
           <div class="meta-time">${time}</div>
         </li>
@@ -110,9 +91,9 @@ async function loadUsers(reset = false) {
     const offset = (currentPage - 1) * pageSize;
     const { response, data } = await fetchAdminUsers(query, pageSize, offset);
     if (!response.ok) {
-        userList.innerHTML = `<li>${data.error || "加载用户失败"}</li>`;
-        userCount.textContent = "用户总数: -";
-        pageInfo.textContent = "第 - 页";
+        userList.innerHTML = `<li>${data.error || t("admin.loadUsersFailed")}</li>`;
+        userCount.textContent = t("admin.userCountDash");
+        pageInfo.textContent = t("admin.pageInfoDash");
         prevPageBtn.disabled = true;
         nextPageBtn.disabled = true;
         return;
@@ -123,14 +104,14 @@ async function loadUsers(reset = false) {
     if (currentPage > totalPages) {
         currentPage = totalPages;
     }
-    userCount.textContent = `用户总数: ${totalUsers}`;
-    pageInfo.textContent = `第 ${currentPage} / ${totalPages} 页`;
+    userCount.textContent = t("admin.userCount", { count: String(totalUsers) });
+    pageInfo.textContent = t("admin.pageInfo", { current: String(currentPage), total: String(totalPages) });
     prevPageBtn.disabled = currentPage <= 1;
     nextPageBtn.disabled = currentPage >= totalPages;
     renderUserList(true);
     if (selectedUserID && !users.some((item) => item.id === selectedUserID)) {
         selectedUserID = "";
-        selectedUserTitle.textContent = "请选择左侧用户";
+        selectedUserTitle.textContent = t("admin.selectUser");
         selectedUserMeta.textContent = "-";
         loginHistoryList.innerHTML = "";
     }
@@ -149,7 +130,7 @@ async function selectUser(userID) {
     confirmPasswordInput.value = "";
     const { response, data } = await fetchAdminUserLoginHistory(userID, 30);
     if (!response.ok) {
-        loginHistoryList.innerHTML = `<li>${data.error || "加载登录记录失败"}</li>`;
+        loginHistoryList.innerHTML = `<li>${data.error || t("admin.loadHistoryFailed")}</li>`;
         return;
     }
     renderLoginHistory(data.records || []);
@@ -165,23 +146,8 @@ async function bootstrap() {
         window.location.replace("/dashboard.html");
         return;
     }
-    welcomeText.textContent = `欢迎你，${data.username}`;
-    setFootUser(data.username || "Admin", data.role || "admin", data.icon_url);
-    // Keep brand rendered even when site-settings API has temporary issue.
-    if (!document.querySelector("[data-site-name]")?.textContent?.trim()) {
-        try {
-            const settings = await fetchSiteSettings();
-            if (settings.response.ok) {
-                renderSiteBrand(settings.data.site);
-            }
-            else {
-                renderSiteBrand({ name: "Polar-", icon_url: makeDefaultAvatar("Polar-", 160) });
-            }
-        }
-        catch {
-            renderSiteBrand({ name: "Polar-" });
-        }
-    }
+    welcomeText.textContent = t("admin.welcome", { username: data.username || "" });
+    renderSidebarFoot(data);
     await loadUsers(true);
 }
 searchBtn.addEventListener("click", () => {
@@ -229,33 +195,33 @@ userList.addEventListener("click", (event) => {
 });
 updatePasswordBtn.addEventListener("click", async () => {
     if (!selectedUserID) {
-        passwordStatus.textContent = "请先选择用户";
+        passwordStatus.textContent = t("admin.selectUserFirst");
         return;
     }
     const newPassword = newPasswordInput.value.trim();
     const confirm = confirmPasswordInput.value.trim();
     if (newPassword.length < 6) {
-        passwordStatus.textContent = "新密码至少 6 位";
+        passwordStatus.textContent = t("admin.passwordTooShort");
         return;
     }
     if (newPassword !== confirm) {
-        passwordStatus.textContent = "两次输入密码不一致";
+        passwordStatus.textContent = t("admin.passwordMismatch");
         return;
     }
     updatePasswordBtn.disabled = true;
-    passwordStatus.textContent = "正在更新密码...";
+    passwordStatus.textContent = t("admin.updatingPassword");
     try {
         const { response, data } = await updateAdminUserPassword(selectedUserID, newPassword);
         if (!response.ok) {
-            passwordStatus.textContent = data.error || "更新失败";
+            passwordStatus.textContent = data.error || t("admin.updateFailed");
             return;
         }
-        passwordStatus.textContent = data.message || "密码已更新";
+        passwordStatus.textContent = data.message || t("admin.passwordUpdated");
         newPasswordInput.value = "";
         confirmPasswordInput.value = "";
     }
     catch {
-        passwordStatus.textContent = "网络错误，请重试";
+        passwordStatus.textContent = t("admin.networkError");
     }
     finally {
         updatePasswordBtn.disabled = false;
@@ -269,10 +235,10 @@ logoutBtn.addEventListener("click", async () => {
             window.location.replace("/login.html");
             return;
         }
-        welcomeText.textContent = "退出失败";
+        welcomeText.textContent = t("admin.logoutFailed");
     }
     catch {
-        welcomeText.textContent = "网络错误，请重试";
+        welcomeText.textContent = t("admin.networkError");
     }
     finally {
         logoutBtn.disabled = false;
