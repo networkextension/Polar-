@@ -22,6 +22,7 @@ import {
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
+import { logout } from "./api/session.js";
 import type {
   LatchProxy,
   LatchRule,
@@ -760,3 +761,9 @@ function wireAdminEvents(): void {
 }
 
 init();
+
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  try { await logout(); } finally { window.location.replace("/login.html"); }
+});
+

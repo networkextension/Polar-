@@ -4,6 +4,7 @@ import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { fetchTags } from "./api/dashboard.js";
 import { t } from "./lib/i18n.js";
+import { logout } from "./api/session.js";
 
 const API_BASE = "";
 const postWelcome = byId<HTMLElement>("postWelcome");
@@ -894,3 +895,9 @@ async function init(): Promise<void> {
 }
 
 void init();
+
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  try { await logout(); } finally { window.location.replace("/login.html"); }
+});
+

@@ -3,6 +3,7 @@ import { renderMarkdown } from "./lib/marked.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
+import { logout } from "./api/session.js";
 const titleEl = byId("markdownTitle");
 const metaEl = byId("markdownMeta");
 const alertBox = byId("markdownAlert");
@@ -63,3 +64,12 @@ async function loadPublicMarkdown() {
 }
 void hydrateSiteBrand();
 void loadPublicMarkdown();
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try {
+        await logout();
+    }
+    finally {
+        window.location.replace("/login.html");
+    }
+});

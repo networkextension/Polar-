@@ -1,6 +1,6 @@
 import { createLLMThread, fetchChatLLMConfigs, fetchChats, fetchLLMThreads, fetchMessages, fetchSharedMarkdown, retryMessage, revokeMessage as revokeChatMessage, sendAttachment, sendMessage, startChat, switchLLMThreadConfig, updateLLMThread } from "./api/chat.js";
 import { requestJson } from "./api/http.js";
-import { fetchCurrentUser } from "./api/session.js";
+import { fetchCurrentUser, logout } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
@@ -1102,5 +1102,14 @@ void init();
 window.addEventListener("beforeunload", () => {
     if (activeThreadId) {
         sendPresence("leave_thread", activeThreadId);
+    }
+});
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try {
+        await logout();
+    }
+    finally {
+        window.location.replace("/login.html");
     }
 });

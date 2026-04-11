@@ -1,6 +1,6 @@
 import { blockUser, unblockUser, upsertRecommendation, updateMyProfile, fetchUserProfile } from "./api/profile.js";
 import { uploadUserIcon } from "./api/dashboard.js";
-import { fetchCurrentUser, sendEmailVerification } from "./api/session.js";
+import { fetchCurrentUser, logout, sendEmailVerification } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
 import { byId } from "./lib/dom.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
@@ -264,3 +264,12 @@ async function init() {
     await loadProfile();
 }
 void init();
+// Logout
+document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    try {
+        await logout();
+    }
+    finally {
+        window.location.replace("/login.html");
+    }
+});
