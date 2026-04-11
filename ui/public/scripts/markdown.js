@@ -1,6 +1,6 @@
 import { byId } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
-import { hydrateSiteBrand, hydrateCurrentUserFoot } from "./lib/site.js";
+import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const titleEl = byId("markdownTitle");
@@ -62,5 +62,4 @@ async function loadPublicMarkdown() {
     }
 }
 void hydrateSiteBrand();
-void hydrateCurrentUserFoot();
 void loadPublicMarkdown();

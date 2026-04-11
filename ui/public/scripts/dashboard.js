@@ -5,7 +5,7 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
-import { hydrateSiteBrand, renderSiteBrand, hydrateSidebarFoot } from "./lib/site.js";
+import { hydrateSiteBrand, renderSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const welcomeText = byId("welcomeText");
@@ -464,7 +464,6 @@ async function loadProfile() {
     }
     isAdmin = data.role === "admin";
     welcomeText.textContent = t("dashboard.welcome", { username: data.username });
-    hydrateSidebarFoot(data.username, data.role);
     dashboardRoleBadge.hidden = !isAdmin;
     settingsCardName.textContent = data.username || t("dashboard.currentUser");
     settingsCardMeta.textContent = isAdmin ? t("dashboard.adminMeta") : t("dashboard.userMeta");

@@ -31,14 +31,6 @@ export function renderSiteBrand(site) {
         }
     });
 }
-export function hydrateSidebarFoot(username, role) {
-    const avatar = document.getElementById("lpFootAvatar");
-    const nameEl = document.getElementById("lpFootName");
-    const roleEl = document.getElementById("lpFootRole");
-    if (avatar) avatar.textContent = (username || "U")[0].toUpperCase();
-    if (nameEl) nameEl.textContent = username || "—";
-    if (roleEl) roleEl.textContent = role === "admin" ? "Administrator" : "Member";
-}
 const SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
 export function initSidebarToggle() {
     const topbar = document.querySelector(".lp-topbar");
@@ -60,25 +52,10 @@ export function initSidebarToggle() {
     });
     topbar.insertBefore(btn, topbar.firstChild);
 }
-export async function hydrateCurrentUserFoot() {
-    if (!document.getElementById("lpFootName")) {
-        return;
-    }
-    try {
-        const res = await fetch("/api/me", { credentials: "include" });
-        if (!res.ok) {
-            return;
-        }
-        const data = await res.json();
-        hydrateSidebarFoot(data.username, data.role);
-    }
-    catch {
-        // not logged in or network error — leave placeholder
-    }
-}
 export async function hydrateSiteBrand() {
     applyI18n();
     initSidebarToggle();
+    void hydrateSidebarFoot();
     if (!document.querySelector("[data-site-brand]")) {
         return;
     }
@@ -93,5 +70,52 @@ export async function hydrateSiteBrand() {
     }
     catch {
         renderSiteBrand();
+    }
+}
+export function renderSidebarFoot(user) {
+    const nameEl = document.getElementById("lpFootName");
+    const roleEl = document.getElementById("lpFootRole");
+    const avatarEl = document.getElementById("lpFootAvatar");
+    if (!nameEl && !roleEl && !avatarEl) {
+        return;
+    }
+    const username = (user?.username || "").trim();
+    if (nameEl) {
+        nameEl.textContent = username || "—";
+    }
+    if (roleEl) {
+        roleEl.textContent = user?.role === "admin" ? "Administrator" : "Member";
+    }
+    if (avatarEl) {
+        const avatar = username ? username.slice(0, 1).toUpperCase() : "U";
+        if (user?.icon_url) {
+            avatarEl.style.backgroundImage = `url(${user.icon_url})`;
+            avatarEl.style.backgroundSize = "cover";
+            avatarEl.style.backgroundPosition = "center";
+            avatarEl.textContent = "";
+        }
+        else {
+            avatarEl.style.backgroundImage = "";
+            avatarEl.style.backgroundSize = "";
+            avatarEl.style.backgroundPosition = "";
+            avatarEl.textContent = avatar;
+        }
+    }
+}
+export async function hydrateSidebarFoot() {
+    const hasFoot = document.getElementById("lpFootName") || document.getElementById("lpFootRole") || document.getElementById("lpFootAvatar");
+    if (!hasFoot) {
+        return;
+    }
+    try {
+        const response = await fetch("/api/me", { credentials: "include" });
+        if (!response.ok) {
+            return;
+        }
+        const data = await response.json();
+        renderSidebarFoot(data);
+    }
+    catch {
+        // Keep static placeholders on network failure.
     }
 }

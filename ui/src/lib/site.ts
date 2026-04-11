@@ -49,8 +49,33 @@ export function renderSiteBrand(site?: SiteSettings): void {
   });
 }
 
+const SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
+
+export function initSidebarToggle(): void {
+  const topbar = document.querySelector<HTMLElement>(".lp-topbar");
+  const app = document.querySelector<HTMLElement>(".lp-app");
+  if (!topbar || !app) {
+    return;
+  }
+  if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") {
+    app.classList.add("sidebar-collapsed");
+  }
+  const btn = document.createElement("button");
+  btn.className = "lp-sidebar-toggle";
+  btn.title = "Toggle sidebar";
+  btn.setAttribute("aria-label", "Toggle sidebar");
+  btn.textContent = "☰";
+  btn.addEventListener("click", () => {
+    const collapsed = app.classList.toggle("sidebar-collapsed");
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  });
+  topbar.insertBefore(btn, topbar.firstChild);
+}
+
 export async function hydrateSiteBrand(): Promise<void> {
   applyI18n();
+  initSidebarToggle();
+  void hydrateSidebarFoot();
 
   if (!document.querySelector("[data-site-brand]")) {
     return;
