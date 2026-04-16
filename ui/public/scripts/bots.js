@@ -1,11 +1,15 @@
 import { createBotUser, createLLMConfig, fetchAvailableLLMConfigs, fetchBotUsers, fetchLLMConfigs, removeBotUser, removeLLMConfig, testLLMConfig, updateBotUser, updateLLMConfig, } from "./api/dashboard.js";
 import { logout, fetchCurrentUser } from "./api/session.js";
 import { byId } from "./lib/dom.js";
+import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint } from "./lib/llm_presets.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { t } from "./lib/i18n.js";
 import { renderMarkdown } from "./lib/marked.js";
 // ── LLM Config DOM ──────────────────────────────────────────────────────────
 const llmConfigForm = byId("llmConfigForm");
+const llmProviderPresetSelect = byId("llmProviderPresetSelect");
+const llmProviderPresetNote = byId("llmProviderPresetNote");
+const llmProviderPresetDocs = byId("llmProviderPresetDocs");
 const llmConfigNameInput = byId("llmConfigNameInput");
 const llmConfigBaseUrlInput = byId("llmConfigBaseUrlInput");
 const llmConfigModelInput = byId("llmConfigModelInput");
@@ -38,6 +42,22 @@ let expandedBotId = null;
 let currentLLMConfigs = [];
 let currentAvailableLLMConfigs = [];
 let currentBotUsers = [];
+function populateLLMProviderPresets() {
+    llmProviderPresetSelect.innerHTML = LLM_PROVIDER_PRESETS
+        .map((item) => `<option value="${item.id}">${item.displayName}</option>`)
+        .join("");
+}
+function applyLLMProviderPreset(presetID, keepName = false) {
+    const preset = getPresetByID(presetID) || LLM_PROVIDER_PRESETS[0];
+    llmProviderPresetSelect.value = preset.id;
+    llmConfigBaseUrlInput.value = resolvePresetEndpoint(preset);
+    llmConfigModelInput.value = preset.defaultModelID;
+    llmProviderPresetNote.textContent = preset.note;
+    llmProviderPresetDocs.href = preset.docsURL;
+    if (!keepName || !llmConfigNameInput.value.trim()) {
+        llmConfigNameInput.value = `${preset.displayName} Preset`;
+    }
+}
 // ── LLM Config ────────────────────────────────────────────────────────────────
 function resetLLMConfigForm() {
     editingLLMConfigId = null;
@@ -45,6 +65,7 @@ function resetLLMConfigForm() {
     llmConfigApiKeyInput.value = "";
     llmConfigStatus.textContent = "";
     llmConfigSubmitBtn.textContent = t("dashboard.saveConfigBtn");
+    applyLLMProviderPreset(LLM_PROVIDER_PRESETS[0].id, false);
 }
 function renderLLMConfigList(configs) {
     if (!configs.length) {
@@ -185,6 +206,9 @@ async function bootstrap() {
 llmConfigResetBtn.addEventListener("click", () => {
     resetLLMConfigForm();
 });
+llmProviderPresetSelect.addEventListener("change", () => {
+    applyLLMProviderPreset(llmProviderPresetSelect.value, false);
+});
 llmConfigTestBtn.addEventListener("click", async () => {
     const payload = {
         name: llmConfigNameInput.value.trim(),
@@ -263,6 +287,8 @@ llmConfigList.addEventListener("click", async (event) => {
     const action = button.dataset.action;
     if (action === "edit") {
         editingLLMConfigId = config.id;
+        const presetID = matchPresetByBaseURL(config.base_url) || LLM_PROVIDER_PRESETS[0].id;
+        applyLLMProviderPreset(presetID, true);
         llmConfigNameInput.value = config.name;
         llmConfigBaseUrlInput.value = config.base_url;
         llmConfigModelInput.value = config.model;
@@ -400,3 +426,7 @@ logoutBtn.addEventListener("click", async () => {
     }
 });
 void bootstrap();
+populateLLMProviderPresets();
+llmConfigBaseUrlInput.readOnly = true;
+llmConfigModelInput.readOnly = true;
+applyLLMProviderPreset(LLM_PROVIDER_PRESETS[0].id, false);

@@ -104,7 +104,8 @@ func (s *Server) handleChatStart(c *gin.Context) {
 	}
 
 	var req struct {
-		UserID string `json:"user_id" binding:"required"`
+		UserID      string `json:"user_id" binding:"required"`
+		LLMConfigID int64  `json:"llm_config_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
@@ -147,6 +148,41 @@ func (s *Server) handleChatStart(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
+	}
+	if strings.HasPrefix(targetID, "bot_") {
+		selectedLLMConfigID := req.LLMConfigID
+		if selectedLLMConfigID <= 0 {
+			configs, cfgErr := s.listAvailableLLMConfigs(userIDStr)
+			if cfgErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+				return
+			}
+			if len(configs) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "暂无可用 LLM 配置，请先创建或共享一个配置"})
+				return
+			}
+			selectedLLMConfigID = configs[0].ID
+		}
+
+		llmThreadID, _, threadErr := s.resolveChatLLMThread(thread.ID, userIDStr, "", true, time.Now())
+		if threadErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+			return
+		}
+		if llmThreadID == nil || *llmThreadID <= 0 {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "初始化话题失败"})
+			return
+		}
+
+		item, updateErr := s.updateLLMThreadConfig(thread.ID, userIDStr, *llmThreadID, selectedLLMConfigID, time.Now())
+		if updateErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+			return
+		}
+		if item == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "选择的 LLM 配置无效"})
+			return
+		}
 	}
 
 	summary, err := s.getChatSummary(userIDStr, thread.ID)

@@ -94,6 +94,35 @@ type PushDelivery struct {
 	UpdatedAt    time.Time
 }
 
+type builtinBotPreset struct {
+	Name         string
+	Description  string
+	SystemPrompt string
+}
+
+var builtinBotPresets = []builtinBotPreset{
+	{
+		Name:         "美股分析师",
+		Description:  "关注美股市场，提供结构化研究与风险提示。",
+		SystemPrompt: "你是美股分析师。请用中文提供结构化分析：先给结论，再给关键数据、驱动因素、风险点与操作建议。严禁编造数据；无法确认时请明确说明不确定性。",
+	},
+	{
+		Name:         "哲学家",
+		Description:  "通过哲学视角帮助用户澄清问题与价值取向。",
+		SystemPrompt: "你是哲学家。请通过提问与推理帮助用户澄清概念、前提与价值冲突，保持温和、理性、可实践，避免空泛说教。",
+	},
+	{
+		Name:         "代码高手",
+		Description:  "擅长代码实现、调试与工程化落地。",
+		SystemPrompt: "你是代码高手。请优先给可执行方案与最小改动路径，必要时提供示例代码、边界条件和验证步骤。",
+	},
+	{
+		Name:         "灵魂导师",
+		Description:  "提供支持性对话，帮助梳理情绪与行动步骤。",
+		SystemPrompt: "你是灵魂导师。请先共情，再帮助用户拆解当前困境，给出小步可执行建议，保持真诚、稳重，不做医疗诊断。",
+	},
+}
+
 type MarkdownEntry struct {
 	ID         int64     `json:"id"`
 	UserID     string    `json:"user_id"`
@@ -1737,6 +1766,52 @@ func (s *Server) listBotUsers(ownerUserID string) ([]BotUser, error) {
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *Server) ensureBuiltinBotUsers(ownerUserID string, now time.Time) error {
+	configs, err := s.listAvailableLLMConfigs(ownerUserID)
+	if err != nil {
+		return err
+	}
+	if len(configs) == 0 {
+		return nil
+	}
+	defaultLLMConfigID := configs[0].ID
+
+	rows, err := s.db.Query(`SELECT name FROM bot_users WHERE owner_user_id = $1`, ownerUserID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	existingNames := make(map[string]bool, len(builtinBotPresets))
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		existingNames[strings.TrimSpace(name)] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, preset := range builtinBotPresets {
+		if existingNames[preset.Name] {
+			continue
+		}
+		if _, err := s.createBotUser(
+			ownerUserID,
+			preset.Name,
+			preset.Description,
+			preset.SystemPrompt,
+			defaultLLMConfigID,
+			now,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) getBotUserForOwner(ownerUserID string, id int64) (*BotUser, error) {

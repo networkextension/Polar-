@@ -10,10 +10,13 @@ export async function sendAttachment(threadId, file) {
 export async function fetchChats(limit = 50) {
     return requestJson(`/api/chats?limit=${limit}`);
 }
-export async function startChat(userId) {
+export async function startChat(userId, llmConfigId) {
     return requestJson("/api/chats/start", {
         method: "POST",
-        body: { user_id: userId },
+        body: {
+            user_id: userId,
+            llm_config_id: llmConfigId && llmConfigId > 0 ? llmConfigId : undefined,
+        },
     });
 }
 export async function fetchMessages(threadId, limit = 200, llmThreadId) {

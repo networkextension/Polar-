@@ -52,6 +52,8 @@ const sharedMarkdownLoading = new Set();
 const messageCacheMap = new Map();
 const MSG_PAGE_SIZE = 50;
 let visibleOlderCount = 0;
+let quickStartTargets = [];
+let quickStartLLMOptions = [];
 function getCacheKey() {
     return activeLLMThreadId != null
         ? `${activeThreadId}:${activeLLMThreadId}`
@@ -399,60 +401,70 @@ async function loadChats(focusThreadId = null) {
     }
     updateActiveChatHeader();
 }
-async function startChatWithUser(userId) {
-    const { response, data } = await startChat(userId);
+async function startChatWithUser(userId, llmConfigId) {
+    const { response, data } = await startChat(userId, llmConfigId);
     if (!response.ok) {
         chatSubtitle.textContent = data.error || t("chat.createFailed");
         return null;
     }
     return data.chat || null;
 }
-function renderQuickStart(targets) {
+function renderQuickStart(targets, llmOptions) {
     if (!targets.length) {
-        chatQuickStart.innerHTML = "";
+        chatQuickStart.innerHTML = `<div class="chat-empty">暂无可用 Bot。请先创建或检查 LLM 配置。</div>`;
         return;
     }
+    const botOptionsHTML = targets
+        .map((item) => `<option value="${escapeHtml(item.user_id)}">${escapeHtml(item.name)} · ${escapeHtml(item.meta)}</option>`)
+        .join("");
+    const llmOptionsHTML = [
+        `<option value="">自动选择（不选也能开始）</option>`,
+        ...llmOptions.map((item) => `<option value="${item.id}">${escapeHtml(item.name)} · ${escapeHtml(item.model)}</option>`),
+    ].join("");
+    const canStart = llmOptions.length > 0;
     chatQuickStart.innerHTML = `
-    <div class="chat-quick-start-title">Quick Start</div>
-    <div class="chat-quick-start-list">
-      ${targets
-        .map((item) => `
-            <button class="btn-inline btn-secondary chat-quick-start-btn" type="button" data-target-user-id="${item.user_id}">
-              <span>${escapeHtml(item.name)}</span>
-              <span class="chat-quick-start-meta">${escapeHtml(item.meta)}</span>
-            </button>
-          `)
-        .join("")}
+    <div class="chat-quick-start-title">新建对话</div>
+    <div class="chat-quick-start-list" style="display:grid; gap:8px;">
+      <select id="quickStartBotSelect" class="input">${botOptionsHTML}</select>
+      <select id="quickStartLLMSelect" class="input">${llmOptionsHTML}</select>
+      <button id="quickStartStartBtn" class="btn-inline btn-secondary" type="button" ${canStart ? "" : "disabled"}>
+        ${canStart ? "开始聊天" : "暂无可用 LLM，无法开始"}
+      </button>
     </div>
   `;
 }
 async function loadQuickStartTargets() {
-    const targets = [
-        {
-            user_id: "system",
-            name: "AI Assistant",
-            meta: "System",
-        },
-    ];
+    const targets = [];
+    const llmOptions = [];
     try {
-        const { response, data } = await fetchBotUsers();
-        if (response.ok) {
-            (data.bots || []).forEach((bot) => {
-                if (!bot.bot_user_id) {
+        const [botResult, llmResult] = await Promise.all([fetchBotUsers(), fetchChatLLMConfigs()]);
+        if (botResult.response.ok) {
+            (botResult.data.bots || []).forEach((bot) => {
+                if (!bot.bot_user_id)
                     return;
-                }
                 targets.push({
                     user_id: bot.bot_user_id,
                     name: bot.name || bot.bot_user_id,
-                    meta: "Bot User",
+                    meta: "Bot",
+                });
+            });
+        }
+        if (llmResult.response.ok) {
+            (llmResult.data.configs || []).forEach((item) => {
+                llmOptions.push({
+                    id: item.id,
+                    name: item.name,
+                    model: item.model,
                 });
             });
         }
     }
     catch {
-        // Keep the default system assistant entry.
+        // Keep empty state if network request fails.
     }
-    renderQuickStart(targets);
+    quickStartTargets = targets;
+    quickStartLLMOptions = llmOptions;
+    renderQuickStart(quickStartTargets, quickStartLLMOptions);
 }
 async function loadLLMThreads(threadId, preferredThreadId) {
     const chat = chatCache.find((item) => item.id === threadId);
@@ -1040,17 +1052,21 @@ chatRefreshBtn.addEventListener("click", async () => {
 });
 chatQuickStart.addEventListener("click", async (event) => {
     const target = event.target;
-    const button = target.closest("[data-target-user-id]");
+    const button = target.closest("#quickStartStartBtn");
     if (!button) {
         return;
     }
-    const userId = button.dataset.targetUserId || "";
+    const botSelect = document.getElementById("quickStartBotSelect");
+    const llmSelect = document.getElementById("quickStartLLMSelect");
+    const userId = (botSelect?.value || "").trim();
     if (!userId) {
+        chatSubtitle.textContent = "请先选择一个 Bot";
         return;
     }
+    const llmConfigId = Number(llmSelect?.value || 0);
     button.disabled = true;
     try {
-        const chat = await startChatWithUser(userId);
+        const chat = await startChatWithUser(userId, llmConfigId > 0 ? llmConfigId : null);
         await loadChats(chat ? chat.id : null);
         if (chat) {
             await openChat(chat);

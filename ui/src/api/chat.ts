@@ -22,10 +22,13 @@ export async function fetchChats(limit = 50) {
   return requestJson<ChatListResponse>(`/api/chats?limit=${limit}`);
 }
 
-export async function startChat(userId: string) {
+export async function startChat(userId: string, llmConfigId?: number | null) {
   return requestJson<StartChatResponse>("/api/chats/start", {
     method: "POST",
-    body: { user_id: userId },
+    body: {
+      user_id: userId,
+      llm_config_id: llmConfigId && llmConfigId > 0 ? llmConfigId : undefined,
+    },
   });
 }
 
