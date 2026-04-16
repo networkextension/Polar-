@@ -59,13 +59,15 @@
           <span id="markdownTitle" class="lp-topbar-title" data-i18n="markdown.title">Public Markdown</span>
           <div class="lp-topbar-end">
             <span id="markdownMeta" class="lp-mode-badge" data-i18n="markdown.readOnlyPreview">Read-only preview</span>
+            <button id="markdownRawToggle" class="lp-topbar-back" type="button" hidden data-i18n="markdown.showRaw">Show raw</button>
             <a class="lp-topbar-back" href="/login.html" data-i18n="markdown.loginToEdit">Log in to edit</a>
           </div>
         </div>
 
         <div class="lp-content">
           <div id="markdownAlert" class="alert"></div>
-          <div id="markdownContent" class="panel content-box" data-i18n="markdown.loading">Loading content...</div>
+          <div id="markdownContent" class="panel content-box markdown-body" data-i18n="markdown.loading">Loading content...</div>
+          <pre id="markdownRaw" class="panel content-raw" hidden></pre>
         </div>
       </div>
     </div>

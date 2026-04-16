@@ -1,4 +1,5 @@
 import { createLLMThread, fetchChatLLMConfigs, fetchChats, fetchLLMThreads, fetchMessages, fetchSharedMarkdown, retryMessage, revokeMessage as revokeChatMessage, sendAttachment, sendMessage, startChat, switchLLMThreadConfig, updateLLMThread } from "./api/chat.js";
+import { fetchBotUsers } from "./api/dashboard.js";
 import { requestJson } from "./api/http.js";
 import { fetchCurrentUser, logout } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
@@ -10,6 +11,7 @@ import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 import type { ChatEventPayload, ChatLLMConfig, ChatMessage, ChatMessageAttachment, ChatSummary, LLMThread } from "./types/chat.js";
 const chatWelcome = byId<HTMLElement>("chatWelcome");
+const chatQuickStart = byId<HTMLElement>("chatQuickStart");
 const chatList = byId<HTMLElement>("chatList");
 const chatTitle = byId<HTMLElement>("chatTitle");
 const chatSubtitle = byId<HTMLElement>("chatSubtitle");
@@ -52,6 +54,12 @@ const sharedMarkdownLoading = new Set<string>();
 const messageCacheMap = new Map<string, ChatMessage[]>();
 const MSG_PAGE_SIZE = 50;
 let visibleOlderCount = 0;
+
+type QuickStartTarget = {
+  user_id: string;
+  name: string;
+  meta: string;
+};
 
 function getCacheKey(): string {
   return activeLLMThreadId != null
@@ -435,6 +443,56 @@ async function startChatWithUser(userId: string): Promise<ChatSummary | null> {
     return null;
   }
   return data.chat || null;
+}
+
+function renderQuickStart(targets: QuickStartTarget[]): void {
+  if (!targets.length) {
+    chatQuickStart.innerHTML = "";
+    return;
+  }
+  chatQuickStart.innerHTML = `
+    <div class="chat-quick-start-title">Quick Start</div>
+    <div class="chat-quick-start-list">
+      ${targets
+        .map(
+          (item) => `
+            <button class="btn-inline btn-secondary chat-quick-start-btn" type="button" data-target-user-id="${item.user_id}">
+              <span>${escapeHtml(item.name)}</span>
+              <span class="chat-quick-start-meta">${escapeHtml(item.meta)}</span>
+            </button>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+async function loadQuickStartTargets(): Promise<void> {
+  const targets: QuickStartTarget[] = [
+    {
+      user_id: "system",
+      name: "AI Assistant",
+      meta: "System",
+    },
+  ];
+  try {
+    const { response, data } = await fetchBotUsers();
+    if (response.ok) {
+      (data.bots || []).forEach((bot) => {
+        if (!bot.bot_user_id) {
+          return;
+        }
+        targets.push({
+          user_id: bot.bot_user_id,
+          name: bot.name || bot.bot_user_id,
+          meta: "Bot User",
+        });
+      });
+    }
+  } catch {
+    // Keep the default system assistant entry.
+  }
+  renderQuickStart(targets);
 }
 
 async function loadLLMThreads(threadId: string, preferredThreadId?: number | null): Promise<void> {
@@ -1045,6 +1103,28 @@ chatRefreshBtn.addEventListener("click", async () => {
   }
 });
 
+chatQuickStart.addEventListener("click", async (event) => {
+  const target = event.target as HTMLElement;
+  const button = target.closest<HTMLButtonElement>("[data-target-user-id]");
+  if (!button) {
+    return;
+  }
+  const userId = button.dataset.targetUserId || "";
+  if (!userId) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    const chat = await startChatWithUser(userId);
+    await loadChats(chat ? chat.id : null);
+    if (chat) {
+      await openChat(chat);
+    }
+  } finally {
+    button.disabled = false;
+  }
+});
+
 chatThreadSelect.addEventListener("change", async () => {
   if (!activeThreadId) {
     return;
@@ -1129,6 +1209,7 @@ chatSwitchModelBtn.addEventListener("click", async () => {
 async function init(): Promise<void> {
   await hydrateSiteBrand();
   await loadProfile();
+  await loadQuickStartTargets();
   messageInput.disabled = true;
   connectWebSocket();
 
@@ -1174,4 +1255,3 @@ window.addEventListener("beforeunload", () => {
 document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   try { await logout(); } finally { window.location.replace("/login.html"); }
 });
-

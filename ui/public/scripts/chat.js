@@ -1,4 +1,5 @@
 import { createLLMThread, fetchChatLLMConfigs, fetchChats, fetchLLMThreads, fetchMessages, fetchSharedMarkdown, retryMessage, revokeMessage as revokeChatMessage, sendAttachment, sendMessage, startChat, switchLLMThreadConfig, updateLLMThread } from "./api/chat.js";
+import { fetchBotUsers } from "./api/dashboard.js";
 import { requestJson } from "./api/http.js";
 import { fetchCurrentUser, logout } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
@@ -9,6 +10,7 @@ import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 const chatWelcome = byId("chatWelcome");
+const chatQuickStart = byId("chatQuickStart");
 const chatList = byId("chatList");
 const chatTitle = byId("chatTitle");
 const chatSubtitle = byId("chatSubtitle");
@@ -404,6 +406,53 @@ async function startChatWithUser(userId) {
         return null;
     }
     return data.chat || null;
+}
+function renderQuickStart(targets) {
+    if (!targets.length) {
+        chatQuickStart.innerHTML = "";
+        return;
+    }
+    chatQuickStart.innerHTML = `
+    <div class="chat-quick-start-title">Quick Start</div>
+    <div class="chat-quick-start-list">
+      ${targets
+        .map((item) => `
+            <button class="btn-inline btn-secondary chat-quick-start-btn" type="button" data-target-user-id="${item.user_id}">
+              <span>${escapeHtml(item.name)}</span>
+              <span class="chat-quick-start-meta">${escapeHtml(item.meta)}</span>
+            </button>
+          `)
+        .join("")}
+    </div>
+  `;
+}
+async function loadQuickStartTargets() {
+    const targets = [
+        {
+            user_id: "system",
+            name: "AI Assistant",
+            meta: "System",
+        },
+    ];
+    try {
+        const { response, data } = await fetchBotUsers();
+        if (response.ok) {
+            (data.bots || []).forEach((bot) => {
+                if (!bot.bot_user_id) {
+                    return;
+                }
+                targets.push({
+                    user_id: bot.bot_user_id,
+                    name: bot.name || bot.bot_user_id,
+                    meta: "Bot User",
+                });
+            });
+        }
+    }
+    catch {
+        // Keep the default system assistant entry.
+    }
+    renderQuickStart(targets);
 }
 async function loadLLMThreads(threadId, preferredThreadId) {
     const chat = chatCache.find((item) => item.id === threadId);
@@ -989,6 +1038,28 @@ chatRefreshBtn.addEventListener("click", async () => {
         await refreshActiveMessagesIfNeeded(activeThreadId, true);
     }
 });
+chatQuickStart.addEventListener("click", async (event) => {
+    const target = event.target;
+    const button = target.closest("[data-target-user-id]");
+    if (!button) {
+        return;
+    }
+    const userId = button.dataset.targetUserId || "";
+    if (!userId) {
+        return;
+    }
+    button.disabled = true;
+    try {
+        const chat = await startChatWithUser(userId);
+        await loadChats(chat ? chat.id : null);
+        if (chat) {
+            await openChat(chat);
+        }
+    }
+    finally {
+        button.disabled = false;
+    }
+});
 chatThreadSelect.addEventListener("change", async () => {
     if (!activeThreadId) {
         return;
@@ -1068,6 +1139,7 @@ chatSwitchModelBtn.addEventListener("click", async () => {
 async function init() {
     await hydrateSiteBrand();
     await loadProfile();
+    await loadQuickStartTargets();
     messageInput.disabled = true;
     connectWebSocket();
     const target = getTargetFromQuery();
