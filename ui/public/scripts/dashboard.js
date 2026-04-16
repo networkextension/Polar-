@@ -178,6 +178,9 @@ function syncLanguageButton() {
     languageToggleBtn.textContent = lang === "zh-CN" ? t("dashboard.switchToEnglish") : t("dashboard.switchToChinese");
 }
 function switchSettingsSection(section) {
+    if (!isAdmin && (section === "settings" || section === "site")) {
+        section = "bots";
+    }
     activeSettingsSection = section;
     const titles = {
         profile: {
@@ -486,6 +489,14 @@ async function loadProfile() {
     settingsNavButtons.forEach((button) => {
         if (button.dataset.settingsNav === "site") {
             button.hidden = !isAdmin;
+            return;
+        }
+        if (button.dataset.settingsNav === "settings") {
+            button.hidden = !isAdmin;
+            return;
+        }
+        if (button.dataset.settingsNav === "bots") {
+            button.hidden = false;
         }
     });
     const avatar = data.icon_url || makeDefaultAvatar(data.username || "U", 160);
@@ -510,15 +521,30 @@ async function loadSiteAdminData() {
             }
         })(),
         (async () => {
-            const [ownResult, availableResult] = await Promise.all([fetchLLMConfigs(), fetchAvailableLLMConfigs()]);
-            if (ownResult.response.ok) {
-                currentLLMConfigs = ownResult.data.configs || [];
-                renderLLMConfigList(currentLLMConfigs);
+            if (isAdmin) {
+                const [ownResult, availableResult] = await Promise.all([fetchLLMConfigs(), fetchAvailableLLMConfigs()]);
+                if (ownResult.response.ok) {
+                    currentLLMConfigs = ownResult.data.configs || [];
+                    renderLLMConfigList(currentLLMConfigs);
+                }
+                else {
+                    llmConfigStatus.textContent = ownResult.data.error || t("dashboard.llmConfigLoadFailed");
+                    llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.llmConfigLoadFailed")}</li>`;
+                }
+                if (availableResult.response.ok) {
+                    currentAvailableLLMConfigs = availableResult.data.configs || [];
+                    syncBotConfigOptions(currentAvailableLLMConfigs);
+                }
+                else {
+                    currentAvailableLLMConfigs = [];
+                    botUserStatus.textContent = availableResult.data.error || t("dashboard.availableConfigLoadFailed");
+                    syncBotConfigOptions(currentAvailableLLMConfigs);
+                }
+                return;
             }
-            else {
-                llmConfigStatus.textContent = ownResult.data.error || t("dashboard.llmConfigLoadFailed");
-                llmConfigList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.llmConfigLoadFailed")}</li>`;
-            }
+            currentLLMConfigs = [];
+            renderLLMConfigList(currentLLMConfigs);
+            const availableResult = await fetchAvailableLLMConfigs();
             if (availableResult.response.ok) {
                 currentAvailableLLMConfigs = availableResult.data.configs || [];
                 syncBotConfigOptions(currentAvailableLLMConfigs);
