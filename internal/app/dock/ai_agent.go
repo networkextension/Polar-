@@ -74,6 +74,7 @@ const (
 	aiProviderOpenAICompatible aiProvider = "openai_compatible"
 	aiProviderGemini           aiProvider = "gemini"
 	aiProviderXAIResponses     aiProvider = "xai_responses"
+	aiProviderAnthropic        aiProvider = "anthropic_messages"
 )
 
 type geminiGenerateContentRequest struct {
@@ -125,6 +126,28 @@ type xAIResponsesOutput struct {
 }
 
 type xAIResponsesOutputContent struct {
+	Type string `json:"type,omitempty"`
+	Text string `json:"text,omitempty"`
+}
+
+type anthropicMessagesRequest struct {
+	Model     string                     `json:"model"`
+	System    string                     `json:"system,omitempty"`
+	Messages  []anthropicMessagesMessage `json:"messages"`
+	MaxTokens int                        `json:"max_tokens"`
+}
+
+type anthropicMessagesMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type anthropicMessagesResponse struct {
+	Content []anthropicMessagesContent `json:"content,omitempty"`
+	Error   json.RawMessage            `json:"error,omitempty"`
+}
+
+type anthropicMessagesContent struct {
 	Type string `json:"type,omitempty"`
 	Text string `json:"text,omitempty"`
 }
@@ -282,6 +305,8 @@ func (a *aiAgent) testRuntimeConfig(runtimeConfig aiRuntimeConfig) error {
 
 func (a *aiAgent) requestChatCompletion(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
 	switch detectAIProvider(runtimeConfig.BaseURL) {
+	case aiProviderAnthropic:
+		return a.requestAnthropicMessages(runtimeConfig, payload)
 	case aiProviderGemini:
 		return a.requestGeminiContent(runtimeConfig, payload)
 	case aiProviderXAIResponses:
@@ -445,6 +470,65 @@ func (a *aiAgent) requestXAIResponses(runtimeConfig aiRuntimeConfig, payload aiC
 	}, nil
 }
 
+func (a *aiAgent) requestAnthropicMessages(runtimeConfig aiRuntimeConfig, payload aiChatCompletionRequest) (*aiChatCompletionResponse, error) {
+	reqURL, err := buildAnthropicMessagesRequestURL(runtimeConfig.BaseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	bodyPayload := convertToAnthropicMessagesRequest(payload)
+	body, err := json.Marshal(bodyPayload)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent request: provider=anthropic url=%s model=%s payload=%s", reqURL, runtimeConfig.Model, compactLogJSON(body))
+
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", runtimeConfig.APIKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai agent response: provider=anthropic status=%d body=%s", resp.StatusCode, compactLogJSON(responseBody))
+
+	var result anthropicMessagesResponse
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		if message := parseAIErrorMessage(result.Error); message != "" {
+			return nil, errors.New(message)
+		}
+		return nil, fmt.Errorf("anthropic api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+
+	text := extractAnthropicResponseText(result)
+	return &aiChatCompletionResponse{
+		Choices: []struct {
+			Message aiChatCompletionMessage `json:"message"`
+		}{
+			{
+				Message: aiChatCompletionMessage{
+					Role:    "assistant",
+					Content: text,
+				},
+			},
+		},
+	}, nil
+}
+
 func (a *aiAgent) runtimeConfig(threadID int64, llmThreadID *int64, responderUserID string) (aiRuntimeConfig, error) {
 	if responderUserID == systemUserID {
 		return aiRuntimeConfig{
@@ -545,6 +629,9 @@ func parseAIErrorMessage(raw json.RawMessage) string {
 
 func detectAIProvider(baseURL string) aiProvider {
 	text := strings.ToLower(strings.TrimSpace(baseURL))
+	if strings.Contains(text, "api.anthropic.com") {
+		return aiProviderAnthropic
+	}
 	if strings.Contains(text, "generativelanguage.googleapis.com") || strings.Contains(text, "googleapis.com") && strings.Contains(text, "generatecontent") {
 		return aiProviderGemini
 	}
@@ -616,6 +703,32 @@ func buildXAIResponsesRequestURL(baseURL string) (string, error) {
 		path = path + "/responses"
 	default:
 		path = path + "/responses"
+	}
+	parsed.Path = path
+	return parsed.String(), nil
+}
+
+func buildAnthropicMessagesRequestURL(baseURL string) (string, error) {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "", errors.New("Claude 配置缺少 Base URL")
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	path := strings.TrimRight(parsed.Path, "/")
+	switch {
+	case path == "":
+		path = "/v1/messages"
+	case strings.HasSuffix(path, "/messages"):
+		// already points to messages endpoint
+	case strings.HasSuffix(path, "/v1"):
+		path = path + "/messages"
+	default:
+		path = path + "/messages"
 	}
 	parsed.Path = path
 	return parsed.String(), nil
@@ -693,6 +806,41 @@ func convertToXAIResponsesRequest(payload aiChatCompletionRequest) xAIResponsesR
 	return req
 }
 
+func convertToAnthropicMessagesRequest(payload aiChatCompletionRequest) anthropicMessagesRequest {
+	req := anthropicMessagesRequest{
+		Model:     payload.Model,
+		Messages:  make([]anthropicMessagesMessage, 0, len(payload.Messages)),
+		MaxTokens: 4096,
+	}
+
+	var systemParts []string
+	for _, msg := range payload.Messages {
+		text := strings.TrimSpace(msg.Content)
+		if text == "" {
+			continue
+		}
+		switch strings.TrimSpace(msg.Role) {
+		case "system":
+			systemParts = append(systemParts, text)
+		case "assistant":
+			req.Messages = append(req.Messages, anthropicMessagesMessage{
+				Role:    "assistant",
+				Content: text,
+			})
+		default:
+			req.Messages = append(req.Messages, anthropicMessagesMessage{
+				Role:    "user",
+				Content: text,
+			})
+		}
+	}
+
+	if len(systemParts) > 0 {
+		req.System = strings.Join(systemParts, "\n\n")
+	}
+	return req
+}
+
 func extractGeminiResponseText(result geminiGenerateContentResponse) string {
 	if len(result.Candidates) == 0 {
 		return ""
@@ -725,6 +873,17 @@ func extractXAIResponseText(result xAIResponsesResponse) string {
 		}
 	}
 
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func extractAnthropicResponseText(result anthropicMessagesResponse) string {
+	var parts []string
+	for _, item := range result.Content {
+		text := strings.TrimSpace(item.Text)
+		if text != "" {
+			parts = append(parts, text)
+		}
+	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 

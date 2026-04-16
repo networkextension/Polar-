@@ -162,6 +162,10 @@ func (s *Server) handleLLMConfigDelete(c *gin.Context) {
 func (s *Server) handleBotUserList(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	userIDStr, _ := userID.(string)
+	if err := s.ensureBuiltinBotUsers(userIDStr, time.Now()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
 	items, err := s.listBotUsers(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})

@@ -34,6 +34,7 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
+import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint } from "./lib/llm_presets.js";
 import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
 import { t, getLang, setLang, applyI18n } from "./lib/i18n.js";
@@ -110,6 +111,9 @@ const settingsSectionLead = byId<HTMLElement>("settingsSectionLead");
 const siteAdminPanel = byId<HTMLElement>("siteAdminPanel");
 const themeCurrentValue = byId<HTMLElement>("themeCurrentValue");
 const llmConfigForm = byId<HTMLFormElement>("llmConfigForm");
+const llmProviderPresetSelect = byId<HTMLSelectElement>("llmProviderPresetSelect");
+const llmProviderPresetNote = byId<HTMLElement>("llmProviderPresetNote");
+const llmProviderPresetDocs = byId<HTMLAnchorElement>("llmProviderPresetDocs");
 const llmConfigNameInput = byId<HTMLInputElement>("llmConfigNameInput");
 const llmConfigBaseUrlInput = byId<HTMLInputElement>("llmConfigBaseUrlInput");
 const llmConfigModelInput = byId<HTMLInputElement>("llmConfigModelInput");
@@ -175,6 +179,24 @@ let currentLLMConfigs: LLMConfig[] = [];
 let currentAvailableLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
 let activeSettingsSection: "profile" | "personalization" | "settings" | "system" | "bots" | "site" = "personalization";
+
+function populateLLMProviderPresets(): void {
+  llmProviderPresetSelect.innerHTML = LLM_PROVIDER_PRESETS
+    .map((item) => `<option value="${item.id}">${item.displayName}</option>`)
+    .join("");
+}
+
+function applyLLMProviderPreset(presetID: string, keepName = false): void {
+  const preset = getPresetByID(presetID) || LLM_PROVIDER_PRESETS[0];
+  llmProviderPresetSelect.value = preset.id;
+  llmConfigBaseUrlInput.value = resolvePresetEndpoint(preset);
+  llmConfigModelInput.value = preset.defaultModelID;
+  llmProviderPresetNote.textContent = preset.note;
+  llmProviderPresetDocs.href = preset.docsURL;
+  if (!keepName || !llmConfigNameInput.value.trim()) {
+    llmConfigNameInput.value = `${preset.displayName} Preset`;
+  }
+}
 
 function renderEmailVerificationState(email?: string, verified?: boolean): void {
   emailVerificationAddress.textContent = email || t("dashboard.emailUnavailable");
@@ -424,6 +446,7 @@ function resetLLMConfigForm(): void {
   llmConfigApiKeyInput.value = "";
   llmConfigStatus.textContent = "";
   llmConfigSubmitBtn.textContent = t("dashboard.saveConfigBtn");
+  applyLLMProviderPreset(LLM_PROVIDER_PRESETS[0].id, false);
 }
 
 function resetBotUserForm(): void {
@@ -974,6 +997,10 @@ llmConfigResetBtn.addEventListener("click", () => {
   resetLLMConfigForm();
 });
 
+llmProviderPresetSelect.addEventListener("change", () => {
+  applyLLMProviderPreset(llmProviderPresetSelect.value, false);
+});
+
 llmConfigTestBtn.addEventListener("click", async () => {
   const payload: LLMConfigPayload = {
     name: llmConfigNameInput.value.trim(),
@@ -1064,6 +1091,8 @@ llmConfigList.addEventListener("click", async (event) => {
   const action = button.dataset.action;
   if (action === "edit") {
     editingLLMConfigId = config.id;
+    const presetID = matchPresetByBaseURL(config.base_url) || LLM_PROVIDER_PRESETS[0].id;
+    applyLLMProviderPreset(presetID, true);
     llmConfigNameInput.value = config.name;
     llmConfigBaseUrlInput.value = config.base_url;
     llmConfigModelInput.value = config.model;
@@ -1541,6 +1570,10 @@ syncThemeButton(initialTheme);
 bindThemeSync(syncThemeButton);
 syncLanguageButton();
 switchSettingsSection(activeSettingsSection);
+populateLLMProviderPresets();
+llmConfigBaseUrlInput.readOnly = true;
+llmConfigModelInput.readOnly = true;
+applyLLMProviderPreset(LLM_PROVIDER_PRESETS[0].id, false);
 
 void (async () => {
   await hydrateSiteBrand();
