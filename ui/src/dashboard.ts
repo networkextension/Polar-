@@ -189,13 +189,25 @@ function populateLLMProviderPresets(): void {
 function applyLLMProviderPreset(presetID: string, keepName = false): void {
   const preset = getPresetByID(presetID) || LLM_PROVIDER_PRESETS[0];
   llmProviderPresetSelect.value = preset.id;
-  llmConfigBaseUrlInput.value = resolvePresetEndpoint(preset);
-  llmConfigModelInput.value = preset.defaultModelID;
+  llmConfigBaseUrlInput.placeholder = resolvePresetEndpoint(preset);
+  llmConfigModelInput.placeholder = preset.defaultModelID;
   llmProviderPresetNote.textContent = preset.note;
   llmProviderPresetDocs.href = preset.docsURL;
   if (!keepName || !llmConfigNameInput.value.trim()) {
     llmConfigNameInput.value = `${preset.displayName} Preset`;
   }
+}
+
+function collectLLMConfigPayloadFromForm(): LLMConfigPayload {
+  const preset = getPresetByID(llmProviderPresetSelect.value) || LLM_PROVIDER_PRESETS[0];
+  return {
+    name: llmConfigNameInput.value.trim(),
+    base_url: llmConfigBaseUrlInput.value.trim() || resolvePresetEndpoint(preset),
+    model: llmConfigModelInput.value.trim() || preset.defaultModelID,
+    api_key: llmConfigApiKeyInput.value.trim(),
+    system_prompt: llmConfigSystemPromptInput.value.trim(),
+    shared: llmConfigSharedInput.checked,
+  };
 }
 
 function renderEmailVerificationState(email?: string, verified?: boolean): void {
@@ -1002,14 +1014,7 @@ llmProviderPresetSelect.addEventListener("change", () => {
 });
 
 llmConfigTestBtn.addEventListener("click", async () => {
-  const payload: LLMConfigPayload = {
-    name: llmConfigNameInput.value.trim(),
-    base_url: llmConfigBaseUrlInput.value.trim(),
-    model: llmConfigModelInput.value.trim(),
-    api_key: llmConfigApiKeyInput.value.trim(),
-    system_prompt: llmConfigSystemPromptInput.value.trim(),
-    shared: llmConfigSharedInput.checked,
-  };
+  const payload = collectLLMConfigPayloadFromForm();
   if (!payload.base_url || !payload.model || !payload.api_key) {
     setStatusMessage(llmConfigStatus, t("dashboard.llmTestMissingFields"), "error");
     return;
@@ -1039,14 +1044,7 @@ botUserResetBtn.addEventListener("click", () => {
 
 llmConfigForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const payload: LLMConfigPayload = {
-    name: llmConfigNameInput.value.trim(),
-    base_url: llmConfigBaseUrlInput.value.trim(),
-    model: llmConfigModelInput.value.trim(),
-    api_key: llmConfigApiKeyInput.value.trim(),
-    system_prompt: llmConfigSystemPromptInput.value.trim(),
-    shared: llmConfigSharedInput.checked,
-  };
+  const payload = collectLLMConfigPayloadFromForm();
   if (!payload.name || !payload.base_url || !payload.model) {
     llmConfigStatus.textContent = t("dashboard.llmConfigMissingFields");
     return;
@@ -1571,8 +1569,6 @@ bindThemeSync(syncThemeButton);
 syncLanguageButton();
 switchSettingsSection(activeSettingsSection);
 populateLLMProviderPresets();
-llmConfigBaseUrlInput.readOnly = true;
-llmConfigModelInput.readOnly = true;
 applyLLMProviderPreset(LLM_PROVIDER_PRESETS[0].id, false);
 
 void (async () => {
