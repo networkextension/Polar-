@@ -10,6 +10,148 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func buildMarkdownAssistSystemPrompt(botPrompt, instruction string) string {
+	base := []string{
+		"你是一个中文写作润色助手。你的任务是基于用户原文做改写与润色，而不是替用户重新发明核心观点。",
+		"必须遵循：",
+		"1) 保留用户核心事实、观点、立场与结论，不擅自新增关键事实。",
+		"2) 优先做表达优化：结构、语序、逻辑、可读性、措辞、语法。",
+		"3) 如果用户给了明确风格要求，按要求润色；若无要求，默认清晰、自然、专业。",
+		"4) 输出只返回最终可直接粘贴的正文内容，不要解释、不要前后缀。",
+	}
+	if strings.TrimSpace(botPrompt) != "" {
+		base = append(base, "Bot 额外写作偏好：\n"+strings.TrimSpace(botPrompt))
+	}
+	if strings.TrimSpace(instruction) != "" {
+		base = append(base, "本次润色要求：\n"+strings.TrimSpace(instruction))
+	}
+	return strings.Join(base, "\n\n")
+}
+
+func (s *Server) handleMarkdownAssistWithBot(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	if s.aiAgent == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI Agent 未初始化"})
+		return
+	}
+
+	var req struct {
+		BotID       int64  `json:"bot_id" binding:"required"`
+		LLMConfigID int64  `json:"llm_config_id"`
+		Title       string `json:"title"`
+		Content     string `json:"content" binding:"required"`
+		Instruction string `json:"instruction"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	if req.BotID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效 Bot"})
+		return
+	}
+	sourceContent := strings.TrimSpace(req.Content)
+	if sourceContent == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "内容不能为空"})
+		return
+	}
+
+	bot, err := s.getBotUserForOwner(userIDStr, req.BotID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if bot == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Bot 不存在"})
+		return
+	}
+
+	var (
+		llmConfig *LLMConfig
+		apiKey    string
+	)
+	if req.LLMConfigID > 0 {
+		llmConfig, apiKey, err = s.getAvailableLLMConfigWithAPIKey(userIDStr, req.LLMConfigID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+			return
+		}
+		if llmConfig == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "所选 LLM 配置不可用"})
+			return
+		}
+	} else {
+		llmConfig, apiKey, err = s.getLLMConfigForBot(bot.BotUserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+			return
+		}
+	}
+	if llmConfig == nil || strings.TrimSpace(apiKey) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "这个 Bot 的模型配置不可用，请先检查 API Key 和模型配置"})
+		return
+	}
+
+	runtimeConfig := aiRuntimeConfig{
+		APIKey:       strings.TrimSpace(apiKey),
+		BaseURL:      strings.TrimSpace(llmConfig.BaseURL),
+		Model:        strings.TrimSpace(llmConfig.Model),
+		SystemPrompt: buildMarkdownAssistSystemPrompt(bot.SystemPrompt, req.Instruction),
+	}
+
+	userPrompt := strings.TrimSpace(strings.Join([]string{
+		"请润色以下正文，保持核心内容不变：",
+		"标题：" + strings.TrimSpace(req.Title),
+		"--- 原文开始 ---",
+		sourceContent,
+		"--- 原文结束 ---",
+	}, "\n"))
+
+	payload := aiChatCompletionRequest{
+		Model: runtimeConfig.Model,
+		Messages: []aiChatCompletionMessage{
+			{Role: "system", Content: runtimeConfig.SystemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+
+	result, err := s.aiAgent.requestChatCompletion(runtimeConfig, payload)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if len(result.Choices) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "模型返回为空"})
+		return
+	}
+
+	refined := strings.TrimSpace(result.Choices[0].Message.Content)
+	if refined == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "模型返回为空"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "润色完成",
+		"content": refined,
+		"bot": gin.H{
+			"id":   bot.ID,
+			"name": bot.Name,
+		},
+		"llm": gin.H{
+			"config_id": llmConfig.ID,
+			"model":     llmConfig.Model,
+		},
+	})
+}
+
 func (s *Server) handleMarkdownSubmit(c *gin.Context) {
 	var req struct {
 		Title    string `json:"title" binding:"required"`

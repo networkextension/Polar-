@@ -1313,6 +1313,25 @@ func (s *Server) getLLMConfigForBot(botUserID string) (*LLMConfig, string, error
 	return &item, apiKey, nil
 }
 
+func (s *Server) getAvailableLLMConfigWithAPIKey(ownerUserID string, id int64) (*LLMConfig, string, error) {
+	var item LLMConfig
+	var apiKey string
+	err := s.db.QueryRow(
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		   FROM llm_configs
+		  WHERE id = $1 AND (owner_user_id = $2 OR shared = TRUE)`,
+		id,
+		ownerUserID,
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	return &item, apiKey, nil
+}
+
 func (s *Server) createLLMConfig(ownerUserID, name, baseURL, model, apiKey, systemPrompt, shareID string, shared bool, now time.Time) (*LLMConfig, error) {
 	var item LLMConfig
 	err := s.db.QueryRow(

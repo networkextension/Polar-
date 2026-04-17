@@ -368,6 +368,7 @@ func (s *Server) registerRoutes() {
 		api.DELETE("/devices/push-token", s.AuthMiddleware(), s.handleDevicePushTokenDelete)
 		api.GET("/login-history", s.AuthMiddleware(), s.handleLoginHistory)
 		api.POST("/markdown", s.AuthMiddleware(), s.handleMarkdownSubmit)
+		api.POST("/markdown/assist-with-bot", s.AuthMiddleware(), s.handleMarkdownAssistWithBot)
 		api.GET("/markdown", s.AuthMiddleware(), s.handleMarkdownList)
 		api.GET("/public/markdowns", s.handlePublicMarkdownList)
 		api.GET("/public/markdown/:id", s.handlePublicMarkdownRead)
