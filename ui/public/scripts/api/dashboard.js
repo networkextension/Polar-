@@ -80,6 +80,12 @@ export async function removeBotUser(id) {
         method: "DELETE",
     });
 }
+export async function assistMarkdownWithBot(payload) {
+    return requestJson("/api/markdown/assist-with-bot", {
+        method: "POST",
+        body: payload,
+    });
+}
 export async function updateSiteSettings(payload) {
     return requestJson("/api/site-settings", {
         method: "PUT",

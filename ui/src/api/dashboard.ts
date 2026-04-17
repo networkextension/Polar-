@@ -2,6 +2,7 @@ import { request, requestJson } from "./http.js";
 import type {
   BotListResponse,
   BotPayload,
+  MarkdownAssistResponse,
   EntryDetailResponse,
   EntryListResponse,
   ErrorResponse,
@@ -124,6 +125,19 @@ export async function updateBotUser(id: number, payload: BotPayload) {
 export async function removeBotUser(id: number) {
   return requestJson<ErrorResponse>(`/api/bots/${id}`, {
     method: "DELETE",
+  });
+}
+
+export async function assistMarkdownWithBot(payload: {
+  bot_id: number;
+  llm_config_id?: number;
+  title?: string;
+  content: string;
+  instruction?: string;
+}) {
+  return requestJson<MarkdownAssistResponse>("/api/markdown/assist-with-bot", {
+    method: "POST",
+    body: payload,
   });
 }
 

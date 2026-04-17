@@ -167,6 +167,18 @@ export type BotListResponse = ErrorResponse & {
   bot?: BotUser;
 };
 
+export type MarkdownAssistResponse = ErrorResponse & {
+  content?: string;
+  bot?: {
+    id: number;
+    name: string;
+  };
+  llm?: {
+    config_id: number;
+    model: string;
+  };
+};
+
 export type PackTunnelKCPTunConfig = {
   key: string;
   crypt: string;
