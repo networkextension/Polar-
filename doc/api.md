@@ -812,6 +812,9 @@
 - `shared = true` 的 `LLM Config` 可被其他用户用于聊天切换和 Bot 绑定
 - 建议先调用“测试配置”确认连通，再保存配置
 - 每个 Bot 都会对应一个可私聊的 `user_id`
+- `GET /api/bots` 会自动补齐内置 Bot（美股分析师 / 哲学家 / 代码高手 / 灵魂导师）
+  - 仅在当前用户有至少 1 个可用 `LLM Config` 时自动创建
+  - 若同名 Bot 已存在则不会重复创建
 - Bot 与官方 `system` 助理共用同一套私聊入口，但运行时配置来源不同
 - 当前推荐的职责划分：
   - `LLM Config`：保存 `Base URL / Model / API Key` 等连接信息
@@ -1018,6 +1021,11 @@
   ]
 }
 ```
+
+说明：
+
+- 调用该接口时，服务端会先执行一次“内置 Bot 补齐”逻辑（见上文）
+- 这使得新用户首次进入聊天时可直接选择内置 Bot，无需手工先创建 Bot
 
 ### 创建 Bot
 
@@ -1720,9 +1728,18 @@ curl -X POST http://localhost:3000/api/posts \
 请求体：
 ```json
 {
-  "user_id": "u_018"
+  "user_id": "u_018",
+  "llm_config_id": 3
 }
 ```
+
+请求字段说明：
+
+- `user_id`：必填，对端用户或 Bot 的用户 ID
+- `llm_config_id`：可选，仅在对端是 `bot user` 时生效
+  - 传值：新会话/当前默认话题会使用该配置
+  - 不传：服务端自动选择当前用户“可用配置列表”的第一项
+  - 若没有任何可用配置，返回 `400`
 
 成功响应：
 ```json
@@ -1752,6 +1769,7 @@ curl -X POST http://localhost:3000/api/posts \
 - `is_implicit_friend` 仅对普通用户私聊有意义；`system` / `bot user` 会话恒为 `true`
 - 当普通用户会话中双方都至少发送过一条未撤回消息后，`is_implicit_friend` 会变为 `true`
 - 空会话初次进入时 `reply_required = false`；只有你先发出首条消息后，才会进入等待对方回复状态
+- 当目标是 `bot user` 时，服务端会自动确保存在默认 `llm_thread`，并按上述规则确定初始 `llm_config_id`
 
 若因拉黑被拒绝，返回 `403 Forbidden`：
 ```json
@@ -1764,6 +1782,13 @@ curl -X POST http://localhost:3000/api/posts \
 ```json
 {
   "error": "对方已拉黑你，无法创建私聊"
+}
+```
+
+当目标是 `bot user` 且没有可用模型配置时，返回 `400 Bad Request`：
+```json
+{
+  "error": "暂无可用 LLM 配置，请先创建或共享一个配置"
 }
 ```
 
@@ -1861,6 +1886,11 @@ curl -X POST http://localhost:3000/api/posts \
 
 权限要求：会话参与者，且该会话对端必须是 `system` 或 `bot user`
 
+说明：
+
+- 新话题会继承当前 Bot 默认配置（或当前会话已选中的配置）作为初始 `llm_config_id`
+- 后续仍可通过“切换 Bot 话题模型配置”接口单独覆盖
+
 请求体：
 ```json
 {
@@ -1871,12 +1901,15 @@ curl -X POST http://localhost:3000/api/posts \
 成功响应：
 ```json
 {
-  "message": "话题已创建",
+  "message": "新话题已创建",
   "thread": {
     "id": 22,
     "chat_thread_id": 12,
     "owner_user_id": "u_018",
     "bot_user_id": "bot_translate_01",
+    "llm_config_id": 3,
+    "config_name": "OpenAI 生产配置",
+    "config_model": "gpt-4.1-mini",
     "title": "新话题",
     "created_at": "2026-03-25T09:30:00+08:00",
     "updated_at": "2026-03-25T09:30:00+08:00",

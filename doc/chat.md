@@ -114,7 +114,10 @@ user_blocks 字段：
 
 请求
 ```json
-{ "user_id": "abc123" }
+{
+  "user_id": "abc123",
+  "llm_config_id": 3
+}
 ```
 
 响应
@@ -139,6 +142,10 @@ user_blocks 字段：
 - 新创建的普通用户会话默认 `is_implicit_friend = false`
 - 只有双方都至少发出一条未撤回消息后，才会变为 `true`
 - 空会话初次进入时 `reply_required = false`
+- `llm_config_id` 为可选字段，仅在目标是 `bot user` 时生效
+  - 传值：默认话题使用该配置
+  - 不传：服务端自动选择“可用配置列表”第一项
+  - 若没有可用配置，返回 `400` 并提示先创建/共享 LLM 配置
 
 如果双方存在拉黑关系，返回 `403 Forbidden`：
 ```json
