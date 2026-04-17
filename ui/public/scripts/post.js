@@ -2,7 +2,7 @@ import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
-import { fetchTags } from "./api/dashboard.js";
+import { assistPostWithBot, assistReplyWithBot, fetchAvailableLLMConfigs, fetchBotUsers, fetchTags, } from "./api/dashboard.js";
 import { t } from "./lib/i18n.js";
 import { logout } from "./api/session.js";
 const API_BASE = "";
@@ -22,8 +22,21 @@ const postImages = byId("postImages");
 const postVideos = byId("postVideos");
 const postFormStatus = byId("postFormStatus");
 const postSubmitBtn = byId("postSubmitBtn");
+const postAssistBotSelect = byId("postAssistBot");
+const postAssistLLMSelect = byId("postAssistLLM");
+const postAssistTopicInput = byId("postAssistTopic");
+const postAssistInstructionInput = byId("postAssistInstruction");
+const postAssistStatus = byId("postAssistStatus");
+const postAssistPreview = byId("postAssistPreview");
+const postAssistRunBtn = byId("postAssistRunBtn");
+const postAssistApplyBtn = byId("postAssistApplyBtn");
 let currentUserId = "";
 let currentUserRole = "user";
+let assistBots = [];
+let assistLLMConfigs = [];
+let assistBotsLoaded = false;
+let postAssistResult = "";
+let replyAssistResult = "";
 let videoModal = null;
 let videoModalPlayer = null;
 let imageModal = null;
@@ -61,6 +74,179 @@ function getTagName(tagId) {
         return "";
     }
     return currentTags.find((item) => item.id === tagId)?.name || "";
+}
+async function loadAssistOptions() {
+    if (assistBotsLoaded) {
+        return;
+    }
+    try {
+        const [botResult, llmResult] = await Promise.all([fetchBotUsers(), fetchAvailableLLMConfigs()]);
+        assistBots = botResult.response.ok ? botResult.data.bots || [] : [];
+        assistLLMConfigs = llmResult.response.ok ? llmResult.data.configs || [] : [];
+    }
+    catch {
+        assistBots = [];
+        assistLLMConfigs = [];
+    }
+    assistBotsLoaded = true;
+    renderPostAssistOptions();
+}
+function renderPostAssistOptions() {
+    if (!assistBots.length) {
+        postAssistBotSelect.innerHTML = `<option value="">${t("post.assistNoBot")}</option>`;
+        postAssistRunBtn.disabled = true;
+    }
+    else {
+        postAssistBotSelect.innerHTML = assistBots
+            .map((bot) => `<option value="${bot.id}">${bot.name}${bot.config_name ? ` · ${bot.config_name}` : ""}</option>`)
+            .join("");
+        postAssistRunBtn.disabled = false;
+    }
+    const llmOptions = assistLLMConfigs
+        .map((cfg) => `<option value="${cfg.id}">${cfg.name} · ${cfg.model}</option>`)
+        .join("");
+    postAssistLLMSelect.innerHTML = `<option value="">${t("post.assistDefaultLLM")}</option>${llmOptions}`;
+}
+function setupPostAssistPanel() {
+    const panel = document.getElementById("postAssistPanel");
+    panel?.addEventListener("toggle", () => {
+        if (panel.open) {
+            void loadAssistOptions();
+        }
+    });
+    postAssistRunBtn.addEventListener("click", async () => {
+        const botId = Number(postAssistBotSelect.value || 0);
+        if (botId <= 0) {
+            postAssistStatus.textContent = t("post.assistBotRequired");
+            return;
+        }
+        const topic = postAssistTopicInput.value.trim();
+        const draft = postContent.value.trim();
+        if (!topic && !draft) {
+            postAssistStatus.textContent = t("post.assistTopicOrDraftRequired");
+            return;
+        }
+        postAssistRunBtn.disabled = true;
+        postAssistApplyBtn.disabled = true;
+        postAssistStatus.textContent = t("post.assistRunning");
+        try {
+            const llmId = Number(postAssistLLMSelect.value || 0);
+            const { response, data } = await assistPostWithBot({
+                bot_id: botId,
+                llm_config_id: llmId > 0 ? llmId : undefined,
+                content: draft,
+                topic,
+                instruction: postAssistInstructionInput.value.trim(),
+            });
+            if (!response.ok || !data.content) {
+                postAssistStatus.textContent = data.error || t("post.assistFailed");
+                postAssistPreview.hidden = true;
+                postAssistResult = "";
+                return;
+            }
+            postAssistResult = data.content;
+            postAssistPreview.textContent = postAssistResult;
+            postAssistPreview.hidden = false;
+            postAssistApplyBtn.disabled = false;
+            const llmLabel = data.llm?.model ? ` · ${data.llm.model}` : "";
+            postAssistStatus.textContent = `${t("post.assistDone")}${llmLabel}`;
+        }
+        catch {
+            postAssistStatus.textContent = t("common.networkError");
+        }
+        finally {
+            postAssistRunBtn.disabled = assistBots.length === 0;
+        }
+    });
+    postAssistApplyBtn.addEventListener("click", () => {
+        if (!postAssistResult) {
+            return;
+        }
+        postContent.value = postAssistResult;
+        postAssistStatus.textContent = t("post.assistApplied");
+    });
+}
+function renderReplyAssistBotOptions(select, llmSelect) {
+    if (!assistBots.length) {
+        select.innerHTML = `<option value="">${t("post.assistNoBot")}</option>`;
+    }
+    else {
+        select.innerHTML = assistBots
+            .map((bot) => `<option value="${bot.id}">${bot.name}${bot.config_name ? ` · ${bot.config_name}` : ""}</option>`)
+            .join("");
+    }
+    const llmOptions = assistLLMConfigs
+        .map((cfg) => `<option value="${cfg.id}">${cfg.name} · ${cfg.model}</option>`)
+        .join("");
+    llmSelect.innerHTML = `<option value="">${t("post.assistDefaultLLM")}</option>${llmOptions}`;
+}
+function setupReplyAssist(postId, replyInput) {
+    const details = document.getElementById("replyAssistPanel");
+    if (!details) {
+        return;
+    }
+    const botSelect = document.getElementById("replyAssistBot");
+    const llmSelect = document.getElementById("replyAssistLLM");
+    const instructionInput = document.getElementById("replyAssistInstruction");
+    const runBtn = document.getElementById("replyAssistRunBtn");
+    const applyBtn = document.getElementById("replyAssistApplyBtn");
+    const status = document.getElementById("replyAssistStatus");
+    const preview = document.getElementById("replyAssistPreview");
+    if (!botSelect || !llmSelect || !instructionInput || !runBtn || !applyBtn || !status || !preview) {
+        return;
+    }
+    details.addEventListener("toggle", async () => {
+        if (!details.open) {
+            return;
+        }
+        await loadAssistOptions();
+        renderReplyAssistBotOptions(botSelect, llmSelect);
+        runBtn.disabled = assistBots.length === 0;
+    });
+    runBtn.addEventListener("click", async () => {
+        const botId = Number(botSelect.value || 0);
+        if (botId <= 0) {
+            status.textContent = t("post.assistBotRequired");
+            return;
+        }
+        runBtn.disabled = true;
+        applyBtn.disabled = true;
+        status.textContent = t("post.assistRunning");
+        try {
+            const llmId = Number(llmSelect.value || 0);
+            const { response, data } = await assistReplyWithBot(postId, {
+                bot_id: botId,
+                llm_config_id: llmId > 0 ? llmId : undefined,
+                content: replyInput.value.trim(),
+                instruction: instructionInput.value.trim(),
+            });
+            if (!response.ok || !data.content) {
+                status.textContent = data.error || t("post.assistFailed");
+                preview.hidden = true;
+                replyAssistResult = "";
+                return;
+            }
+            replyAssistResult = data.content;
+            preview.textContent = replyAssistResult;
+            preview.hidden = false;
+            applyBtn.disabled = false;
+            const llmLabel = data.llm?.model ? ` · ${data.llm.model}` : "";
+            status.textContent = `${t("post.assistDone")}${llmLabel}`;
+        }
+        catch {
+            status.textContent = t("common.networkError");
+        }
+        finally {
+            runBtn.disabled = assistBots.length === 0;
+        }
+    });
+    applyBtn.addEventListener("click", () => {
+        if (!replyAssistResult) {
+            return;
+        }
+        replyInput.value = replyAssistResult;
+        status.textContent = t("post.assistApplied");
+    });
 }
 async function loadTagOptions() {
     const { response, data } = await fetchTags();
@@ -413,6 +599,23 @@ function renderPost(post) {
         <input id="replyInput" class="input reply-input" type="text" placeholder="${t("post.replyPlaceholder")}" required />
         <button class="btn-inline btn-secondary" type="submit">${t("post.sendReply")}</button>
       </form>
+      <details id="replyAssistPanel" class="post-assist-panel">
+        <summary class="post-assist-summary">${t("post.replyAssistToggle")}</summary>
+        <div class="post-assist-body">
+          <label class="form-label" for="replyAssistBot">${t("post.assistBot")}</label>
+          <select id="replyAssistBot" class="input"></select>
+          <label class="form-label" for="replyAssistLLM">${t("post.assistLLM")}</label>
+          <select id="replyAssistLLM" class="input"></select>
+          <label class="form-label" for="replyAssistInstruction">${t("post.assistInstruction")}</label>
+          <input id="replyAssistInstruction" class="input" type="text" placeholder="${t("post.assistInstructionPlaceholder")}" />
+          <div id="replyAssistStatus" class="status-text"></div>
+          <div id="replyAssistPreview" class="post-assist-preview" hidden></div>
+          <div class="task-form-actions">
+            <button id="replyAssistRunBtn" class="btn-inline btn-secondary" type="button">${t("post.replyAssistRun")}</button>
+            <button id="replyAssistApplyBtn" class="btn-inline btn-secondary" type="button" disabled>${t("post.replyAssistApply")}</button>
+          </div>
+        </div>
+      </details>
     </div>
   `;
     const likeBtn = byId("detailLikeBtn");
@@ -449,6 +652,8 @@ function renderPost(post) {
     });
     const replyForm = byId("replyForm");
     const replyInput = byId("replyInput");
+    replyAssistResult = "";
+    setupReplyAssist(post.id, replyInput);
     const taskApplyBtn = document.getElementById("taskApplyBtn");
     const taskCloseBtn = document.getElementById("taskCloseBtn");
     const taskLoadApplicantsBtn = document.getElementById("taskLoadApplicantsBtn");
@@ -740,6 +945,7 @@ async function init() {
     await loadProfile();
     await loadTagOptions();
     syncTaskFields();
+    setupPostAssistPanel();
     await loadPost();
 }
 void init();

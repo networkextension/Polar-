@@ -83,6 +83,30 @@
               <label class="form-label" for="postContent" data-i18n="post.contentLabel">Content</label>
               <textarea id="postContent" class="input textarea" rows="4" data-i18n-placeholder="post.contentPlaceholder" placeholder="Share your thoughts..." required></textarea>
 
+              <details id="postAssistPanel" class="post-assist-panel">
+                <summary class="post-assist-summary" data-i18n="post.assistToggle">AI Assist</summary>
+                <div class="post-assist-body">
+                  <label class="form-label" for="postAssistBot" data-i18n="post.assistBot">Bot</label>
+                  <select id="postAssistBot" class="input"></select>
+
+                  <label class="form-label" for="postAssistLLM" data-i18n="post.assistLLM">Model (optional)</label>
+                  <select id="postAssistLLM" class="input"></select>
+
+                  <label class="form-label" for="postAssistTopic" data-i18n="post.assistTopic">Topic / idea</label>
+                  <input id="postAssistTopic" class="input" type="text" data-i18n-placeholder="post.assistTopicPlaceholder" placeholder="Optional topic to seed the draft" />
+
+                  <label class="form-label" for="postAssistInstruction" data-i18n="post.assistInstruction">Instruction (optional)</label>
+                  <input id="postAssistInstruction" class="input" type="text" data-i18n-placeholder="post.assistInstructionPlaceholder" placeholder="e.g. keep it casual, under 200 chars" />
+
+                  <div id="postAssistStatus" class="status-text"></div>
+                  <div id="postAssistPreview" class="post-assist-preview" hidden></div>
+                  <div class="task-form-actions">
+                    <button id="postAssistRunBtn" class="btn-inline btn-secondary" type="button" data-i18n="post.assistRun">Generate draft</button>
+                    <button id="postAssistApplyBtn" class="btn-inline btn-secondary" type="button" disabled data-i18n="post.assistApply">Apply to content</button>
+                  </div>
+                </div>
+              </details>
+
               <div id="taskFields" class="task-form-fields" hidden>
                 <label class="form-label" for="taskLocation" data-i18n="post.taskLocationLabel">Location (optional)</label>
                 <input id="taskLocation" class="input" type="text" data-i18n-placeholder="post.taskLocationPlaceholder" placeholder="e.g. Remote / Shanghai" />

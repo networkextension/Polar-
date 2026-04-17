@@ -1,4 +1,4 @@
-import { blockUser, unblockUser, upsertRecommendation, updateMyProfile, fetchUserProfile } from "./api/profile.js";
+import { blockUser, unblockUser, upsertRecommendation, updateMyProfile, fetchUserProfile, followUser, unfollowUser, fetchFollowers, fetchFollowing, } from "./api/profile.js";
 import { uploadUserIcon } from "./api/dashboard.js";
 import { fetchCurrentUser, logout, sendEmailVerification } from "./api/session.js";
 import { resolveAvatar } from "./lib/avatar.js";
@@ -9,11 +9,14 @@ import { t } from "./lib/i18n.js";
 const profileWelcome = byId("profileWelcome");
 const profileCard = byId("profileCard");
 const profileBioPanel = byId("profileBioPanel");
+const profileFollowPanel = byId("profileFollowPanel");
 const profileRecommendationPanel = byId("profileRecommendationPanel");
 let currentUserId = "";
 let currentUserEmail = "";
 let currentUserEmailVerified = false;
 let profileUserId = "";
+let followTab = "followers";
+let followCurrentProfile = null;
 initStoredTheme();
 bindThemeSync();
 function getUserId() {
@@ -55,9 +58,22 @@ function renderProfileCard(profile) {
     const messageAction = canMessage
         ? `<a class="btn-inline btn-secondary" href="/chat.html?user_id=${encodeURIComponent(profile.user_id)}&username=${encodeURIComponent(profile.username)}">${t("profile.sendMessage")}</a>`
         : "";
+    const canFollow = !profile.is_me && !profile.i_blocked_user && !profile.blocked_me;
+    const followAction = canFollow
+        ? `<button id="profileFollowBtn" class="btn-inline ${profile.is_following ? "btn-secondary" : "btn-primary"}" type="button">${profile.is_following ? t("profile.unfollowUser") : t("profile.followUser")}</button>`
+        : "";
     const blockAction = !profile.is_me
         ? `<button id="profileBlockBtn" class="btn-inline btn-secondary" type="button">${profile.i_blocked_user ? t("profile.unblockUser") : t("profile.blockUser")}</button>`
         : "";
+    const followerCount = profile.follower_count ?? 0;
+    const followingCount = profile.following_count ?? 0;
+    const followSummary = `
+    <div class="profile-meta-line profile-follow-summary">
+      <span class="profile-follow-count"><strong>${followerCount}</strong> ${t("profile.followersLabel")}</span>
+      <span class="profile-follow-count"><strong>${followingCount}</strong> ${t("profile.followingLabel")}</span>
+      ${profile.followed_me ? `<span class="tag-chip">${t("profile.followsYou")}</span>` : ""}
+    </div>
+  `;
     const statusLine = blockMessage
         ? `<div class="status-text">${escapeHtml(blockMessage)}</div>`
         : "";
@@ -70,7 +86,8 @@ function renderProfileCard(profile) {
         ${emailLine}
         <div class="profile-meta-line">${t("profile.userId", { id: profile.user_id })}</div>
         <div class="profile-meta-line">${t("profile.joinedAt", { time: formatTime(profile.created_at) })}</div>
-        <div class="task-form-actions">${messageAction}${blockAction}</div>
+        ${followSummary}
+        <div class="task-form-actions">${messageAction}${followAction}${blockAction}</div>
         ${statusLine}
       </div>
     </div>
@@ -78,6 +95,24 @@ function renderProfileCard(profile) {
     if (profile.is_me) {
         return;
     }
+    const followBtn = document.getElementById("profileFollowBtn");
+    followBtn?.addEventListener("click", async () => {
+        followBtn.disabled = true;
+        const result = profile.is_following
+            ? await unfollowUser(profile.user_id)
+            : await followUser(profile.user_id);
+        if (!result.response.ok || !result.data.profile) {
+            profileWelcome.textContent = result.data.error || t("profile.followActionFailed");
+            followBtn.disabled = false;
+            return;
+        }
+        profileWelcome.textContent = result.data.message || "";
+        const updated = result.data.profile;
+        renderProfileCard(updated);
+        renderBioPanel(updated);
+        renderFollowPanel(updated);
+        renderRecommendationPanel(updated);
+    });
     const blockBtn = byId("profileBlockBtn");
     blockBtn.addEventListener("click", async () => {
         blockBtn.disabled = true;
@@ -88,10 +123,82 @@ function renderProfileCard(profile) {
             return;
         }
         profileWelcome.textContent = result.data.message || "";
-        renderProfileCard(result.data.profile);
-        renderBioPanel(result.data.profile);
-        renderRecommendationPanel(result.data.profile);
+        const updated = result.data.profile;
+        renderProfileCard(updated);
+        renderBioPanel(updated);
+        renderFollowPanel(updated);
+        renderRecommendationPanel(updated);
     });
+}
+function renderFollowUserList(users) {
+    if (!users.length) {
+        const emptyKey = followTab === "followers" ? "profile.noFollowers" : "profile.noFollowing";
+        return `<div class='reply-empty'>${t(emptyKey)}</div>`;
+    }
+    return users
+        .map((user) => {
+        const avatar = resolveAvatar(user.username, user.user_icon, 40);
+        const bio = user.bio ? `<div class="reply-meta">${escapeHtml(user.bio)}</div>` : "";
+        const followBadge = user.is_following ? `<span class="tag-chip">${t("profile.followingLabel")}</span>` : "";
+        return `
+        <div class="profile-recommendation-item">
+          <div class="task-applicant-head">
+            <a href="/profile.html?user_id=${encodeURIComponent(user.id)}">
+              <img class="avatar-xs" src="${avatar}" alt="${escapeHtml(user.username)}" />
+            </a>
+            <div>
+              <a class="post-author-name" href="/profile.html?user_id=${encodeURIComponent(user.id)}">${escapeHtml(user.username)}</a>
+              ${bio}
+            </div>
+            ${followBadge}
+          </div>
+        </div>
+      `;
+    })
+        .join("");
+}
+async function loadFollowList() {
+    if (!followCurrentProfile) {
+        return;
+    }
+    const container = document.getElementById("profileFollowList");
+    if (!container) {
+        return;
+    }
+    container.innerHTML = `<div class='reply-empty'>${t("profile.loadingFollowList")}</div>`;
+    const targetUserId = followCurrentProfile.user_id;
+    const fetcher = followTab === "followers" ? fetchFollowers : fetchFollowing;
+    const { response, data } = await fetcher(targetUserId, 30, 0);
+    if (!response.ok) {
+        container.innerHTML = `<div class='reply-empty'>${t("profile.followListLoadFailed")}</div>`;
+        return;
+    }
+    container.innerHTML = renderFollowUserList(data.users || []);
+}
+function renderFollowPanel(profile) {
+    followCurrentProfile = profile;
+    const followerCount = profile.follower_count ?? 0;
+    const followingCount = profile.following_count ?? 0;
+    profileFollowPanel.innerHTML = `
+    <div class="badge">${t("profile.followSection")}</div>
+    <div class="lp-filter-bar" style="margin-top:8px;">
+      <button class="btn-inline btn-secondary profile-follow-tab ${followTab === "followers" ? "active" : ""}" data-follow-tab="followers" type="button">${t("profile.tabFollowers", { count: String(followerCount) })}</button>
+      <button class="btn-inline btn-secondary profile-follow-tab ${followTab === "following" ? "active" : ""}" data-follow-tab="following" type="button">${t("profile.tabFollowing", { count: String(followingCount) })}</button>
+    </div>
+    <div id="profileFollowList" class="task-result-list" style="margin-top:8px;"></div>
+  `;
+    profileFollowPanel.querySelectorAll(".profile-follow-tab").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+            const next = btn.dataset.followTab || "followers";
+            if (next === followTab) {
+                return;
+            }
+            followTab = next;
+            renderFollowPanel(profile);
+            await loadFollowList();
+        });
+    });
+    void loadFollowList();
 }
 function renderBioPanel(profile) {
     if (profile.is_me) {
@@ -256,6 +363,7 @@ async function loadProfile() {
         : t("profile.viewingProfile", { username: profile.username });
     renderProfileCard(profile);
     renderBioPanel(profile);
+    renderFollowPanel(profile);
     renderRecommendationPanel(profile);
 }
 async function init() {

@@ -79,6 +79,7 @@ let currentImageGallery: string[] = [];
 let currentImageIndex = 0;
 let currentPostTypeFilter: "all" | "standard" | "task" = "all";
 let currentTagFilter: number | null = null;
+let currentScope: "all" | "following" = "all";
 let currentTags: Tag[] = [];
 
 initStoredTheme();
@@ -100,6 +101,10 @@ function getTagName(tagId?: number | null): string {
 }
 
 function updateListBadge(): void {
+  if (currentScope === "following") {
+    postListBadge.textContent = t("posts.followingPosts");
+    return;
+  }
   if (currentTagFilter) {
     postListBadge.textContent = getTagName(currentTagFilter) || t("posts.sectionPosts");
     return;
@@ -109,20 +114,26 @@ function updateListBadge(): void {
 }
 
 function renderTypeFilters(): void {
-  const items: Array<{ label: string; value: "all" | "standard" | "task" }> = [
-    { label: t("posts.filterLatest"), value: "all" },
-    { label: t("posts.filterRegular"), value: "standard" },
-    { label: t("posts.filterGigs"), value: "task" },
+  const items: Array<{ label: string; value: "all" | "standard" | "task"; scope?: "all" | "following" }> = [
+    { label: t("posts.filterLatest"), value: "all", scope: "all" },
+    { label: t("posts.filterFollowing"), value: "all", scope: "following" },
+    { label: t("posts.filterRegular"), value: "standard", scope: "all" },
+    { label: t("posts.filterGigs"), value: "task", scope: "all" },
   ];
   postTypeFilters.innerHTML = items
-    .map(
-      (item) =>
-        `<button class="btn-inline btn-secondary post-filter-btn ${currentPostTypeFilter === item.value && !currentTagFilter ? "active" : ""}" data-post-type="${item.value}" type="button">${item.label}</button>`
-    )
+    .map((item, idx) => {
+      const scope = item.scope || "all";
+      const active =
+        !currentTagFilter
+        && currentScope === scope
+        && (scope === "following" || currentPostTypeFilter === item.value);
+      return `<button class="btn-inline btn-secondary post-filter-btn ${active ? "active" : ""}" data-filter-idx="${idx}" data-post-type="${item.value}" data-scope="${scope}" type="button">${item.label}</button>`;
+    })
     .join("");
   postTypeFilters.querySelectorAll<HTMLButtonElement>(".post-filter-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       currentPostTypeFilter = (button.dataset.postType as "all" | "standard" | "task") || "all";
+      currentScope = (button.dataset.scope as "all" | "following") || "all";
       currentTagFilter = null;
       renderTypeFilters();
       renderTagFilters();
@@ -143,6 +154,7 @@ function renderTagFilters(): void {
     button.addEventListener("click", async () => {
       currentTagFilter = Number(button.dataset.tagId);
       currentPostTypeFilter = "all";
+      currentScope = "all";
       renderTypeFilters();
       renderTagFilters();
       updateListBadge();
@@ -539,6 +551,9 @@ async function loadPosts(reset = false): Promise<void> {
   if (currentTagFilter) {
     params.set("tag_id", String(currentTagFilter));
   }
+  if (currentScope === "following") {
+    params.set("scope", "following");
+  }
   const res = await fetch(`${API_BASE}/api/posts?${params.toString()}`, {
     credentials: "include",
   });
@@ -550,7 +565,8 @@ async function loadPosts(reset = false): Promise<void> {
   const data = await res.json();
   const posts: Post[] = data.posts || [];
   if (reset && posts.length === 0) {
-    postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
+    const emptyKey = currentScope === "following" ? "posts.noFollowingPosts" : "posts.noPosts";
+    postList.innerHTML = `<div class='post-empty'>${t(emptyKey)}</div>`;
     hasMore = false;
     postLoadMoreBtn.style.display = "none";
     return;

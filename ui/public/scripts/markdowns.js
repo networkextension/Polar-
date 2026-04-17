@@ -1,4 +1,4 @@
-import { resolveAvatar } from "./lib/avatar.js";
+import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
 import { hydrateSiteBrand } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { byId } from "./lib/dom.js";
@@ -13,11 +13,25 @@ bindThemeSync();
 function formatTime(value) {
     return new Date(value).toLocaleString();
 }
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 function createMarkdownCard(entry) {
     const card = document.createElement("a");
     card.className = "markdown-card panel";
     card.href = `/markdown.html?id=${entry.id}`;
     const avatar = resolveAvatar(entry.username, entry.user_icon, 64);
+    const cover = entry.cover_url
+        ? `<img class="markdown-card-cover" src="${buildAssetUrl(entry.cover_url)}" alt="${escapeHtml(entry.title)}" loading="lazy" />`
+        : "";
+    const summary = entry.summary
+        ? `<div class="markdown-card-summary">${escapeHtml(entry.summary)}</div>`
+        : "";
     card.innerHTML = `
     <div class="post-header">
       <div class="post-author">
@@ -26,7 +40,9 @@ function createMarkdownCard(entry) {
       </div>
       <div class="post-time">${formatTime(entry.uploaded_at)}</div>
     </div>
+    ${cover}
     <div class="markdown-card-title">${entry.title}</div>
+    ${summary}
     <div class="markdown-card-meta">${t("markdowns.clickToView")}</div>
   `;
     return card;

@@ -86,6 +86,18 @@ export async function assistMarkdownWithBot(payload) {
         body: payload,
     });
 }
+export async function assistPostWithBot(payload) {
+    return requestJson("/api/posts/assist-with-bot", {
+        method: "POST",
+        body: payload,
+    });
+}
+export async function assistReplyWithBot(postId, payload) {
+    return requestJson(`/api/posts/${postId}/replies/assist-with-bot`, {
+        method: "POST",
+        body: payload,
+    });
+}
 export async function updateSiteSettings(payload) {
     return requestJson("/api/site-settings", {
         method: "PUT",
