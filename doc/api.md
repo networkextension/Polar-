@@ -1723,6 +1723,34 @@ curl -X POST http://localhost:3000/api/posts \
 }
 ```
 
+### 收藏帖子
+
+**POST** `/api/posts/:id/bookmark`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已收藏",
+  "bookmarked_by_me": true
+}
+```
+
+### 取消收藏帖子
+
+**DELETE** `/api/posts/:id/bookmark`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已取消收藏",
+  "bookmarked_by_me": false
+}
+```
+
 ### iOS 对接提示（Posts）
 
 - 发帖请使用 `multipart/form-data`，媒体字段名固定为 `images` 和 `videos`。
@@ -3255,5 +3283,111 @@ Content-Disposition: attachment; filename="default-rules.conf"
   },
   "content": "# Demo Note\\n\\n正文内容",
   "can_edit": false
+}
+```
+
+## Markdown 互动
+
+### 点赞文章
+
+**POST** `/api/markdown/:id/like`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已点赞",
+  "like_count": 12,
+  "liked_by_me": true
+}
+```
+
+### 取消点赞文章
+
+**DELETE** `/api/markdown/:id/like`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已取消点赞",
+  "like_count": 11,
+  "liked_by_me": false
+}
+```
+
+### 发表文章评论
+
+**POST** `/api/markdown/:id/replies`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "content": "这篇写得好，收藏了。"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "评论成功",
+  "id": 42
+}
+```
+
+### 获取文章评论列表
+
+**GET** `/api/markdown/:id/replies?limit=50&offset=0`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "replies": [
+    {
+      "id": 42,
+      "markdown_id": 12,
+      "user_id": "u456",
+      "username": "alice",
+      "user_icon": "/uploads/avatar_u456.png",
+      "content": "这篇写得好，收藏了。",
+      "created_at": "2026-04-17T12:10:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_offset": 1
+}
+```
+
+### 收藏文章
+
+**POST** `/api/markdown/:id/bookmark`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已收藏",
+  "bookmarked_by_me": true
+}
+```
+
+### 取消收藏文章
+
+**DELETE** `/api/markdown/:id/bookmark`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "message": "已取消收藏",
+  "bookmarked_by_me": false
 }
 ```
