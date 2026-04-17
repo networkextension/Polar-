@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (s *Server) saveMarkdownDocument(userID, title, content string, isPublic bool, now time.Time) (*MarkdownEntry, string, error) {
+func (s *Server) saveMarkdownDocument(userID, title, content, editorMode string, isPublic bool, now time.Time) (*MarkdownEntry, string, error) {
 	if err := os.MkdirAll(s.markdownDir, 0o755); err != nil {
 		return nil, "", err
 	}
@@ -27,8 +27,9 @@ func (s *Server) saveMarkdownDocument(userID, title, content string, isPublic bo
 		return nil, "", err
 	}
 
+	mode := normalizeEditorMode(editorMode)
 	summary, coverURL := extractMarkdownMeta(content)
-	entryID, err := s.createMarkdownEntryReturningID(userID, title, path, summary, coverURL, isPublic, now)
+	entryID, err := s.createMarkdownEntryReturningID(userID, title, path, summary, coverURL, mode, isPublic, now)
 	if err != nil {
 		_ = os.Remove(path)
 		return nil, "", err
@@ -42,8 +43,22 @@ func (s *Server) saveMarkdownDocument(userID, title, content string, isPublic bo
 		CoverURL:   coverURL,
 		FilePath:   path,
 		IsPublic:   isPublic,
+		EditorMode: mode,
 		UploadedAt: now,
 	}, content, nil
+}
+
+// normalizeEditorMode validates the UI hint that distinguishes the
+// markdown source editor from the rich WYSIWYG editor. Anything unknown
+// collapses back to "markdown" so storage stays uniform regardless of
+// what clients ship.
+func normalizeEditorMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "rich":
+		return "rich"
+	default:
+		return "markdown"
+	}
 }
 
 var (

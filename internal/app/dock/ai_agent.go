@@ -220,7 +220,7 @@ func (a *aiAgent) handleTask(task aiAgentTask) {
 	}
 	now := time.Now()
 	title := buildSystemMarkdownTitle(reply, now)
-	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, reply, false, now)
+	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, reply, "markdown", false, now)
 	if err != nil {
 		log.Printf("save ai markdown failed: %v", err)
 		if _, sendErr := a.server.sendChatMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, reply, now); sendErr != nil {

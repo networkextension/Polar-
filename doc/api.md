@@ -3420,9 +3420,14 @@ Content-Disposition: attachment; filename="default-rules.conf"
 {
   "title": "Demo Note",
   "content": "# 标题\\n\\n正文内容",
-  "is_public": true
+  "is_public": true,
+  "editor_mode": "markdown"
 }
 ```
+
+- `editor_mode`：可选。标识是由哪种前端编辑器写入的，用于客户端在再次打开时选择对应 UI。
+  允许值：`"markdown"`（默认，Markdown 源码编辑器）、`"rich"`（富文本/WYSIWYG 编辑器）。
+  其它值按 `"markdown"` 处理。存储仍然是统一的 Markdown 文本，此字段只是 UI 提示。
 
 成功响应：
 ```json
@@ -3431,7 +3436,8 @@ Content-Disposition: attachment; filename="default-rules.conf"
   "id": 1,
   "file": "data/markdown/xxx.md",
   "username": "johndoe",
-  "is_public": true
+  "is_public": true,
+  "editor_mode": "markdown"
 }
 ```
 
@@ -3459,6 +3465,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
       "cover_url": "/uploads/cover.png",
       "file_path": "data/markdown/xxx.md",
       "is_public": true,
+      "editor_mode": "markdown",
       "uploaded_at": "2026-03-18T00:00:00Z"
     }
   ],
@@ -3471,6 +3478,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
 
 - `summary`：保存/更新时自动从正文抽取的纯文本摘要，最多 ~200 字，正文为空时为 `""`。
 - `cover_url`：保存/更新时自动从正文中抽取的首张图片链接（支持 `![](...)` 与 `<img src="...">` 两种形式），无图时为 `""`。
+- `editor_mode`：`"markdown"` 或 `"rich"`，提示客户端用哪种编辑器打开；详见 POST `/api/markdown`。
 - `username` / `user_icon`：作者信息，用于列表直接展示，客户端无需再次调 `/api/users/:id/profile`。
 - 列表按上传时间倒序。
 
@@ -3494,6 +3502,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
     "cover_url": "/uploads/cover.png",
     "file_path": "data/markdown/xxx.md",
     "is_public": true,
+    "editor_mode": "markdown",
     "uploaded_at": "2026-03-18T00:00:00Z"
   },
   "content": "# 标题\\n\\n正文内容",
@@ -3510,16 +3519,20 @@ Content-Disposition: attachment; filename="default-rules.conf"
 {
   "title": "新标题",
   "content": "# 新标题\\n\\n更新内容",
-  "is_public": false
+  "is_public": false,
+  "editor_mode": "rich"
 }
 ```
+
+- `editor_mode`：可选。不传时沿用当前记录已有的值；传入未识别的值按 `"markdown"` 处理。
 
 成功响应：
 ```json
 {
   "message": "更新成功",
   "id": 1,
-  "is_public": false
+  "is_public": false,
+  "editor_mode": "rich"
 }
 ```
 
@@ -3554,6 +3567,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
       "title": "Demo Note",
       "summary": "这是一段纯文本摘要...",
       "cover_url": "/uploads/cover.png",
+      "editor_mode": "markdown",
       "uploaded_at": "2026-03-22T08:00:00Z"
     }
   ],

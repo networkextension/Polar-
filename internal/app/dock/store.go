@@ -133,6 +133,7 @@ type MarkdownEntry struct {
 	CoverURL   string    `json:"cover_url"`
 	FilePath   string    `json:"file_path"`
 	IsPublic   bool      `json:"is_public"`
+	EditorMode string    `json:"editor_mode"`
 	UploadedAt time.Time `json:"uploaded_at"`
 }
 
@@ -144,6 +145,7 @@ type PublicMarkdownEntry struct {
 	Title      string    `json:"title"`
 	Summary    string    `json:"summary"`
 	CoverURL   string    `json:"cover_url"`
+	EditorMode string    `json:"editor_mode"`
 	UploadedAt time.Time `json:"uploaded_at"`
 }
 
@@ -603,6 +605,7 @@ CREATE TABLE IF NOT EXISTS markdown_entries (
 	is_public BOOLEAN NOT NULL DEFAULT FALSE,
 	summary TEXT NOT NULL DEFAULT '',
 	cover_url TEXT NOT NULL DEFAULT '',
+	editor_mode TEXT NOT NULL DEFAULT 'markdown',
 	uploaded_at TIMESTAMPTZ NOT NULL
 );
 
@@ -612,6 +615,8 @@ ALTER TABLE markdown_entries
 	ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT '';
 ALTER TABLE markdown_entries
 	ADD COLUMN IF NOT EXISTS cover_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE markdown_entries
+	ADD COLUMN IF NOT EXISTS editor_mode TEXT NOT NULL DEFAULT 'markdown';
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
 	credential_id TEXT PRIMARY KEY,
@@ -2514,17 +2519,18 @@ func (s *Server) createMarkdownEntry(userID, title, filePath string, isPublic bo
 	return err
 }
 
-func (s *Server) createMarkdownEntryReturningID(userID, title, filePath, summary, coverURL string, isPublic bool, uploadedAt time.Time) (int64, error) {
+func (s *Server) createMarkdownEntryReturningID(userID, title, filePath, summary, coverURL, editorMode string, isPublic bool, uploadedAt time.Time) (int64, error) {
 	var id int64
 	err := s.db.QueryRow(
-		`INSERT INTO markdown_entries (user_id, title, file_path, is_public, summary, cover_url, uploaded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		`INSERT INTO markdown_entries (user_id, title, file_path, is_public, summary, cover_url, editor_mode, uploaded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
 		userID,
 		title,
 		filePath,
 		isPublic,
 		summary,
 		coverURL,
+		editorMode,
 		uploadedAt,
 	).Scan(&id)
 	if err != nil {
@@ -2537,12 +2543,12 @@ func (s *Server) getMarkdownEntryByID(id int64) (*MarkdownEntry, error) {
 	var entry MarkdownEntry
 	err := s.db.QueryRow(
 		`SELECT m.id, m.user_id, COALESCE(u.username, ''), COALESCE(u.icon_url, ''),
-		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.editor_mode, m.uploaded_at
 		   FROM markdown_entries m
 		   LEFT JOIN users u ON u.id = m.user_id
 		  WHERE m.id = $1`,
 		id,
-	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
+	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.EditorMode, &entry.UploadedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -3051,7 +3057,7 @@ func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]Markdo
 		offset = 0
 	}
 	rows, err := s.db.Query(
-		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.editor_mode, m.uploaded_at
 		   FROM markdown_entries m
 		   JOIN users u ON u.id = m.user_id
 		  WHERE m.user_id = $1
@@ -3069,7 +3075,7 @@ func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]Markdo
 	entries := make([]MarkdownEntry, 0, limit+1)
 	for rows.Next() {
 		var entry MarkdownEntry
-		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.EditorMode, &entry.UploadedAt); err != nil {
 			return nil, false, err
 		}
 		entries = append(entries, entry)
@@ -3094,7 +3100,7 @@ func (s *Server) listPublicMarkdownEntries(limit, offset int) ([]PublicMarkdownE
 	}
 
 	rows, err := s.db.Query(
-		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.summary, m.cover_url, m.uploaded_at
+		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.summary, m.cover_url, m.editor_mode, m.uploaded_at
 		   FROM markdown_entries m
 		   JOIN users u ON u.id = m.user_id
 		  WHERE m.is_public = TRUE
@@ -3111,7 +3117,7 @@ func (s *Server) listPublicMarkdownEntries(limit, offset int) ([]PublicMarkdownE
 	entries := make([]PublicMarkdownEntry, 0, limit+1)
 	for rows.Next() {
 		var entry PublicMarkdownEntry
-		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.UploadedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.EditorMode, &entry.UploadedAt); err != nil {
 			return nil, false, err
 		}
 		entries = append(entries, entry)
@@ -3489,13 +3495,13 @@ func (s *Server) getMarkdownEntryForUser(viewerUserID string, id int64) (*Markdo
 	var entry MarkdownEntry
 	err := s.db.QueryRow(
 		`SELECT m.id, m.user_id, COALESCE(u.username, ''), COALESCE(u.icon_url, ''),
-		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.editor_mode, m.uploaded_at
 		   FROM markdown_entries m
 		   LEFT JOIN users u ON u.id = m.user_id
 		  WHERE m.id = $1 AND (m.user_id = $2 OR m.is_public = TRUE)`,
 		id,
 		viewerUserID,
-	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
+	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.EditorMode, &entry.UploadedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, false, nil
@@ -3509,13 +3515,13 @@ func (s *Server) getOwnedMarkdownEntry(userID string, id int64) (*MarkdownEntry,
 	var entry MarkdownEntry
 	err := s.db.QueryRow(
 		`SELECT m.id, m.user_id, COALESCE(u.username, ''), COALESCE(u.icon_url, ''),
-		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.editor_mode, m.uploaded_at
 		   FROM markdown_entries m
 		   LEFT JOIN users u ON u.id = m.user_id
 		  WHERE m.user_id = $1 AND m.id = $2`,
 		userID,
 		id,
-	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
+	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.EditorMode, &entry.UploadedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -3525,16 +3531,17 @@ func (s *Server) getOwnedMarkdownEntry(userID string, id int64) (*MarkdownEntry,
 	return &entry, nil
 }
 
-func (s *Server) updateMarkdownEntry(userID string, id int64, title, filePath, summary, coverURL string, isPublic bool) error {
+func (s *Server) updateMarkdownEntry(userID string, id int64, title, filePath, summary, coverURL, editorMode string, isPublic bool) error {
 	_, err := s.db.Exec(
 		`UPDATE markdown_entries
-		    SET title = $1, file_path = $2, is_public = $3, summary = $4, cover_url = $5
-		  WHERE user_id = $6 AND id = $7`,
+		    SET title = $1, file_path = $2, is_public = $3, summary = $4, cover_url = $5, editor_mode = $6
+		  WHERE user_id = $7 AND id = $8`,
 		title,
 		filePath,
 		isPublic,
 		summary,
 		coverURL,
+		editorMode,
 		userID,
 		id,
 	)
