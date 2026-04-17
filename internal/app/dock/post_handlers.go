@@ -498,6 +498,50 @@ func (s *Server) cleanupPostUpload(postID int64, files []string) {
 	}
 }
 
+func (s *Server) handlePostBookmark(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	postID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || postID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的帖子"})
+		return
+	}
+
+	if err := s.bookmarkPost(postID, userIDStr, time.Now()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已收藏", "bookmarked_by_me": true})
+}
+
+func (s *Server) handlePostUnbookmark(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	postID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || postID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的帖子"})
+		return
+	}
+
+	if err := s.unbookmarkPost(postID, userIDStr); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已取消收藏", "bookmarked_by_me": false})
+}
+
 func isUploadType(file *multipart.FileHeader, typePrefix string) bool {
 	if file == nil {
 		return false

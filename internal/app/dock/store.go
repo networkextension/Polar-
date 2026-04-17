@@ -335,6 +335,16 @@ type PostReply struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type MarkdownReply struct {
+	ID         int64     `json:"id"`
+	MarkdownID int64     `json:"markdown_id"`
+	UserID     string    `json:"user_id"`
+	Username   string    `json:"username"`
+	UserIcon   string    `json:"user_icon"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 type ChatThread struct {
 	ID            int64      `json:"id"`
 	UserLow       string     `json:"user_low"`
@@ -851,6 +861,35 @@ CREATE TABLE IF NOT EXISTS post_replies (
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	content TEXT NOT NULL,
 	created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS post_bookmarks (
+	post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS markdown_likes (
+	markdown_id BIGINT NOT NULL REFERENCES markdown_entries(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (markdown_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS markdown_replies (
+	id BIGSERIAL PRIMARY KEY,
+	markdown_id BIGINT NOT NULL REFERENCES markdown_entries(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	content TEXT NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS markdown_bookmarks (
+	markdown_id BIGINT NOT NULL REFERENCES markdown_entries(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (markdown_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS chat_threads (
@@ -3562,6 +3601,136 @@ func (s *Server) listReplies(postID int64, limit, offset int) ([]PostReply, bool
 	}
 
 	return replies, hasMore, nil
+}
+
+func (s *Server) likeMarkdown(markdownID int64, userID string, createdAt time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO markdown_likes (markdown_id, user_id, created_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (markdown_id, user_id) DO NOTHING`,
+		markdownID,
+		userID,
+		createdAt,
+	)
+	return err
+}
+
+func (s *Server) unlikeMarkdown(markdownID int64, userID string) error {
+	_, err := s.db.Exec(`DELETE FROM markdown_likes WHERE markdown_id = $1 AND user_id = $2`, markdownID, userID)
+	return err
+}
+
+func (s *Server) markdownLikeState(markdownID int64, userID string) (likeCount int, likedByMe bool, err error) {
+	err = s.db.QueryRow(
+		`SELECT
+		    (SELECT COUNT(*) FROM markdown_likes WHERE markdown_id = $1),
+		    EXISTS (SELECT 1 FROM markdown_likes WHERE markdown_id = $1 AND user_id = $2)`,
+		markdownID, userID,
+	).Scan(&likeCount, &likedByMe)
+	return
+}
+
+func (s *Server) createMarkdownReply(markdownID int64, userID, content string, createdAt time.Time) (int64, error) {
+	var id int64
+	err := s.db.QueryRow(
+		`INSERT INTO markdown_replies (markdown_id, user_id, content, created_at)
+		 VALUES ($1, $2, $3, $4)
+		 RETURNING id`,
+		markdownID,
+		userID,
+		content,
+		createdAt,
+	).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (s *Server) listMarkdownReplies(markdownID int64, limit, offset int) ([]MarkdownReply, bool, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.db.Query(
+		`SELECT r.id, r.markdown_id, r.user_id, u.username, u.icon_url, r.content, r.created_at
+		   FROM markdown_replies r
+		   JOIN users u ON u.id = r.user_id
+		  WHERE r.markdown_id = $1
+		  ORDER BY r.created_at ASC
+		  LIMIT $2 OFFSET $3`,
+		markdownID,
+		limit+1,
+		offset,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	replies := make([]MarkdownReply, 0, limit+1)
+	for rows.Next() {
+		var reply MarkdownReply
+		if err := rows.Scan(
+			&reply.ID,
+			&reply.MarkdownID,
+			&reply.UserID,
+			&reply.Username,
+			&reply.UserIcon,
+			&reply.Content,
+			&reply.CreatedAt,
+		); err != nil {
+			return nil, false, err
+		}
+		replies = append(replies, reply)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	hasMore := false
+	if len(replies) > limit {
+		hasMore = true
+		replies = replies[:limit]
+	}
+
+	return replies, hasMore, nil
+}
+
+func (s *Server) bookmarkMarkdown(markdownID int64, userID string, createdAt time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO markdown_bookmarks (markdown_id, user_id, created_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (markdown_id, user_id) DO NOTHING`,
+		markdownID,
+		userID,
+		createdAt,
+	)
+	return err
+}
+
+func (s *Server) unbookmarkMarkdown(markdownID int64, userID string) error {
+	_, err := s.db.Exec(`DELETE FROM markdown_bookmarks WHERE markdown_id = $1 AND user_id = $2`, markdownID, userID)
+	return err
+}
+
+func (s *Server) bookmarkPost(postID int64, userID string, createdAt time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO post_bookmarks (post_id, user_id, created_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (post_id, user_id) DO NOTHING`,
+		postID,
+		userID,
+		createdAt,
+	)
+	return err
+}
+
+func (s *Server) unbookmarkPost(postID int64, userID string) error {
+	_, err := s.db.Exec(`DELETE FROM post_bookmarks WHERE post_id = $1 AND user_id = $2`, postID, userID)
+	return err
 }
 
 func (s *Server) createTaskPost(postID int64, location string, startAt, endAt time.Time, workingHours string, applyDeadline time.Time) error {
