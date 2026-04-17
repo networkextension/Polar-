@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -26,7 +27,8 @@ func (s *Server) saveMarkdownDocument(userID, title, content string, isPublic bo
 		return nil, "", err
 	}
 
-	entryID, err := s.createMarkdownEntryReturningID(userID, title, path, isPublic, now)
+	summary, coverURL := extractMarkdownMeta(content)
+	entryID, err := s.createMarkdownEntryReturningID(userID, title, path, summary, coverURL, isPublic, now)
 	if err != nil {
 		_ = os.Remove(path)
 		return nil, "", err
@@ -36,10 +38,44 @@ func (s *Server) saveMarkdownDocument(userID, title, content string, isPublic bo
 		ID:         entryID,
 		UserID:     userID,
 		Title:      title,
+		Summary:    summary,
+		CoverURL:   coverURL,
 		FilePath:   path,
 		IsPublic:   isPublic,
 		UploadedAt: now,
 	}, content, nil
+}
+
+var (
+	mdImageRegex  = regexp.MustCompile(`!\[[^\]]*\]\(([^)\s]+)`)
+	mdHTMLImgRegex = regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
+)
+
+// extractMarkdownMeta derives a plain-text summary and the first image URL
+// from markdown content. Safe to call on any content; returns empty strings
+// if nothing matches.
+func extractMarkdownMeta(content string) (summary, coverURL string) {
+	if match := mdImageRegex.FindStringSubmatch(content); len(match) > 1 {
+		coverURL = strings.TrimSpace(match[1])
+	} else if match := mdHTMLImgRegex.FindStringSubmatch(content); len(match) > 1 {
+		coverURL = strings.TrimSpace(match[1])
+	}
+	summary = buildMarkdownPreview(stripFirstHeading(content), 200)
+	if summary == "AI 文档回复" {
+		summary = ""
+	}
+	return summary, coverURL
+}
+
+func stripFirstHeading(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, "#") {
+		return trimmed
+	}
+	if idx := strings.Index(trimmed, "\n"); idx >= 0 {
+		return strings.TrimSpace(trimmed[idx+1:])
+	}
+	return ""
 }
 
 func buildSystemMarkdownTitle(content string, now time.Time) string {

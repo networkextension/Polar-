@@ -2,9 +2,11 @@ import { request, requestJson } from "./http.js";
 import type {
   BotListResponse,
   BotPayload,
+  MarkdownAssistResponse,
   EntryDetailResponse,
   EntryListResponse,
   ErrorResponse,
+  InviteCodeResponse,
   IconUploadResponse,
   LLMConfigListResponse,
   LLMConfigPayload,
@@ -127,10 +129,34 @@ export async function removeBotUser(id: number) {
   });
 }
 
+export async function assistMarkdownWithBot(payload: {
+  bot_id: number;
+  llm_config_id?: number;
+  title?: string;
+  content: string;
+  instruction?: string;
+}) {
+  return requestJson<MarkdownAssistResponse>("/api/markdown/assist-with-bot", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function updateSiteSettings(payload: SiteSettings) {
   return requestJson<SiteSettingsResponse>("/api/site-settings", {
     method: "PUT",
     body: payload,
+  });
+}
+
+export async function fetchInviteCodes(limit = 30) {
+  return requestJson<InviteCodeResponse>(`/api/site-settings/invite-codes?limit=${limit}`);
+}
+
+export async function generateInviteCodes(count = 1) {
+  return requestJson<InviteCodeResponse>("/api/site-settings/invite-codes", {
+    method: "POST",
+    body: { count },
   });
 }
 

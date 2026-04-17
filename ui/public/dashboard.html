@@ -443,11 +443,32 @@
                     <label class="form-label" for="siteDescriptionInput" data-i18n="dashboard.siteDescriptionLabel">Site description</label>
                     <textarea id="siteDescriptionInput" class="input textarea" rows="4" maxlength="300" data-i18n-placeholder="dashboard.siteDescriptionPlaceholder" placeholder="One-line description of your site"></textarea>
 
+                    <label class="form-label" for="siteRegistrationInviteRequired" data-i18n="dashboard.registrationInviteRequiredLabel">Registration requires invite code</label>
+                    <label class="switch-row" for="siteRegistrationInviteRequired">
+                      <input id="siteRegistrationInviteRequired" type="checkbox" />
+                      <span data-i18n="dashboard.registrationInviteRequiredHint">When enabled, new users must provide a valid invite code to register.</span>
+                    </label>
+
                     <div class="site-settings-actions">
                       <button id="saveSiteBtn" class="btn-secondary" type="button" data-i18n="dashboard.saveSite">Save site info</button>
                     </div>
                     <div id="siteStatus" class="status-text"></div>
                   </div>
+                </div>
+
+                <div class="site-tags-section">
+                  <div class="site-tags-header">
+                    <div>
+                      <div class="badge" data-i18n="dashboard.inviteCodeBadge">Invite Codes</div>
+                      <p class="drawer-help" data-i18n="dashboard.inviteCodeHelp">Generate one-time invite codes for new user registration.</p>
+                    </div>
+                  </div>
+                  <div class="site-settings-actions">
+                    <input id="inviteCodeCountInput" class="input" type="number" min="1" max="50" value="5" style="max-width: 120px;" />
+                    <button id="generateInviteCodeBtn" class="btn-inline btn-secondary" type="button" data-i18n="dashboard.generateInviteCode">Generate</button>
+                  </div>
+                  <div id="inviteCodeStatus" class="status-text"></div>
+                  <ul id="inviteCodeList" class="tag-list"></ul>
                 </div>
 
                 <div class="site-tags-section">

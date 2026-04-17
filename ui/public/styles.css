@@ -447,6 +447,20 @@ button:hover {
   margin: 0;
 }
 
+.switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.switch-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .site-tags-header {
   display: flex;
   justify-content: space-between;

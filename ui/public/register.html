@@ -29,6 +29,11 @@
           <input id="email" name="email" type="email" required placeholder="you@example.com" />
           <label for="password" data-i18n="register.password">Password</label>
           <input id="password" name="password" type="password" required minlength="6" data-i18n-placeholder="register.passwordPlaceholder" placeholder="At least 6 characters" />
+          <div id="inviteCodeWrap" hidden>
+            <label for="invitation_code" data-i18n="register.inviteCode">Invite code</label>
+            <input id="invitation_code" name="invitation_code" type="text" maxlength="24" data-i18n-placeholder="register.inviteCodePlaceholder" placeholder="Enter invite code" />
+            <p class="drawer-help" data-i18n="register.inviteCodeHelp">Registration on this site currently requires a valid invite code.</p>
+          </div>
           <button type="submit" data-i18n="register.submit">Register</button>
         </form>
         <a class="link" href="/login.html" data-i18n="register.hasAccount">Already have an account? Log in</a>

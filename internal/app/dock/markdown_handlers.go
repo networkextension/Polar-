@@ -348,7 +348,8 @@ func (s *Server) handleMarkdownUpdate(c *gin.Context) {
 		return
 	}
 
-	if err := s.updateMarkdownEntry(userIDStr, entryID, req.Title, entry.FilePath, req.IsPublic); err != nil {
+	summary, coverURL := extractMarkdownMeta(content)
+	if err := s.updateMarkdownEntry(userIDStr, entryID, req.Title, entry.FilePath, summary, coverURL, req.IsPublic); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
@@ -428,4 +429,183 @@ func (s *Server) handlePublicMarkdownRead(c *gin.Context) {
 		"content":  string(content),
 		"can_edit": false,
 	})
+}
+
+func (s *Server) handleMarkdownLike(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	markdownID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || markdownID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	if err := s.likeMarkdown(markdownID, userIDStr, time.Now()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	likeCount, likedByMe, _ := s.markdownLikeState(markdownID, userIDStr)
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "已点赞",
+		"like_count":   likeCount,
+		"liked_by_me":  likedByMe,
+	})
+}
+
+func (s *Server) handleMarkdownUnlike(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	markdownID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || markdownID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	if err := s.unlikeMarkdown(markdownID, userIDStr); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	likeCount, likedByMe, _ := s.markdownLikeState(markdownID, userIDStr)
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "已取消点赞",
+		"like_count":   likeCount,
+		"liked_by_me":  likedByMe,
+	})
+}
+
+func (s *Server) handleMarkdownReplyCreate(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	markdownID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || markdownID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "评论不能为空"})
+		return
+	}
+
+	replyID, err := s.createMarkdownReply(markdownID, userIDStr, content, time.Now())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "评论成功",
+		"id":      replyID,
+	})
+}
+
+func (s *Server) handleMarkdownReplyList(c *gin.Context) {
+	markdownID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || markdownID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	limit := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		parsed, err := strconv.Atoi(limitStr)
+		if err != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+			return
+		}
+		limit = parsed
+	}
+
+	offset := 0
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		parsed, err := strconv.Atoi(offsetStr)
+		if err != nil || parsed < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+			return
+		}
+		offset = parsed
+	}
+
+	replies, hasMore, err := s.listMarkdownReplies(markdownID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	nextOffset := offset + len(replies)
+	c.JSON(http.StatusOK, gin.H{
+		"replies":     replies,
+		"has_more":    hasMore,
+		"next_offset": nextOffset,
+	})
+}
+
+func (s *Server) handleMarkdownBookmark(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	markdownID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || markdownID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	if err := s.bookmarkMarkdown(markdownID, userIDStr, time.Now()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已收藏", "bookmarked_by_me": true})
+}
+
+func (s *Server) handleMarkdownUnbookmark(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	markdownID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || markdownID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+
+	if err := s.unbookmarkMarkdown(markdownID, userIDStr); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "已取消收藏", "bookmarked_by_me": false})
 }

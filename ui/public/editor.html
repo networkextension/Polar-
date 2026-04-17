@@ -78,6 +78,23 @@
               </label>
               <div id="publicHint" class="status-text" data-i18n="editor.publicByDefault">Visible only to you by default.</div>
             </div>
+            <div class="editor-options">
+              <div class="badge">Bot 润色助手</div>
+              <div class="toolbar" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <select id="assistBotSelect" class="input"></select>
+                <select id="assistLLMSelect" class="input"></select>
+              </div>
+              <textarea id="assistInstructionInput" class="input textarea" rows="3" placeholder="可选：写本次润色要求，例如“更专业、更简洁、保留原观点”"></textarea>
+              <div class="toolbar" style="display:flex; gap:8px;">
+                <button id="assistRunBtn" class="btn-inline btn-secondary" type="button">润色正文</button>
+                <button id="assistApplyBtn" class="btn-inline btn-secondary" type="button" disabled>应用到正文</button>
+                <button id="assistDiffBtn" class="btn-inline btn-secondary" type="button" disabled>查看差异</button>
+              </div>
+              <div id="assistStatus" class="status-text"></div>
+              <div class="badge">润色结果预览</div>
+              <div id="assistPreview" class="content-box">暂无润色结果</div>
+              <div id="assistDiff" class="content-box" hidden>暂无差异结果</div>
+            </div>
             <div class="grid">
               <div>
                 <textarea id="contentInput" data-i18n-placeholder="editor.contentPlaceholder" placeholder="Enter Markdown content here..."></textarea>
