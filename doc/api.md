@@ -33,9 +33,13 @@
 {
   "username": "johndoe",
   "email": "john@example.com",
-  "password": "password123"
+  "password": "password123",
+  "invitation_code": "IM8F2A1C9D4B"
 }
 ```
+
+说明：
+- 当站点设置 `registration_requires_invite=true` 时，`invitation_code` 必填。
 
 成功响应：
 ```json
@@ -781,10 +785,122 @@
     "can_recommend": true,
     "i_blocked_user": false,
     "blocked_me": false,
+    "is_following": false,
+    "followed_me": false,
+    "follower_count": 0,
+    "following_count": 0,
     "recommendations": []
   }
 }
 ```
+
+## 用户搜索与关注
+
+### 搜索用户
+
+**GET** `/api/users?q=alice&limit=20&offset=0`
+
+权限要求：已登录用户
+
+说明：
+
+- `q`（可选）：按用户名、邮箱或用户 ID 模糊匹配；为空时按默认排序返回。
+- 仅返回普通用户；排除系统用户、当前用户自己、`admin` 角色、以及 Bot 关联用户。
+- `is_following` 表示当前登录用户是否已关注该用户。
+- 用于新建私聊、关注推荐等 UI。
+
+成功响应 `200`：
+```json
+{
+  "users": [
+    {
+      "id": "u_018",
+      "username": "Alice",
+      "user_icon": "/uploads/avatar_u_018.png",
+      "bio": "hi",
+      "is_following": true
+    }
+  ],
+  "total": 1,
+  "has_more": false,
+  "next_offset": 0
+}
+```
+
+### 关注用户
+
+**POST** `/api/users/:id/follow`
+
+权限要求：已登录用户
+
+说明：
+
+- 不能关注自己；重复关注幂等。
+- 若双方存在拉黑关系会返回 `403`。
+
+成功响应 `200`：
+```json
+{
+  "message": "已关注",
+  "profile": { "user_id": "u_018", "is_following": true, "follower_count": 4, "following_count": 12 }
+}
+```
+
+### 取消关注
+
+**DELETE** `/api/users/:id/follow`
+
+权限要求：已登录用户
+
+成功响应 `200`：
+```json
+{
+  "message": "已取消关注",
+  "profile": { "user_id": "u_018", "is_following": false }
+}
+```
+
+### 获取指定用户的粉丝列表
+
+**GET** `/api/users/:id/followers?limit=20&offset=0`
+
+权限要求：已登录用户
+
+说明：返回关注 `:id` 的用户列表；`is_following` 字段反映当前登录用户是否也在关注该条目对应的用户。
+
+成功响应 `200`：
+```json
+{
+  "users": [
+    {
+      "id": "u_021",
+      "username": "Carol",
+      "user_icon": "/uploads/avatar_u_021.png",
+      "bio": "",
+      "is_following": false
+    }
+  ],
+  "total": 1,
+  "has_more": false,
+  "next_offset": 0
+}
+```
+
+### 获取指定用户的关注列表
+
+**GET** `/api/users/:id/following?limit=20&offset=0`
+
+权限要求：已登录用户
+
+说明：返回 `:id` 正在关注的用户列表，响应结构与粉丝列表一致。
+
+### 获取自己的关注列表
+
+**GET** `/api/users/me/following?limit=20&offset=0`
+
+权限要求：已登录用户
+
+说明：等价于 `GET /api/users/<me>/following`，但免去客户端拼接自己 ID。
 
 ## 站点设置
 
@@ -801,6 +917,7 @@
     "name": "Polar-",
     "description": "AI-assisted product prototyping workspace",
     "icon_url": "/uploads/site_icon_20260322.png",
+    "registration_requires_invite": false,
     "updated_at": "2026-03-22T08:00:00Z"
   }
 }
@@ -816,7 +933,8 @@
 ```json
 {
   "name": "Polar-",
-  "description": "AI-assisted product prototyping workspace"
+  "description": "AI-assisted product prototyping workspace",
+  "registration_requires_invite": true
 }
 ```
 
@@ -828,8 +946,65 @@
     "name": "Polar-",
     "description": "AI-assisted product prototyping workspace",
     "icon_url": "/uploads/site_icon_20260322.png",
+    "registration_requires_invite": true,
     "updated_at": "2026-03-22T08:00:00Z"
   }
+}
+```
+
+### 获取邀请码列表（仅管理员）
+
+**GET** `/api/site-settings/invite-codes?limit=30`
+
+权限要求：管理员
+
+成功响应：
+```json
+{
+  "codes": [
+    {
+      "code": "IM8F2A1C9D4B",
+      "created_by": "u_admin_001",
+      "created_at": "2026-04-17T09:00:00Z",
+      "used_by": "",
+      "used_at": null,
+      "disabled": false
+    }
+  ]
+}
+```
+
+### 生成邀请码（仅管理员）
+
+**POST** `/api/site-settings/invite-codes`
+
+权限要求：管理员
+
+请求体：
+```json
+{
+  "count": 5
+}
+```
+
+说明：
+- `count` 可选，默认 `1`，最大 `50`
+- 生成的一次性邀请码可用于注册接口的 `invitation_code`
+
+成功响应：
+```json
+{
+  "message": "邀请码已生成",
+  "codes": [
+    {
+      "code": "IM8F2A1C9D4B",
+      "created_by": "u_admin_001",
+      "created_at": "2026-04-17T09:00:00Z",
+      "used_by": "",
+      "used_at": null,
+      "disabled": false
+    }
+  ]
 }
 ```
 
@@ -1558,9 +1733,16 @@ curl -X POST http://localhost:3000/api/posts \
 
 ### 获取帖子列表
 
-**GET** `/api/posts?limit=10&offset=0`
+**GET** `/api/posts?limit=10&offset=0&scope=all&post_type=all&tag_id=`
 
 权限要求：已登录用户
+
+查询参数：
+- `limit`（可选）：每页数量，默认 20
+- `offset`（可选）：偏移量
+- `tag_id`（可选）：按标签过滤
+- `post_type`（可选）：`all`（默认）/ `standard` / `task`
+- `scope`（可选）：`all`（默认）或 `following`。`following` 仅返回当前用户自己以及已关注用户发布的帖子。
 
 成功响应：
 ```json
@@ -1748,6 +1930,98 @@ curl -X POST http://localhost:3000/api/posts \
 {
   "message": "已取消收藏",
   "bookmarked_by_me": false
+}
+```
+
+### 获取我收藏的帖子列表
+
+**GET** `/api/users/me/bookmarks?limit=20&offset=0`
+
+权限要求：已登录用户
+
+成功响应：
+```json
+{
+  "posts": [
+    {
+      "id": 12,
+      "user_id": "u123",
+      "username": "johndoe",
+      "user_icon": "/uploads/avatar_u123.png",
+      "tag_id": 1,
+      "post_type": "standard",
+      "content": "...",
+      "created_at": "2026-03-19T12:00:00Z",
+      "like_count": 3,
+      "reply_count": 2,
+      "liked_by_me": true,
+      "images": [],
+      "videos": []
+    }
+  ],
+  "has_more": false,
+  "next_offset": 1
+}
+```
+
+说明：排序按收藏时间倒序。
+
+### Bot 辅助帖子写作
+
+**POST** `/api/posts/assist-with-bot`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "bot_id": 3,
+  "llm_config_id": 11,
+  "content": "我在想写点什么关于 Go 错误处理的短贴...",
+  "topic": "Go 错误处理最佳实践",
+  "instruction": "语气轻松，适合技术讨论"
+}
+```
+
+- `bot_id`（必填）：已绑定的 Bot ID
+- `llm_config_id`（可选）：覆盖 Bot 默认 LLM 配置
+- `content` 与 `topic` 至少二选一
+- `instruction`（可选）：本次润色指令
+
+成功响应：
+```json
+{
+  "message": "草稿已生成",
+  "content": "模型返回的帖子正文...",
+  "bot": { "id": 3, "name": "代码高手" },
+  "llm": { "config_id": 11, "model": "gpt-4o-mini" }
+}
+```
+
+### Bot 辅助回复草稿
+
+**POST** `/api/posts/:id/replies/assist-with-bot`
+
+权限要求：已登录用户
+
+请求体：
+```json
+{
+  "bot_id": 3,
+  "llm_config_id": 11,
+  "content": "我想从测试角度切入...",
+  "instruction": "不要超过两句话"
+}
+```
+
+成功响应：
+```json
+{
+  "message": "评论草稿已生成",
+  "content": "模型返回的评论正文...",
+  "post_id": 12,
+  "bot": { "id": 3, "name": "代码高手" },
+  "llm": { "config_id": 11, "model": "gpt-4o-mini" }
 }
 ```
 
@@ -3169,7 +3443,11 @@ Content-Disposition: attachment; filename="default-rules.conf"
     {
       "id": 1,
       "user_id": "xxxx",
+      "username": "johndoe",
+      "user_icon": "/uploads/avatar_xxxx.png",
       "title": "Demo Note",
+      "summary": "这是一段纯文本摘要，自动从正文抽取...",
+      "cover_url": "/uploads/cover.png",
       "file_path": "data/markdown/xxx.md",
       "is_public": true,
       "uploaded_at": "2026-03-18T00:00:00Z"
@@ -3179,6 +3457,13 @@ Content-Disposition: attachment; filename="default-rules.conf"
   "next_offset": 10
 }
 ```
+
+说明：
+
+- `summary`：保存/更新时自动从正文抽取的纯文本摘要，最多 ~200 字，正文为空时为 `""`。
+- `cover_url`：保存/更新时自动从正文中抽取的首张图片链接（支持 `![](...)` 与 `<img src="...">` 两种形式），无图时为 `""`。
+- `username` / `user_icon`：作者信息，用于列表直接展示，客户端无需再次调 `/api/users/:id/profile`。
+- 列表按上传时间倒序。
 
 ## 读取 Markdown 记录
 
@@ -3193,7 +3478,11 @@ Content-Disposition: attachment; filename="default-rules.conf"
   "entry": {
     "id": 1,
     "user_id": "xxxx",
+    "username": "johndoe",
+    "user_icon": "/uploads/avatar_xxxx.png",
     "title": "Demo Note",
+    "summary": "...",
+    "cover_url": "/uploads/cover.png",
     "file_path": "data/markdown/xxx.md",
     "is_public": true,
     "uploaded_at": "2026-03-18T00:00:00Z"
@@ -3254,6 +3543,8 @@ Content-Disposition: attachment; filename="default-rules.conf"
       "username": "johndoe",
       "user_icon": "/uploads/icon_u123.png",
       "title": "Demo Note",
+      "summary": "这是一段纯文本摘要...",
+      "cover_url": "/uploads/cover.png",
       "uploaded_at": "2026-03-22T08:00:00Z"
     }
   ],

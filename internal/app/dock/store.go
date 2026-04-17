@@ -126,7 +126,11 @@ var builtinBotPresets = []builtinBotPreset{
 type MarkdownEntry struct {
 	ID         int64     `json:"id"`
 	UserID     string    `json:"user_id"`
+	Username   string    `json:"username"`
+	UserIcon   string    `json:"user_icon"`
 	Title      string    `json:"title"`
+	Summary    string    `json:"summary"`
+	CoverURL   string    `json:"cover_url"`
 	FilePath   string    `json:"file_path"`
 	IsPublic   bool      `json:"is_public"`
 	UploadedAt time.Time `json:"uploaded_at"`
@@ -138,6 +142,8 @@ type PublicMarkdownEntry struct {
 	Username   string    `json:"username"`
 	UserIcon   string    `json:"user_icon"`
 	Title      string    `json:"title"`
+	Summary    string    `json:"summary"`
+	CoverURL   string    `json:"cover_url"`
 	UploadedAt time.Time `json:"uploaded_at"`
 }
 
@@ -173,13 +179,23 @@ type Tag struct {
 }
 
 type SiteSettings struct {
-	Name              string                `json:"name"`
-	Description       string                `json:"description"`
-	IconURL           string                `json:"icon_url"`
-	ApplePushDevCert  *ApplePushCertificate `json:"apple_push_dev_cert,omitempty"`
-	ApplePushProdCert *ApplePushCertificate `json:"apple_push_prod_cert,omitempty"`
-	SystemInfo        *SystemInfo           `json:"system_info,omitempty"`
-	UpdatedAt         time.Time             `json:"updated_at"`
+	Name                       string                `json:"name"`
+	Description                string                `json:"description"`
+	IconURL                    string                `json:"icon_url"`
+	RegistrationRequiresInvite bool                  `json:"registration_requires_invite"`
+	ApplePushDevCert           *ApplePushCertificate `json:"apple_push_dev_cert,omitempty"`
+	ApplePushProdCert          *ApplePushCertificate `json:"apple_push_prod_cert,omitempty"`
+	SystemInfo                 *SystemInfo           `json:"system_info,omitempty"`
+	UpdatedAt                  time.Time             `json:"updated_at"`
+}
+
+type InviteCode struct {
+	Code      string     `json:"code"`
+	CreatedBy string     `json:"created_by,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UsedBy    string     `json:"used_by,omitempty"`
+	UsedAt    *time.Time `json:"used_at,omitempty"`
+	Disabled  bool       `json:"disabled"`
 }
 
 type SystemInfo struct {
@@ -487,7 +503,19 @@ type UserProfileDetail struct {
 	CanRecommend    bool                    `json:"can_recommend"`
 	IBlockedUser    bool                    `json:"i_blocked_user"`
 	BlockedMe       bool                    `json:"blocked_me"`
+	IsFollowing     bool                    `json:"is_following"`
+	FollowedMe      bool                    `json:"followed_me"`
+	FollowerCount   int                     `json:"follower_count"`
+	FollowingCount  int                     `json:"following_count"`
 	Recommendations []ProfileRecommendation `json:"recommendations"`
+}
+
+type UserSummary struct {
+	ID          string `json:"id"`
+	Username    string `json:"username"`
+	UserIcon    string `json:"user_icon"`
+	Bio         string `json:"bio"`
+	IsFollowing bool   `json:"is_following"`
 }
 
 func openDB(dsn string) (*sql.DB, error) {
@@ -559,17 +587,31 @@ CREATE TABLE IF NOT EXISTS user_blocks (
 	PRIMARY KEY (blocker_user_id, blocked_user_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_follows (
+	follower_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	followee_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TIMESTAMPTZ NOT NULL,
+	PRIMARY KEY (follower_user_id, followee_user_id),
+	CHECK (follower_user_id <> followee_user_id)
+);
+
 CREATE TABLE IF NOT EXISTS markdown_entries (
 	id BIGSERIAL PRIMARY KEY,
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	title TEXT NOT NULL,
 	file_path TEXT NOT NULL,
 	is_public BOOLEAN NOT NULL DEFAULT FALSE,
+	summary TEXT NOT NULL DEFAULT '',
+	cover_url TEXT NOT NULL DEFAULT '',
 	uploaded_at TIMESTAMPTZ NOT NULL
 );
 
 ALTER TABLE markdown_entries
 	ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE markdown_entries
+	ADD COLUMN IF NOT EXISTS summary TEXT NOT NULL DEFAULT '';
+ALTER TABLE markdown_entries
+	ADD COLUMN IF NOT EXISTS cover_url TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
 	credential_id TEXT PRIMARY KEY,
@@ -672,6 +714,7 @@ CREATE TABLE IF NOT EXISTS site_settings (
 	name TEXT NOT NULL DEFAULT 'Polar-',
 	description TEXT NOT NULL DEFAULT '',
 	icon_url TEXT NOT NULL DEFAULT '',
+	registration_requires_invite BOOLEAN NOT NULL DEFAULT FALSE,
 	apple_push_dev_cert_url TEXT NOT NULL DEFAULT '',
 	apple_push_dev_cert_name TEXT NOT NULL DEFAULT '',
 	apple_push_dev_cert_uploaded_at TIMESTAMPTZ,
@@ -681,6 +724,8 @@ CREATE TABLE IF NOT EXISTS site_settings (
 	updated_at TIMESTAMPTZ NOT NULL
 );
 
+ALTER TABLE site_settings
+	ADD COLUMN IF NOT EXISTS registration_requires_invite BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE site_settings
 	ADD COLUMN IF NOT EXISTS apple_push_dev_cert_url TEXT NOT NULL DEFAULT '';
 ALTER TABLE site_settings
@@ -696,12 +741,24 @@ ALTER TABLE site_settings
 
 INSERT INTO site_settings (
 	id, name, description, icon_url,
+	registration_requires_invite,
 	apple_push_dev_cert_url, apple_push_dev_cert_name, apple_push_dev_cert_uploaded_at,
 	apple_push_prod_cert_url, apple_push_prod_cert_name, apple_push_prod_cert_uploaded_at,
 	updated_at
 )
-VALUES (1, 'Polar-', '', '', '', '', NULL, '', '', NULL, NOW())
+VALUES (1, 'Polar-', '', '', FALSE, '', '', NULL, '', '', NULL, NOW())
 ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS invite_codes (
+	code TEXT PRIMARY KEY,
+	created_by TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL,
+	used_by TEXT NOT NULL DEFAULT '',
+	used_at TIMESTAMPTZ,
+	disabled BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_invite_codes_created_at ON invite_codes(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS llm_configs (
 	id BIGSERIAL PRIMARY KEY,
@@ -985,6 +1042,8 @@ CREATE INDEX IF NOT EXISTS idx_bot_users_owner_user_id ON bot_users(owner_user_i
 CREATE UNIQUE INDEX IF NOT EXISTS idx_profile_recommendations_target_author ON profile_recommendations(target_user_id, author_user_id);
 CREATE INDEX IF NOT EXISTS idx_profile_recommendations_target_updated_at ON profile_recommendations(target_user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_user_blocks_blocked_user_id ON user_blocks(blocked_user_id, blocker_user_id);
+CREATE INDEX IF NOT EXISTS idx_user_follows_followee ON user_follows(followee_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_follows_follower ON user_follows(follower_user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tags_sort_order_created_at ON tags(sort_order DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_post_images_post_id ON post_images(post_id);
@@ -2455,14 +2514,17 @@ func (s *Server) createMarkdownEntry(userID, title, filePath string, isPublic bo
 	return err
 }
 
-func (s *Server) createMarkdownEntryReturningID(userID, title, filePath string, isPublic bool, uploadedAt time.Time) (int64, error) {
+func (s *Server) createMarkdownEntryReturningID(userID, title, filePath, summary, coverURL string, isPublic bool, uploadedAt time.Time) (int64, error) {
 	var id int64
 	err := s.db.QueryRow(
-		`INSERT INTO markdown_entries (user_id, title, file_path, is_public, uploaded_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+		`INSERT INTO markdown_entries (user_id, title, file_path, is_public, summary, cover_url, uploaded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
 		userID,
 		title,
 		filePath,
 		isPublic,
+		summary,
+		coverURL,
 		uploadedAt,
 	).Scan(&id)
 	if err != nil {
@@ -2474,11 +2536,13 @@ func (s *Server) createMarkdownEntryReturningID(userID, title, filePath string, 
 func (s *Server) getMarkdownEntryByID(id int64) (*MarkdownEntry, error) {
 	var entry MarkdownEntry
 	err := s.db.QueryRow(
-		`SELECT id, user_id, title, file_path, is_public, uploaded_at
-		   FROM markdown_entries
-		  WHERE id = $1`,
+		`SELECT m.id, m.user_id, COALESCE(u.username, ''), COALESCE(u.icon_url, ''),
+		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		   FROM markdown_entries m
+		   LEFT JOIN users u ON u.id = m.user_id
+		  WHERE m.id = $1`,
 		id,
-	).Scan(&entry.ID, &entry.UserID, &entry.Title, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
+	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -2719,6 +2783,18 @@ func (s *Server) getUserProfileDetail(targetUserID, viewerUserID string) (*UserP
 	if err != nil {
 		return nil, err
 	}
+	isFollowing, followedMe, err := s.getUserFollowState(viewerUserID, targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	followerCount, err := s.countUserFollowers(targetUserID)
+	if err != nil {
+		return nil, err
+	}
+	followingCount, err := s.countUserFollowing(targetUserID)
+	if err != nil {
+		return nil, err
+	}
 	return &UserProfileDetail{
 		UserID:   user.ID,
 		Username: user.Username,
@@ -2735,8 +2811,236 @@ func (s *Server) getUserProfileDetail(targetUserID, viewerUserID string) (*UserP
 		CanRecommend:    targetUserID != viewerUserID,
 		IBlockedUser:    iBlockedUser,
 		BlockedMe:       blockedMe,
+		IsFollowing:     isFollowing,
+		FollowedMe:      followedMe,
+		FollowerCount:   followerCount,
+		FollowingCount:  followingCount,
 		Recommendations: recommendations,
 	}, nil
+}
+
+func (s *Server) createUserFollow(followerID, followeeID string, now time.Time) error {
+	if followerID == "" || followeeID == "" || followerID == followeeID {
+		return errors.New("invalid follow pair")
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO user_follows (follower_user_id, followee_user_id, created_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (follower_user_id, followee_user_id) DO NOTHING`,
+		followerID,
+		followeeID,
+		now,
+	)
+	return err
+}
+
+func (s *Server) deleteUserFollow(followerID, followeeID string) (bool, error) {
+	result, err := s.db.Exec(
+		`DELETE FROM user_follows
+		  WHERE follower_user_id = $1 AND followee_user_id = $2`,
+		followerID,
+		followeeID,
+	)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func (s *Server) getUserFollowState(viewerUserID, targetUserID string) (isFollowing, followedMe bool, err error) {
+	if strings.TrimSpace(viewerUserID) == "" || strings.TrimSpace(targetUserID) == "" || viewerUserID == targetUserID {
+		return false, false, nil
+	}
+	err = s.db.QueryRow(
+		`SELECT EXISTS(
+		     SELECT 1 FROM user_follows
+		      WHERE follower_user_id = $1 AND followee_user_id = $2
+		   ),
+		   EXISTS(
+		     SELECT 1 FROM user_follows
+		      WHERE follower_user_id = $2 AND followee_user_id = $1
+		   )`,
+		viewerUserID,
+		targetUserID,
+	).Scan(&isFollowing, &followedMe)
+	if err != nil {
+		return false, false, err
+	}
+	return isFollowing, followedMe, nil
+}
+
+func (s *Server) countUserFollowers(userID string) (int, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM user_follows WHERE followee_user_id = $1`,
+		userID,
+	).Scan(&count)
+	return count, err
+}
+
+func (s *Server) countUserFollowing(userID string) (int, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM user_follows WHERE follower_user_id = $1`,
+		userID,
+	).Scan(&count)
+	return count, err
+}
+
+// listUserFollowers returns the users following targetUserID.
+// viewerUserID is the caller; `is_following` reflects whether the viewer
+// follows each listed user.
+func (s *Server) listUserFollowers(targetUserID, viewerUserID string, limit, offset int) ([]UserSummary, int, error) {
+	return s.listFollowRelation(targetUserID, viewerUserID, limit, offset, true)
+}
+
+// listUserFollowing returns the users that targetUserID follows.
+func (s *Server) listUserFollowing(targetUserID, viewerUserID string, limit, offset int) ([]UserSummary, int, error) {
+	return s.listFollowRelation(targetUserID, viewerUserID, limit, offset, false)
+}
+
+func (s *Server) listFollowRelation(targetUserID, viewerUserID string, limit, offset int, followers bool) ([]UserSummary, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var (
+		totalQuery string
+		listQuery  string
+	)
+	if followers {
+		totalQuery = `SELECT COUNT(*) FROM user_follows WHERE followee_user_id = $1`
+		listQuery = `
+			SELECT u.id, u.username, u.icon_url, u.bio,
+			       EXISTS(
+			         SELECT 1 FROM user_follows vf
+			          WHERE vf.follower_user_id = $2 AND vf.followee_user_id = u.id
+			       ) AS is_following
+			  FROM user_follows f
+			  JOIN users u ON u.id = f.follower_user_id
+			 WHERE f.followee_user_id = $1
+			 ORDER BY f.created_at DESC
+			 LIMIT $3 OFFSET $4`
+	} else {
+		totalQuery = `SELECT COUNT(*) FROM user_follows WHERE follower_user_id = $1`
+		listQuery = `
+			SELECT u.id, u.username, u.icon_url, u.bio,
+			       EXISTS(
+			         SELECT 1 FROM user_follows vf
+			          WHERE vf.follower_user_id = $2 AND vf.followee_user_id = u.id
+			       ) AS is_following
+			  FROM user_follows f
+			  JOIN users u ON u.id = f.followee_user_id
+			 WHERE f.follower_user_id = $1
+			 ORDER BY f.created_at DESC
+			 LIMIT $3 OFFSET $4`
+	}
+
+	var total int
+	if err := s.db.QueryRow(totalQuery, targetUserID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.Query(listQuery, targetUserID, viewerUserID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]UserSummary, 0, limit)
+	for rows.Next() {
+		var item UserSummary
+		if err := rows.Scan(&item.ID, &item.Username, &item.UserIcon, &item.Bio, &item.IsFollowing); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+// searchUsers returns real users (non-admin, non-bot) matching q, with
+// is_following computed for the viewer. viewerUserID is excluded from results.
+func (s *Server) searchUsers(q, viewerUserID string, limit, offset int) ([]UserSummary, int, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	filter := "%"
+	if trimmed := strings.TrimSpace(q); trimmed != "" {
+		filter = "%" + trimmed + "%"
+	}
+
+	var total int
+	if err := s.db.QueryRow(
+		`SELECT COUNT(*)
+		   FROM users u
+		  WHERE u.id <> $1
+		    AND u.id <> $2
+		    AND u.role <> 'admin'
+		    AND NOT EXISTS (SELECT 1 FROM bot_users b WHERE b.bot_user_id = u.id)
+		    AND ($3 = '%' OR u.username ILIKE $3 OR u.email ILIKE $3 OR u.id ILIKE $3)`,
+		systemUserID,
+		viewerUserID,
+		filter,
+	).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := s.db.Query(
+		`SELECT u.id, u.username, u.icon_url, u.bio,
+		        EXISTS(
+		          SELECT 1 FROM user_follows vf
+		           WHERE vf.follower_user_id = $2 AND vf.followee_user_id = u.id
+		        ) AS is_following
+		   FROM users u
+		  WHERE u.id <> $1
+		    AND u.id <> $2
+		    AND u.role <> 'admin'
+		    AND NOT EXISTS (SELECT 1 FROM bot_users b WHERE b.bot_user_id = u.id)
+		    AND ($3 = '%' OR u.username ILIKE $3 OR u.email ILIKE $3 OR u.id ILIKE $3)
+		  ORDER BY u.username ASC, u.id ASC
+		  LIMIT $4 OFFSET $5`,
+		systemUserID,
+		viewerUserID,
+		filter,
+		limit,
+		offset,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]UserSummary, 0, limit)
+	for rows.Next() {
+		var item UserSummary
+		if err := rows.Scan(&item.ID, &item.Username, &item.UserIcon, &item.Bio, &item.IsFollowing); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]MarkdownEntry, bool, error) {
@@ -2747,11 +3051,12 @@ func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]Markdo
 		offset = 0
 	}
 	rows, err := s.db.Query(
-		`SELECT id, user_id, title, file_path, is_public, uploaded_at
-		FROM markdown_entries
-		WHERE user_id = $1
-		ORDER BY uploaded_at DESC
-		LIMIT $2 OFFSET $3`,
+		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		   FROM markdown_entries m
+		   JOIN users u ON u.id = m.user_id
+		  WHERE m.user_id = $1
+		  ORDER BY m.uploaded_at DESC
+		  LIMIT $2 OFFSET $3`,
 		userID,
 		limit+1,
 		offset,
@@ -2764,7 +3069,7 @@ func (s *Server) listMarkdownEntries(userID string, limit, offset int) ([]Markdo
 	entries := make([]MarkdownEntry, 0, limit+1)
 	for rows.Next() {
 		var entry MarkdownEntry
-		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Title, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt); err != nil {
 			return nil, false, err
 		}
 		entries = append(entries, entry)
@@ -2789,7 +3094,7 @@ func (s *Server) listPublicMarkdownEntries(limit, offset int) ([]PublicMarkdownE
 	}
 
 	rows, err := s.db.Query(
-		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.uploaded_at
+		`SELECT m.id, m.user_id, u.username, u.icon_url, m.title, m.summary, m.cover_url, m.uploaded_at
 		   FROM markdown_entries m
 		   JOIN users u ON u.id = m.user_id
 		  WHERE m.is_public = TRUE
@@ -2806,7 +3111,7 @@ func (s *Server) listPublicMarkdownEntries(limit, offset int) ([]PublicMarkdownE
 	entries := make([]PublicMarkdownEntry, 0, limit+1)
 	for rows.Next() {
 		var entry PublicMarkdownEntry
-		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.UploadedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.UploadedAt); err != nil {
 			return nil, false, err
 		}
 		entries = append(entries, entry)
@@ -2832,7 +3137,7 @@ func (s *Server) getSiteSettings() (*SiteSettings, error) {
 	var prodName sql.NullString
 	var prodUploadedAt sql.NullTime
 	err := s.db.QueryRow(
-		`SELECT name, description, icon_url,
+		`SELECT name, description, icon_url, registration_requires_invite,
 		        apple_push_dev_cert_url, apple_push_dev_cert_name, apple_push_dev_cert_uploaded_at,
 		        apple_push_prod_cert_url, apple_push_prod_cert_name, apple_push_prod_cert_uploaded_at,
 		        updated_at
@@ -2842,6 +3147,7 @@ func (s *Server) getSiteSettings() (*SiteSettings, error) {
 		&settings.Name,
 		&settings.Description,
 		&settings.IconURL,
+		&settings.RegistrationRequiresInvite,
 		&devURL,
 		&devName,
 		&devUploadedAt,
@@ -2853,10 +3159,11 @@ func (s *Server) getSiteSettings() (*SiteSettings, error) {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return &SiteSettings{
-				Name:        "Polar-",
-				Description: "",
-				IconURL:     "",
-				UpdatedAt:   time.Now(),
+				Name:                       "Polar-",
+				Description:                "",
+				IconURL:                    "",
+				RegistrationRequiresInvite: false,
+				UpdatedAt:                  time.Now(),
 			}, nil
 		}
 		return nil, err
@@ -2884,16 +3191,17 @@ func (s *Server) getSiteSettings() (*SiteSettings, error) {
 	return &settings, nil
 }
 
-func (s *Server) updateSiteSettings(name, description string) error {
+func (s *Server) updateSiteSettings(name, description string, registrationRequiresInvite bool) error {
 	_, err := s.db.Exec(
 		`INSERT INTO site_settings (
 		     id, name, description, icon_url,
+		     registration_requires_invite,
 		     apple_push_dev_cert_url, apple_push_dev_cert_name, apple_push_dev_cert_uploaded_at,
 		     apple_push_prod_cert_url, apple_push_prod_cert_name, apple_push_prod_cert_uploaded_at,
 		     updated_at
 		 )
 		 VALUES (
-		     1, $1, $2, COALESCE((SELECT icon_url FROM site_settings WHERE id = 1), ''),
+		     1, $1, $2, COALESCE((SELECT icon_url FROM site_settings WHERE id = 1), ''), $3,
 		     COALESCE((SELECT apple_push_dev_cert_url FROM site_settings WHERE id = 1), ''),
 		     COALESCE((SELECT apple_push_dev_cert_name FROM site_settings WHERE id = 1), ''),
 		     (SELECT apple_push_dev_cert_uploaded_at FROM site_settings WHERE id = 1),
@@ -2903,9 +3211,13 @@ func (s *Server) updateSiteSettings(name, description string) error {
 		     NOW()
 		 )
 		 ON CONFLICT (id)
-		 DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = NOW()`,
+		 DO UPDATE SET name = EXCLUDED.name,
+		               description = EXCLUDED.description,
+		               registration_requires_invite = EXCLUDED.registration_requires_invite,
+		               updated_at = NOW()`,
 		name,
 		description,
+		registrationRequiresInvite,
 	)
 	return err
 }
@@ -2914,6 +3226,7 @@ func (s *Server) updateSiteIcon(iconURL string) error {
 	_, err := s.db.Exec(
 		`INSERT INTO site_settings (
 		     id, name, description, icon_url,
+		     registration_requires_invite,
 		     apple_push_dev_cert_url, apple_push_dev_cert_name, apple_push_dev_cert_uploaded_at,
 		     apple_push_prod_cert_url, apple_push_prod_cert_name, apple_push_prod_cert_uploaded_at,
 		     updated_at
@@ -2921,6 +3234,7 @@ func (s *Server) updateSiteIcon(iconURL string) error {
 		 VALUES (1, COALESCE((SELECT name FROM site_settings WHERE id = 1), 'Polar-'),
 		             COALESCE((SELECT description FROM site_settings WHERE id = 1), ''),
 		             $1,
+		             COALESCE((SELECT registration_requires_invite FROM site_settings WHERE id = 1), FALSE),
 		             COALESCE((SELECT apple_push_dev_cert_url FROM site_settings WHERE id = 1), ''),
 		             COALESCE((SELECT apple_push_dev_cert_name FROM site_settings WHERE id = 1), ''),
 		             (SELECT apple_push_dev_cert_uploaded_at FROM site_settings WHERE id = 1),
@@ -2941,6 +3255,7 @@ func (s *Server) updateApplePushCertificate(environment, fileURL, fileName strin
 	case "dev":
 		query = `INSERT INTO site_settings (
 		           id, name, description, icon_url,
+		           registration_requires_invite,
 		           apple_push_dev_cert_url, apple_push_dev_cert_name, apple_push_dev_cert_uploaded_at,
 		           apple_push_prod_cert_url, apple_push_prod_cert_name, apple_push_prod_cert_uploaded_at,
 		           updated_at
@@ -2950,6 +3265,7 @@ func (s *Server) updateApplePushCertificate(environment, fileURL, fileName strin
 		           COALESCE((SELECT name FROM site_settings WHERE id = 1), 'Polar-'),
 		           COALESCE((SELECT description FROM site_settings WHERE id = 1), ''),
 		           COALESCE((SELECT icon_url FROM site_settings WHERE id = 1), ''),
+		           COALESCE((SELECT registration_requires_invite FROM site_settings WHERE id = 1), FALSE),
 		           $1, $2, $3,
 		           COALESCE((SELECT apple_push_prod_cert_url FROM site_settings WHERE id = 1), ''),
 		           COALESCE((SELECT apple_push_prod_cert_name FROM site_settings WHERE id = 1), ''),
@@ -2964,6 +3280,7 @@ func (s *Server) updateApplePushCertificate(environment, fileURL, fileName strin
 	case "prod":
 		query = `INSERT INTO site_settings (
 		           id, name, description, icon_url,
+		           registration_requires_invite,
 		           apple_push_dev_cert_url, apple_push_dev_cert_name, apple_push_dev_cert_uploaded_at,
 		           apple_push_prod_cert_url, apple_push_prod_cert_name, apple_push_prod_cert_uploaded_at,
 		           updated_at
@@ -2973,6 +3290,7 @@ func (s *Server) updateApplePushCertificate(environment, fileURL, fileName strin
 		           COALESCE((SELECT name FROM site_settings WHERE id = 1), 'Polar-'),
 		           COALESCE((SELECT description FROM site_settings WHERE id = 1), ''),
 		           COALESCE((SELECT icon_url FROM site_settings WHERE id = 1), ''),
+		           COALESCE((SELECT registration_requires_invite FROM site_settings WHERE id = 1), FALSE),
 		           COALESCE((SELECT apple_push_dev_cert_url FROM site_settings WHERE id = 1), ''),
 		           COALESCE((SELECT apple_push_dev_cert_name FROM site_settings WHERE id = 1), ''),
 		           (SELECT apple_push_dev_cert_uploaded_at FROM site_settings WHERE id = 1),
@@ -3016,15 +3334,168 @@ func (s *Server) clearApplePushCertificate(environment string) error {
 	return err
 }
 
+func normalizeInviteCode(value string) string {
+	code := strings.ToUpper(strings.TrimSpace(value))
+	code = strings.ReplaceAll(code, "-", "")
+	code = strings.ReplaceAll(code, " ", "")
+	return code
+}
+
+func generateInviteCode() string {
+	raw := strings.ToUpper(generateResourceID())
+	if len(raw) < 10 {
+		return "IM" + raw
+	}
+	return "IM" + raw[:10]
+}
+
+func (s *Server) createInviteCodes(createdBy string, count int, now time.Time) ([]InviteCode, error) {
+	if count <= 0 {
+		count = 1
+	}
+	if count > 50 {
+		count = 50
+	}
+
+	codes := make([]InviteCode, 0, count)
+	attempts := 0
+	maxAttempts := count * 10
+	for len(codes) < count && attempts < maxAttempts {
+		attempts += 1
+		code := generateInviteCode()
+		res, err := s.db.Exec(
+			`INSERT INTO invite_codes (code, created_by, created_at, used_by, used_at, disabled)
+			 VALUES ($1, $2, $3, '', NULL, FALSE)
+			 ON CONFLICT (code) DO NOTHING`,
+			code,
+			strings.TrimSpace(createdBy),
+			now,
+		)
+		if err != nil {
+			return nil, err
+		}
+		rows, _ := res.RowsAffected()
+		if rows == 0 {
+			continue
+		}
+		codes = append(codes, InviteCode{
+			Code:      code,
+			CreatedBy: strings.TrimSpace(createdBy),
+			CreatedAt: now,
+			Disabled:  false,
+		})
+	}
+	if len(codes) != count {
+		return nil, errors.New("failed to generate enough unique invite codes")
+	}
+	return codes, nil
+}
+
+func (s *Server) listInviteCodes(limit int) ([]InviteCode, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	rows, err := s.db.Query(
+		`SELECT code, created_by, created_at, used_by, used_at, disabled
+		 FROM invite_codes
+		 ORDER BY created_at DESC
+		 LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]InviteCode, 0, limit)
+	for rows.Next() {
+		var item InviteCode
+		var usedAt sql.NullTime
+		if err := rows.Scan(&item.Code, &item.CreatedBy, &item.CreatedAt, &item.UsedBy, &usedAt, &item.Disabled); err != nil {
+			return nil, err
+		}
+		if usedAt.Valid {
+			item.UsedAt = &usedAt.Time
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s *Server) consumeInviteCode(code, usedBy string, usedAt time.Time) (bool, error) {
+	normalized := normalizeInviteCode(code)
+	if normalized == "" {
+		return false, nil
+	}
+	res, err := s.db.Exec(
+		`UPDATE invite_codes
+		    SET used_by = $2, used_at = $3
+		  WHERE code = $1
+		    AND disabled = FALSE
+		    AND used_at IS NULL`,
+		normalized,
+		strings.TrimSpace(usedBy),
+		usedAt,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+func (s *Server) releaseInviteCode(code, usedBy string) error {
+	normalized := normalizeInviteCode(code)
+	if normalized == "" {
+		return nil
+	}
+	_, err := s.db.Exec(
+		`UPDATE invite_codes
+		    SET used_by = '', used_at = NULL
+		  WHERE code = $1 AND used_by = $2`,
+		normalized,
+		strings.TrimSpace(usedBy),
+	)
+	return err
+}
+
+func (s *Server) bindInviteCodeToUser(code, pendingMarker, userID string) error {
+	normalized := normalizeInviteCode(code)
+	if normalized == "" {
+		return nil
+	}
+	_, err := s.db.Exec(
+		`UPDATE invite_codes
+		    SET used_by = $3
+		  WHERE code = $1 AND used_by = $2`,
+		normalized,
+		strings.TrimSpace(pendingMarker),
+		strings.TrimSpace(userID),
+	)
+	return err
+}
+
 func (s *Server) getMarkdownEntryForUser(viewerUserID string, id int64) (*MarkdownEntry, bool, error) {
 	var entry MarkdownEntry
 	err := s.db.QueryRow(
-		`SELECT id, user_id, title, file_path, is_public, uploaded_at
-		FROM markdown_entries
-		WHERE id = $1 AND (user_id = $2 OR is_public = TRUE)`,
+		`SELECT m.id, m.user_id, COALESCE(u.username, ''), COALESCE(u.icon_url, ''),
+		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		   FROM markdown_entries m
+		   LEFT JOIN users u ON u.id = m.user_id
+		  WHERE m.id = $1 AND (m.user_id = $2 OR m.is_public = TRUE)`,
 		id,
 		viewerUserID,
-	).Scan(&entry.ID, &entry.UserID, &entry.Title, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
+	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, false, nil
@@ -3037,12 +3508,14 @@ func (s *Server) getMarkdownEntryForUser(viewerUserID string, id int64) (*Markdo
 func (s *Server) getOwnedMarkdownEntry(userID string, id int64) (*MarkdownEntry, error) {
 	var entry MarkdownEntry
 	err := s.db.QueryRow(
-		`SELECT id, user_id, title, file_path, is_public, uploaded_at
-		FROM markdown_entries
-		WHERE user_id = $1 AND id = $2`,
+		`SELECT m.id, m.user_id, COALESCE(u.username, ''), COALESCE(u.icon_url, ''),
+		        m.title, m.summary, m.cover_url, m.file_path, m.is_public, m.uploaded_at
+		   FROM markdown_entries m
+		   LEFT JOIN users u ON u.id = m.user_id
+		  WHERE m.user_id = $1 AND m.id = $2`,
 		userID,
 		id,
-	).Scan(&entry.ID, &entry.UserID, &entry.Title, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
+	).Scan(&entry.ID, &entry.UserID, &entry.Username, &entry.UserIcon, &entry.Title, &entry.Summary, &entry.CoverURL, &entry.FilePath, &entry.IsPublic, &entry.UploadedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -3052,12 +3525,16 @@ func (s *Server) getOwnedMarkdownEntry(userID string, id int64) (*MarkdownEntry,
 	return &entry, nil
 }
 
-func (s *Server) updateMarkdownEntry(userID string, id int64, title, filePath string, isPublic bool) error {
+func (s *Server) updateMarkdownEntry(userID string, id int64, title, filePath, summary, coverURL string, isPublic bool) error {
 	_, err := s.db.Exec(
-		`UPDATE markdown_entries SET title = $1, file_path = $2, is_public = $3 WHERE user_id = $4 AND id = $5`,
+		`UPDATE markdown_entries
+		    SET title = $1, file_path = $2, is_public = $3, summary = $4, cover_url = $5
+		  WHERE user_id = $6 AND id = $7`,
 		title,
 		filePath,
 		isPublic,
+		summary,
+		coverURL,
 		userID,
 		id,
 	)
@@ -3259,7 +3736,7 @@ func legacyPostImageURL(item PostImage) string {
 	return item.SmallURL
 }
 
-func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64, filterPostType string) ([]Post, bool, error) {
+func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64, filterPostType, scope string) ([]Post, bool, error) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -3268,6 +3745,9 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 	}
 	if filterPostType == "" {
 		filterPostType = "all"
+	}
+	if scope == "" {
+		scope = "all"
 	}
 	rows, err := s.db.Query(
 		`SELECT p.id, p.user_id, u.username, u.icon_url, p.tag_id, p.post_type, p.content, p.created_at,
@@ -3289,6 +3769,14 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 		   LEFT JOIN post_likes pl ON pl.post_id = p.id AND pl.user_id = $1
 		  WHERE ($2::BIGINT IS NULL OR p.tag_id = $2)
 		    AND ($3 = 'all' OR p.post_type = $3)
+		    AND (
+		          $6 <> 'following'
+		       OR p.user_id = $1
+		       OR EXISTS (
+		            SELECT 1 FROM user_follows f
+		             WHERE f.follower_user_id = $1 AND f.followee_user_id = p.user_id
+		          )
+		        )
 		  ORDER BY p.created_at DESC
 		  LIMIT $4 OFFSET $5`,
 		userID,
@@ -3296,6 +3784,7 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 		filterPostType,
 		limit+1,
 		offset,
+		scope,
 	)
 	if err != nil {
 		return nil, false, err
@@ -3339,6 +3828,23 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 		return posts, hasMore, nil
 	}
 
+	if err := s.attachPostMedia(posts, postIDs); err != nil {
+		return posts, hasMore, err
+	}
+	if err := s.attachTaskData(posts, userID); err != nil {
+		return posts, hasMore, err
+	}
+
+	return posts, hasMore, nil
+}
+
+// attachPostMedia fills in Images/ImageItems/Videos/VideoItems on each post in
+// the slice. postIDs must contain the IDs of posts (in the same order or any
+// order — lookup is by ID).
+func (s *Server) attachPostMedia(posts []Post, postIDs []int64) error {
+	if len(postIDs) == 0 {
+		return nil
+	}
 	imageRows, err := s.db.Query(
 		`SELECT post_id, file_url, small_url, medium_url FROM post_images
 		  WHERE post_id = ANY($1)
@@ -3346,7 +3852,7 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 		pq.Array(postIDs),
 	)
 	if err != nil {
-		return posts, hasMore, err
+		return err
 	}
 	defer imageRows.Close()
 
@@ -3354,18 +3860,16 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 	imageItemMap := make(map[int64][]PostImage, len(postIDs))
 	for imageRows.Next() {
 		var postID int64
-		var fileURL string
-		var smallURL string
-		var mediumURL string
+		var fileURL, smallURL, mediumURL string
 		if err := imageRows.Scan(&postID, &fileURL, &smallURL, &mediumURL); err != nil {
-			return posts, hasMore, err
+			return err
 		}
 		imageItem := normalizePostImageItem(fileURL, smallURL, mediumURL)
 		imageMap[postID] = append(imageMap[postID], legacyPostImageURL(imageItem))
 		imageItemMap[postID] = append(imageItemMap[postID], imageItem)
 	}
 	if err := imageRows.Err(); err != nil {
-		return posts, hasMore, err
+		return err
 	}
 
 	videoRows, err := s.db.Query(
@@ -3375,7 +3879,7 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 		pq.Array(postIDs),
 	)
 	if err != nil {
-		return posts, hasMore, err
+		return err
 	}
 	defer videoRows.Close()
 
@@ -3383,16 +3887,15 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 	videoItemMap := make(map[int64][]PostVideo, len(postIDs))
 	for videoRows.Next() {
 		var postID int64
-		var fileURL string
-		var posterURL string
+		var fileURL, posterURL string
 		if err := videoRows.Scan(&postID, &fileURL, &posterURL); err != nil {
-			return posts, hasMore, err
+			return err
 		}
 		videoMap[postID] = append(videoMap[postID], fileURL)
 		videoItemMap[postID] = append(videoItemMap[postID], PostVideo{URL: fileURL, PosterURL: posterURL})
 	}
 	if err := videoRows.Err(); err != nil {
-		return posts, hasMore, err
+		return err
 	}
 
 	for i := range posts {
@@ -3401,12 +3904,7 @@ func (s *Server) listPosts(userID string, limit, offset int, filterTagID *int64,
 		posts[i].Videos = videoMap[posts[i].ID]
 		posts[i].VideoItems = videoItemMap[posts[i].ID]
 	}
-
-	if err := s.attachTaskData(posts, userID); err != nil {
-		return posts, hasMore, err
-	}
-
-	return posts, hasMore, nil
+	return nil
 }
 
 func (s *Server) getPostByID(userID string, postID int64) (*Post, error) {
@@ -3731,6 +4229,91 @@ func (s *Server) bookmarkPost(postID int64, userID string, createdAt time.Time) 
 func (s *Server) unbookmarkPost(postID int64, userID string) error {
 	_, err := s.db.Exec(`DELETE FROM post_bookmarks WHERE post_id = $1 AND user_id = $2`, postID, userID)
 	return err
+}
+
+// listBookmarkedPosts returns posts that userID has bookmarked, most recently
+// bookmarked first. Reuses the same attachments/enrichment pipeline as listPosts.
+func (s *Server) listBookmarkedPosts(userID string, limit, offset int) ([]Post, bool, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.db.Query(
+		`SELECT p.id, p.user_id, u.username, u.icon_url, p.tag_id, p.post_type, p.content, p.created_at,
+		        COALESCE(l.like_count, 0) AS like_count,
+		        COALESCE(r.reply_count, 0) AS reply_count,
+		        (pl.user_id IS NOT NULL) AS liked_by_me
+		   FROM post_bookmarks b
+		   JOIN posts p ON p.id = b.post_id
+		   JOIN users u ON u.id = p.user_id
+		   LEFT JOIN (
+		     SELECT post_id, COUNT(*) AS like_count
+		       FROM post_likes
+		      GROUP BY post_id
+		   ) l ON l.post_id = p.id
+		   LEFT JOIN (
+		     SELECT post_id, COUNT(*) AS reply_count
+		       FROM post_replies
+		      GROUP BY post_id
+		   ) r ON r.post_id = p.id
+		   LEFT JOIN post_likes pl ON pl.post_id = p.id AND pl.user_id = $1
+		  WHERE b.user_id = $1
+		  ORDER BY b.created_at DESC
+		  LIMIT $2 OFFSET $3`,
+		userID,
+		limit+1,
+		offset,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	posts := make([]Post, 0, limit+1)
+	postIDs := make([]int64, 0, limit+1)
+	for rows.Next() {
+		var post Post
+		if err := rows.Scan(
+			&post.ID,
+			&post.UserID,
+			&post.Username,
+			&post.UserIcon,
+			&post.TagID,
+			&post.PostType,
+			&post.Content,
+			&post.CreatedAt,
+			&post.LikeCount,
+			&post.ReplyCount,
+			&post.LikedByMe,
+		); err != nil {
+			return nil, false, err
+		}
+		posts = append(posts, post)
+		postIDs = append(postIDs, post.ID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+
+	hasMore := false
+	if len(posts) > limit {
+		hasMore = true
+		posts = posts[:limit]
+		postIDs = postIDs[:limit]
+	}
+	if len(postIDs) == 0 {
+		return posts, hasMore, nil
+	}
+
+	if err := s.attachPostMedia(posts, postIDs); err != nil {
+		return posts, hasMore, err
+	}
+	if err := s.attachTaskData(posts, userID); err != nil {
+		return posts, hasMore, err
+	}
+	return posts, hasMore, nil
 }
 
 func (s *Server) createTaskPost(postID int64, location string, startAt, endAt time.Time, workingHours string, applyDeadline time.Time) error {

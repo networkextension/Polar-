@@ -281,7 +281,16 @@ func (s *Server) handlePostList(c *gin.Context) {
 		return
 	}
 
-	posts, hasMore, err := s.listPosts(userIDStr, limit, offset, tagID, postType)
+	scope := strings.TrimSpace(c.Query("scope"))
+	if scope == "" {
+		scope = "all"
+	}
+	if scope != "all" && scope != "following" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 scope"})
+		return
+	}
+
+	posts, hasMore, err := s.listPosts(userIDStr, limit, offset, tagID, postType, scope)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
