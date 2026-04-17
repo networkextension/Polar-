@@ -1,123 +1,1775 @@
-import { buildAssetUrl, resolveAvatar } from "./lib/avatar.js";
-import { byId, query } from "./lib/dom.js";
-import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
-import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
-import { fetchTags } from "./api/dashboard.js";
-import { t } from "./lib/i18n.js";
-import { logout } from "./api/session.js";
-const API_BASE = "";
-const postWelcome = byId("postWelcome");
-const postList = byId("postList");
-const postLoadMoreBtn = byId("postLoadMoreBtn");
-const postTypeFilters = byId("postTypeFilters");
-const tagFilters = byId("tagFilters");
-const postListBadge = byId("postListBadge");
-let nextOffset = 0;
-let hasMore = true;
-let currentUserId = "";
-let currentUserRole = "user";
-let videoModal = null;
-let videoModalPlayer = null;
-let imageModal = null;
-let imageModalViewer = null;
-let imageModalCounter = null;
-let imageModalPrevBtn = null;
-let imageModalNextBtn = null;
-let currentImageGallery = [];
-let currentImageIndex = 0;
-let currentPostTypeFilter = "all";
-let currentTagFilter = null;
-let currentScope = "all";
-let currentTags = [];
-initStoredTheme();
-bindThemeSync();
-function formatTime(value) {
-    return new Date(value).toLocaleString();
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __commonJS = (cb, mod) => function __require() {
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+};
+
+// src/lib/avatar.ts
+function buildAssetUrl(url) {
+  if (!url) {
+    return "";
+  }
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  return `${API_BASE}${url}`;
 }
-function profileUrl(userId) {
-    return `/profile.html?user_id=${encodeURIComponent(userId)}`;
+function makeDefaultAvatar(name, size = 64) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return "";
+  }
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = `bold ${Math.max(20, Math.floor(size * 0.45))}px SF Mono, Fira Code, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(
+    (name || "U").trim().charAt(0).toUpperCase(),
+    canvas.width / 2,
+    canvas.height / 2
+  );
+  return canvas.toDataURL("image/png");
 }
-function getTagName(tagId) {
-    if (!tagId) {
-        return "";
+function resolveAvatar(name, iconUrl, size = 64) {
+  return iconUrl ? buildAssetUrl(iconUrl) : makeDefaultAvatar(name, size);
+}
+var API_BASE;
+var init_avatar = __esm({
+  "src/lib/avatar.ts"() {
+    API_BASE = "";
+  }
+});
+
+// src/lib/dom.ts
+function byId(id) {
+  const element = document.getElementById(id);
+  if (!element) {
+    throw new Error(`Missing required element: #${id}`);
+  }
+  return element;
+}
+function query(root, selector) {
+  const element = root.querySelector(selector);
+  if (!element) {
+    throw new Error(`Missing required element: ${selector}`);
+  }
+  return element;
+}
+var init_dom = __esm({
+  "src/lib/dom.ts"() {
+  }
+});
+
+// src/lib/i18n.ts
+function getLang() {
+  try {
+    const stored = localStorage.getItem(LANG_KEY);
+    return stored === "zh-CN" ? "zh-CN" : "en";
+  } catch {
+    return "en";
+  }
+}
+function t(key, params) {
+  const lang = getLang();
+  const locale = locales[lang] ?? en;
+  let str = locale[key] ?? en[key] ?? key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      str = str.replace(new RegExp(`\\{\\{${k}\\}\\}`, "g"), v);
     }
-    return currentTags.find((item) => item.id === tagId)?.name || "";
+  }
+  return str;
 }
-function updateListBadge() {
-    if (currentScope === "following") {
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    el.textContent = t(key);
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    el.placeholder = t(el.getAttribute("data-i18n-placeholder"));
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    document.title = t(el.getAttribute("data-i18n-title"));
+  });
+  document.querySelectorAll("[data-i18n-tooltip]").forEach((el) => {
+    el.title = t(el.getAttribute("data-i18n-tooltip"));
+  });
+  document.documentElement.lang = getLang();
+}
+var LANG_KEY, en, zhCN, locales;
+var init_i18n = __esm({
+  "src/lib/i18n.ts"() {
+    LANG_KEY = "polar_lang";
+    en = {
+      // Common
+      "common.loading": "Loading...",
+      "common.networkError": "Network error, please try again later",
+      "common.networkErrorRetry": "Network error, please retry",
+      "common.save": "Save",
+      "common.saving": "Saving...",
+      "common.saveFailed": "Save failed",
+      "common.saveFailedRetry": "Save failed, please retry",
+      "common.create": "Create",
+      "common.creating": "Creating...",
+      "common.createSuccess": "Created",
+      "common.edit": "Edit",
+      "common.delete": "Delete",
+      "common.deleteFailed": "Delete failed",
+      "common.close": "Close",
+      "device.browser": "Browser",
+      "common.cancel": "Cancel",
+      "common.confirmDelete": "Confirm Delete",
+      "common.uploading": "Uploading...",
+      "common.send": "Send",
+      "common.submit": "Submit",
+      "common.submitting": "Submitting...",
+      "common.submitFailed": "Submission failed",
+      // Brand
+      "brand.loading": "Loading site info...",
+      "brand.icon": "Site icon",
+      // Login
+      "login.title": "Login",
+      "login.welcome": "Welcome back",
+      "login.subtitle": "Sign in with email and password",
+      "login.email": "Email",
+      "login.password": "Password",
+      "login.submit": "Log in",
+      "login.passkey": "Log in with Passkey",
+      "login.passkeyHint": "You need to bind a Passkey in your account first",
+      "login.noAccount": "No account? Register",
+      "login.failed": "Login failed",
+      "login.success": "Login successful, redirecting...",
+      "login.passkeyNotSupported": "Your browser does not support Passkey.",
+      "login.passkeyEnterEmail": "Please enter your email address first.",
+      "login.passkeyStarting": "Starting Passkey...",
+      "login.passkeyBeginFailed": "Cannot initiate Passkey login",
+      "login.passkeySuccess": "Passkey login successful, redirecting...",
+      "login.passkeyFailed": "Passkey login failed",
+      // Register
+      "register.title": "Register",
+      "register.heading": "Create account",
+      "register.subtitle": "Sign up to get started",
+      "register.username": "Username",
+      "register.email": "Email",
+      "register.password": "Password",
+      "register.passwordPlaceholder": "At least 6 characters",
+      "register.submit": "Register",
+      "register.hasAccount": "Already have an account? Log in",
+      "register.failed": "Registration failed",
+      "register.success": "Registration successful, redirecting...",
+      "register.inviteCode": "Invite code",
+      "register.inviteCodePlaceholder": "Enter invite code",
+      "register.inviteCodeHelp": "Registration on this site currently requires a valid invite code.",
+      // Index
+      "index.status": "Checking login status...",
+      "index.selectAction": "Please select an option",
+      "index.login": "Log in",
+      "index.register": "Register",
+      "index.newMarkdown": "New Markdown",
+      // Chat
+      "chat.title": "Chat",
+      "chat.loading": "Loading...",
+      "chat.welcome": "Hello, {{username}}, say hi to your friends.",
+      "chat.noConversations": "No conversations",
+      "chat.loadFailed": "Failed to load conversations",
+      "chat.createFailed": "Failed to create conversation",
+      "chat.online": "Online \xB7 {{device}}",
+      "chat.offline": "Offline \xB7 Last seen {{time}}",
+      "chat.offlineDevice": "Offline \xB7 Last device {{device}}",
+      "chat.noMessages": "No messages",
+      "chat.noPreview": "No messages",
+      "chat.defaultTopic": "Default topic",
+      "chat.newTopic": "New topic",
+      "chat.systemAssistant": "Official system assistant",
+      "chat.noTopicSelected": "No topic selected",
+      "chat.selectTopicFirst": "Please select a topic first",
+      "chat.noConfigs": "No configs available",
+      "chat.followBotDefault": "Follow Bot default config",
+      "chat.topicsLoadFailed": "Failed to load topics",
+      "chat.modelConfigLoadFailed": "Failed to load model config",
+      "chat.messageRevoked": "Message revoked",
+      "chat.loadingContent": "Loading full content...",
+      "chat.sendFailed": "Failed to send, can retry",
+      "chat.collapse": "Collapse",
+      "chat.expand": "Expand",
+      "chat.copy": "Copy",
+      "chat.sharePublicly": "Share publicly",
+      "chat.favorite": "Favorite",
+      "chat.revoke": "Revoke",
+      "chat.retrying": "Retrying last user message...",
+      "chat.retryFailed": "Retry failed",
+      "chat.retrySuccess": "Last user message resubmitted",
+      "chat.copyFailed": "Copy failed, please select and copy manually",
+      "chat.copySuccess": "Markdown copied to clipboard",
+      "chat.copyPermissionFailed": "Copy failed, please check browser permissions",
+      "chat.markdownLoadFailed": "Failed to load full Markdown",
+      "chat.shareFailed": "Public sharing failed",
+      "chat.shareSuccess": "Shared publicly",
+      "chat.favoriteFailed": "Favorite failed",
+      "chat.favoriteSuccess": "Saved to my Markdown",
+      "chat.createTopicFailed": "Failed to create new topic",
+      "chat.renameTopicPrompt": "Enter new topic title",
+      "chat.topicTitleEmpty": "Topic title cannot be empty",
+      "chat.renameFailed": "Rename failed",
+      "chat.renameSuccess": "Topic title updated",
+      "chat.selectModelFirst": "Please select a model config to switch",
+      "chat.switchModelFailed": "Failed to switch model",
+      "chat.switchModelSuccess": "Current topic model switched",
+      "chat.cannotChatWithSelf": "Cannot chat with yourself",
+      "chat.failed": "Failed",
+      "chat.aiMarkdownReply": "AI Markdown reply",
+      "chat.conversationList": "Conversations",
+      "chat.selectConversation": "Select a conversation",
+      "chat.selectFromLeft": "Select from left or navigate from a post",
+      "chat.newTopicBtn": "New topic",
+      "chat.renameTopicBtn": "Rename",
+      "chat.refreshBtn": "Refresh",
+      "chat.send": "Send",
+      "chat.currentTopic": "Current topic",
+      "chat.currentModel": "Current model",
+      "chat.followDefaultConfig": "Follow default config",
+      "chat.switchModel": "Switch model",
+      "chat.messagePlaceholder": "Write something...",
+      "chat.backToPosts": "Back to Posts",
+      "chat.backToDashboard": "Back to Dashboard",
+      "chat.sendAttachment": "Send attachment",
+      "chat.uploading": "Uploading...",
+      "chat.attachmentFailed": "Failed to send attachment",
+      "chat.downloadFile": "Download",
+      "chat.fileSizeKB": "{{size}} KB",
+      "chat.fileSizeMB": "{{size}} MB",
+      // Editor
+      "editor.heading": "Markdown Editor",
+      "editor.newEntry": "New entry",
+      "editor.editEntry": "Edit entry",
+      "editor.publicPreview": "Public document (read-only)",
+      "editor.backToDashboard": "Back to Dashboard",
+      "editor.titlePlaceholder": "Title",
+      "editor.save": "Save",
+      "editor.publicLabel": "Public (others can view but not edit)",
+      "editor.previewBadge": "Preview (original)",
+      "editor.noContent": "No content",
+      "editor.contentPlaceholder": "Enter Markdown content here...",
+      "editor.publicByDefault": "Visible only to you by default.",
+      "editor.publicReadOnly": "This is a public read-only document: {{url}}",
+      "editor.readOnly": "This document is read-only; only the author can edit it.",
+      "editor.publicUrl": "Other users can view this document at {{url}}.",
+      "editor.publicAfterSave": "A public link will be generated after saving; others can view but not edit.",
+      "editor.loadFailed": "Failed to load entry",
+      "editor.readingPublic": "You are viewing a public document. Read-only.",
+      "editor.titleContentRequired": "Title and content cannot be empty",
+      "editor.updateSuccess": "Updated successfully",
+      "editor.saveSuccess": "Saved successfully (ID: {{id}})",
+      // Profile
+      "profile.title": "User Profile",
+      "profile.loading": "Loading user profile...",
+      "profile.backToPosts": "Posts",
+      "profile.backToChat": "Chat",
+      "profile.backToDashboard": "Dashboard",
+      "profile.myProfile": "My Profile",
+      "profile.userProfile": "User Profile",
+      "profile.email": "Email: ",
+      "profile.userId": "User ID: {{id}}",
+      "profile.joinedAt": "Joined: {{time}}",
+      "profile.bio": "Bio",
+      "profile.personalBio": "Personal bio",
+      "profile.bioPlaceholder": "Describe your skills, past tasks, and availability...",
+      "profile.avatar": "Avatar",
+      "profile.emailVerificationStatus": "Email verification",
+      "profile.emailVerified": "Verified",
+      "profile.emailUnverified": "Not verified",
+      "profile.sendVerificationEmail": "Send verification email",
+      "profile.sendingVerificationEmail": "Sending verification email...",
+      "profile.verificationEmailSent": "Verification email sent",
+      "profile.emailVerificationSendFailed": "Failed to send verification email",
+      "profile.emailUnavailable": "No email address available",
+      "profile.saveProfile": "Save profile",
+      "profile.saving": "Saving...",
+      "profile.saveFailed": "Save failed",
+      "profile.avatarUploadFailed": "Avatar upload failed",
+      "profile.profileUpdated": "Profile updated",
+      "profile.noBio": "This user hasn't written a bio yet.",
+      "profile.writeRecommendation": "Write a Recommendation",
+      "profile.recommendationPlaceholder": "Describe your experience working with this person...",
+      "profile.submitRecommendation": "Submit Recommendation",
+      "profile.recommendationRequired": "Please enter recommendation content",
+      "profile.submitting": "Submitting...",
+      "profile.submitFailed": "Submission failed",
+      "profile.recommendationSaved": "Recommendation saved",
+      "profile.noRecommendations": "No recommendations yet",
+      "profile.loadFailed": "Failed to load user profile",
+      "profile.completeProfile": "Complete your avatar and bio to be more discoverable.",
+      "profile.viewingProfile": "Viewing {{username}}'s profile and recommendations.",
+      "profile.recommendation": "Recommendation",
+      "profile.sendMessage": "Private Message",
+      "profile.blockUser": "Block",
+      "profile.unblockUser": "Unblock",
+      "profile.youBlockedUser": "You blocked this user. History remains visible, but messaging is disabled.",
+      "profile.userBlockedYou": "This user blocked you. History remains visible, but messaging is disabled.",
+      "profile.blockActionFailed": "Block action failed",
+      "profile.recommendationBlockedByYou": "You blocked this user, so new recommendations are disabled.",
+      "profile.recommendationBlockedByOther": "This user blocked you, so new recommendations are disabled.",
+      "profile.followUser": "Follow",
+      "profile.unfollowUser": "Unfollow",
+      "profile.followActionFailed": "Follow action failed",
+      "profile.followersLabel": "followers",
+      "profile.followingLabel": "following",
+      "profile.followsYou": "Follows you",
+      "profile.followSection": "Followers & Following",
+      "profile.tabFollowers": "Followers ({{count}})",
+      "profile.tabFollowing": "Following ({{count}})",
+      "profile.noFollowers": "No followers yet.",
+      "profile.noFollowing": "Not following anyone yet.",
+      "profile.loadingFollowList": "Loading users...",
+      "profile.followListLoadFailed": "Failed to load list",
+      // Posts list
+      "posts.title": "Posts Square",
+      "posts.loading": "Loading user info...",
+      "posts.backToDashboard": "Back to Dashboard",
+      "posts.publicMarkdowns": "Public Markdowns",
+      "posts.newPost": "New Post",
+      "posts.filterBadge": "Filter Posts",
+      "posts.sectionPosts": "Section posts",
+      "posts.gigTasks": "Gig tasks",
+      "posts.regularPosts": "Regular Posts",
+      "posts.latestPosts": "Latest Posts",
+      "posts.filterLatest": "Latest",
+      "posts.filterRegular": "Regular",
+      "posts.filterGigs": "Gigs",
+      "posts.filterFollowing": "Following",
+      "posts.followingPosts": "Posts from people you follow",
+      "posts.noFollowingPosts": "People you follow haven't posted anything yet.",
+      "posts.welcome": "Hello, {{username}}, publish your first post.",
+      "posts.videoNotSupported": "Your browser does not support the video tag",
+      "posts.gigTaskBadge": "Gig Task",
+      "posts.taskTime": "Time: {{start}} - {{end}}",
+      "posts.workingHours": "Working hours: {{hours}}",
+      "posts.applyDeadline": "Apply by: {{deadline}}",
+      "posts.applicantCount": "Applicants: {{count}}",
+      "posts.liked": "Liked",
+      "posts.like": "Like",
+      "posts.viewDetails": "View Details",
+      "posts.deletePost": "Delete Post",
+      "posts.confirmDelete": "Delete this post? This cannot be undone.",
+      "posts.noPosts": "No posts yet",
+      "posts.loadFailed": "Failed to load posts",
+      "posts.loadMore": "Load more",
+      // Post detail
+      "post.title": "Post Detail",
+      "post.welcome": "Hello, {{username}}",
+      "post.loading": "Loading...",
+      "post.backToPosts": "Back to Posts Square",
+      "post.postTypeStan": "Regular post",
+      "post.postTypeTask": "Gig task",
+      "post.tagSection": "Section / Tag",
+      "post.noSection": "No section",
+      "post.contentLabel": "Content",
+      "post.contentPlaceholder": "Share your thoughts...",
+      "post.taskLocationLabel": "Location (optional)",
+      "post.taskLocationPlaceholder": "e.g. Remote / Shanghai",
+      "post.taskStartLabel": "Start time",
+      "post.taskEndLabel": "End time",
+      "post.workingHoursLabel": "Working hours",
+      "post.workingHoursPlaceholder": "e.g. 4h / 9:00-13:00 / two weekends",
+      "post.applyDeadlineLabel": "Application deadline",
+      "post.imagesLabel": "Images (optional, multiple allowed)",
+      "post.videosLabel": "Videos (optional, multiple allowed)",
+      "post.publish": "Publish",
+      "post.newPostBadge": "New Post",
+      "post.loadingReplies": "Loading...",
+      "post.repliesLoadFailed": "Failed to load replies",
+      "post.noReplies": "No replies yet",
+      "post.timeRange": "Time Range:",
+      "post.applyDeadline": "Apply by:",
+      "post.location": "Location:",
+      "post.noLocation": "No restriction",
+      "post.status": "Status:",
+      "post.statusOpen": "Open",
+      "post.statusClosed": "Closed",
+      "post.applicantCount": "Applicants:",
+      "post.selectedApplicant": "Selected:",
+      "post.withdrawApplication": "Withdraw application",
+      "post.applyTask": "Apply",
+      "post.closeApplications": "Close applications",
+      "post.viewApplicants": "View applicants",
+      "post.taskResults": "Task results",
+      "post.resultDescription": "Result description",
+      "post.resultDescriptionPlaceholder": "Describe what was completed...",
+      "post.resultImages": "Result images",
+      "post.resultVideos": "Result videos",
+      "post.submitResult": "Submit result",
+      "post.replyPlaceholder": "Write your reply...",
+      "post.prevImage": "Previous",
+      "post.nextImage": "Next",
+      "post.loadingApplicants": "Loading applicants...",
+      "post.applicantsLoadFailed": "Failed to load applicants",
+      "post.noApplicants": "No applicants yet",
+      "post.invitationDefault": "Hello, you have been selected as a candidate for this gig task.\n\nTask: {{content}}\nPlease reply to confirm.",
+      "post.confirmAndMessage": "Confirm and send message",
+      "post.submittingResult": "Submitting task result...",
+      "post.resultSubmitted": "Task result submitted",
+      "post.loadingResults": "Loading task results...",
+      "post.resultsLoadFailed": "Failed to load task results",
+      "post.noResults": "No task results yet",
+      "post.invalidPost": "Invalid post",
+      "post.loadFailed": "Failed to load post",
+      "post.notFound": "Post not found",
+      "post.contentRequired": "Content cannot be empty",
+      "post.taskInfoRequired": "Please fill in all task details",
+      "post.publishing": "Publishing...",
+      "post.publishFailed": "Publish failed",
+      "post.publishSuccess": "Published successfully",
+      "post.publishFailedRetry": "Publish failed, please retry",
+      "post.liked": "Liked",
+      "post.like": "Like",
+      "post.deletePost": "Delete Post",
+      "post.confirmDelete": "Delete this post? This cannot be undone.",
+      "post.videoNotSupported": "Your browser does not support the video tag",
+      "post.gigTaskBadge": "Gig Task",
+      "post.workingHours": "Working hours: {{hours}}",
+      "post.sendReply": "Send",
+      "post.assistToggle": "AI Assist",
+      "post.assistBot": "Bot",
+      "post.assistLLM": "Model (optional)",
+      "post.assistDefaultLLM": "Follow bot default",
+      "post.assistNoBot": "No bot available",
+      "post.assistTopic": "Topic / idea",
+      "post.assistTopicPlaceholder": "Optional topic to seed the draft",
+      "post.assistInstruction": "Instruction (optional)",
+      "post.assistInstructionPlaceholder": "e.g. keep it casual, under 200 chars",
+      "post.assistRun": "Generate draft",
+      "post.assistApply": "Apply to content",
+      "post.assistBotRequired": "Please select a bot first",
+      "post.assistTopicOrDraftRequired": "Provide a topic or some draft first",
+      "post.assistRunning": "Generating draft, please wait...",
+      "post.assistFailed": "Failed to generate draft",
+      "post.assistDone": "Draft ready",
+      "post.assistApplied": "Applied to content",
+      "post.replyAssistToggle": "AI Assist reply",
+      "post.replyAssistRun": "Generate reply",
+      "post.replyAssistApply": "Apply to reply",
+      // Markdowns list
+      "markdowns.title": "Public Markdowns",
+      "markdowns.browse": "Browse all publicly published documents",
+      "markdowns.backToDashboard": "Back to Dashboard",
+      "markdowns.latestBadge": "Latest public documents",
+      "markdowns.loadMore": "Load more",
+      "markdowns.clickToView": "Click to view full Markdown in read-only mode",
+      "markdowns.loadFailed": "Failed to load public Markdowns",
+      "markdowns.noPosts": "No public Markdowns yet",
+      // Markdown viewer
+      "markdown.title": "Public Markdown",
+      "markdown.loginToEdit": "Log in to edit your own documents",
+      "markdown.loading": "Loading content...",
+      "markdown.publicReadOnly": "Public read-only document",
+      "markdown.readOnlyPreview": "Read-only preview",
+      "markdown.authReadOnlyPreview": "Authenticated read-only preview",
+      "markdown.missingId": "Missing document ID",
+      "markdown.loadContentFailed": "Failed to load content",
+      "markdown.loadFailed": "Failed to load document",
+      "markdown.notFound": "Public document not found",
+      "markdown.loadError": "Load failed",
+      // Dashboard
+      "dashboard.title": "Dashboard",
+      "dashboard.loading": "Loading user info...",
+      "dashboard.drawerToggle": "Entry list",
+      "dashboard.profileSettings": "Profile / Settings",
+      "dashboard.newMarkdown": "New Markdown",
+      "dashboard.publicMarkdowns": "Public Markdowns",
+      "dashboard.posts": "Posts",
+      "dashboard.markdownEntries": "Markdown entries",
+      "dashboard.drawerHelp": "Quick access to direct messages or AI assistant.",
+      "dashboard.privateChat": "Chat",
+      "dashboard.aiAssistant": "AI Assistant",
+      "dashboard.newTag": "New Tag",
+      "dashboard.loadMore": "Load more",
+      "dashboard.userAvatar": "User avatar",
+      "dashboard.loadingUser": "Loading...",
+      "dashboard.profile": "Profile",
+      "dashboard.settingsCenter": "Settings Center",
+      "dashboard.logout": "Log out",
+      "dashboard.contentPreview": "Content preview",
+      "dashboard.selectEntry": "Select an entry from the sidebar",
+      "dashboard.editEntry": "Edit",
+      "dashboard.deleteEntry": "Delete",
+      "dashboard.tagModalAdd": "Add Tag",
+      "dashboard.tagNameLabel": "Name",
+      "dashboard.tagNamePlaceholder": "e.g. Go Language",
+      "dashboard.tagSlugLabel": "Identifier (optional)",
+      "dashboard.tagSlugPlaceholder": "e.g. golang",
+      "dashboard.tagDescLabel": "Description (optional)",
+      "dashboard.tagDescPlaceholder": "Brief description",
+      "dashboard.tagOrderLabel": "Order (optional)",
+      "dashboard.tagCreateBtn": "Create",
+      "dashboard.settingsCenterTitle": "Settings Center",
+      "dashboard.navProfile": "Profile",
+      "dashboard.navPersonalization": "Personalization",
+      "dashboard.navSettings": "Settings",
+      "dashboard.navSystem": "System Info",
+      "dashboard.navBots": "Bot Management",
+      "dashboard.navSite": "Site Management",
+      "dashboard.systemTitle": "System Info",
+      "dashboard.systemLead": "View the current instance version, environment, and available disk capacity.",
+      "dashboard.systemRunInfo": "Runtime Info",
+      "dashboard.systemRunInfoDesc": "View the current instance version, OS environment, and available disk space.",
+      "dashboard.systemCpuArch": "CPU Arch",
+      "dashboard.systemDiskCapacity": "Disk Capacity",
+      "dashboard.preferencesBadge": "Preferences & Management",
+      "dashboard.personalCenter": "Personal Center",
+      "dashboard.profileLead": "Manage your avatar, sign-in methods, and recent login activity, keeping your profile and account details together in one place.",
+      "dashboard.viewPublicProfile": "View public Profile",
+      "dashboard.changeAvatar": "Change avatar",
+      "dashboard.zoomLabel": "Zoom",
+      "dashboard.saveAvatar": "Save avatar",
+      "dashboard.cancelAvatar": "Cancel",
+      "dashboard.avatarHint": "Supports upload and basic cropping.",
+      "dashboard.securityTitle": "Account security",
+      "dashboard.emailVerificationTitle": "Email verification",
+      "dashboard.emailVerificationText": "Verify your email address so it can be used for account recovery and future security flows.",
+      "dashboard.sendVerificationEmail": "Send verification email",
+      "dashboard.sendingVerificationEmail": "Sending verification email...",
+      "dashboard.verificationEmailSent": "Verification email sent",
+      "dashboard.emailVerificationSendFailed": "Failed to send verification email",
+      "dashboard.emailVerifiedState": "Verified",
+      "dashboard.emailUnverifiedState": "Not verified",
+      "dashboard.emailUnavailable": "No email address available",
+      "dashboard.securityText": "Bind Passkey for fingerprint or face login.",
+      "dashboard.bindPasskey": "Bind Passkey",
+      "dashboard.recentLogins": "Recent logins",
+      "dashboard.recentLoginsText": "View recent login devices, IPs, and locations.",
+      "dashboard.interfaceStyle": "Interface style",
+      "dashboard.interfaceStyleText": "Toggle between default and monochrome styles.",
+      "dashboard.themeDefault": "Default",
+      "dashboard.themeMonochrome": "Monochrome",
+      "dashboard.switchToMonochrome": "Switch to monochrome",
+      "dashboard.switchToDefault": "Switch to default style",
+      "dashboard.browsingHabits": "Browsing preferences",
+      "dashboard.browsingHabitsText": "Currently keeping a clean, lightweight layout.",
+      "dashboard.llmConfigNameLabel": "Config name",
+      "dashboard.llmConfigNamePlaceholder": "e.g. OpenAI production config",
+      "dashboard.llmConfigApiKeyLabel": "API Key",
+      "dashboard.llmConfigApiKeyPlaceholder": "Recommended on create; leave empty when editing to keep current value",
+      "dashboard.llmConfigSystemPromptLabel": "Test Prompt (optional)",
+      "dashboard.llmConfigSystemPromptPlaceholder": "Only for testing config connectivity, not used as Bot runtime prompt",
+      "dashboard.llmConfigSharedLabel": "Share this LLM Config with other users",
+      "dashboard.llmConfigClear": "Clear",
+      "dashboard.llmConfigTest": "Test config",
+      "dashboard.llmConfigSave": "Save config",
+      "dashboard.botHelp": "Each Bot is a user you can chat with directly. Manage Bot model configs and prompts here.",
+      "dashboard.botNameLabel": "Bot name",
+      "dashboard.botNamePlaceholder": "e.g. Translation assistant",
+      "dashboard.botConfigLabel": "Bind config",
+      "dashboard.botDescriptionLabel": "Bot description",
+      "dashboard.botDescriptionPlaceholder": "Tell users what this Bot is good at",
+      "dashboard.botSystemPromptLabel": "Bot config prompt",
+      "dashboard.botSystemPromptPlaceholder": "Define this Bot's persona, tone, boundaries, and behavior",
+      "dashboard.botClear": "Clear",
+      "dashboard.botSave": "Save Bot",
+      "dashboard.siteManagementBadge": "Site Management",
+      "dashboard.siteHelp": "Manage site logo, intro, APNs keys, and tags here.",
+      "dashboard.siteIconLabel": "Site icon",
+      "dashboard.siteIconHint": "Use a square icon. Changes take effect immediately.",
+      "dashboard.siteNameLabel": "Site name",
+      "dashboard.siteNamePlaceholder": "Enter site name",
+      "dashboard.siteDescriptionLabel": "Site description",
+      "dashboard.siteDescriptionPlaceholder": "One-line description of your site",
+      "dashboard.registrationInviteRequiredLabel": "Registration requires invite code",
+      "dashboard.registrationInviteRequiredHint": "When enabled, new users must provide a valid invite code to register.",
+      "dashboard.saveSite": "Save site info",
+      "dashboard.inviteCodeBadge": "Invite Codes",
+      "dashboard.inviteCodeHelp": "Generate one-time invite codes for new user registration.",
+      "dashboard.generateInviteCode": "Generate",
+      "dashboard.noInviteCodes": "No invite codes yet.",
+      "dashboard.inviteCodeAvailable": "Available",
+      "dashboard.inviteCodeUsed": "Used",
+      "dashboard.inviteCodeLoadFailed": "Failed to load invite codes",
+      "dashboard.generatingInviteCode": "Generating invite codes...",
+      "dashboard.inviteCodeGenerateFailed": "Failed to generate invite codes",
+      "dashboard.inviteCodeGenerated": "Generated {{count}} invite code(s)",
+      "dashboard.applePushBadge": "APNs Key / .p8",
+      "dashboard.applePushHelp": "Maintain dev and production APNs keys for future push notifications.",
+      "dashboard.applePushDevLabel": "Dev APNs key (.p8)",
+      "dashboard.applePushProdLabel": "Production APNs key (.p8)",
+      "dashboard.notUploaded": "Not uploaded",
+      "dashboard.deleteDevCert": "Delete dev key",
+      "dashboard.deleteProdCert": "Delete prod key",
+      "dashboard.tagManagementBadge": "Tag Management",
+      "dashboard.tagManagementHelp": "Create, edit, or delete content tags.",
+      "dashboard.siteNewTag": "New Tag",
+      "dashboard.drawerClose": "Collapse",
+      "dashboard.quickAccess": "Quick access",
+      "dashboard.modalClose": "Close",
+      "dashboard.personalizationTitle": "Personalization",
+      "dashboard.personalizationLead": "Manage the interface style and personal preferences so the workspace feels tailored to how you work.",
+      "dashboard.languageTitle": "Language",
+      "dashboard.languageText": "Choose the interface language for this browser.",
+      "dashboard.languageEnglish": "English",
+      "dashboard.languageChinese": "Chinese",
+      "dashboard.switchToChinese": "Switch to Chinese",
+      "dashboard.switchToEnglish": "Switch to English",
+      "dashboard.settingsTitle": "Settings",
+      "dashboard.botsManagementTitle": "Bot Management",
+      "dashboard.botsLead": "Manage each Bot's default model config, description, and dedicated prompt here.",
+      "dashboard.siteManagementTitle": "Site Management",
+      "dashboard.siteLead": "Admin-only controls for the site logo, intro, APNs keys, and tag management.",
+      "dashboard.unknownLocation": "Unknown location",
+      "dashboard.loginMethodRegister": "Register",
+      "dashboard.loginMethodPassword": "Password",
+      "dashboard.certMeta": "Current file: {{filename}} \xB7 Uploaded: {{time}}",
+      "dashboard.noTags": "No tags yet. Create the first one.",
+      "dashboard.tagOrder": "Order: {{order}}",
+      "dashboard.noDescription": "No description",
+      "dashboard.saveConfigBtn": "Save config",
+      "dashboard.saveBotBtn": "Save Bot",
+      "dashboard.noLLMConfigs": "No LLM configs yet. Create one.",
+      "dashboard.keySaved": "Key saved",
+      "dashboard.noKey": "No key",
+      "dashboard.shared": "Shared",
+      "dashboard.private": "Private",
+      "dashboard.noSystemPrompt": "No system prompt set",
+      "dashboard.createLLMConfigFirst": "Please create an LLM Config first",
+      "dashboard.noBots": "No bots yet. Create one to chat with directly.",
+      "dashboard.botUserId": "User ID: {{id}}",
+      "dashboard.botPromptPreview": "Bot Prompt: {{preview}}...",
+      "dashboard.noBotPrompt": "No Bot Prompt configured",
+      "dashboard.chat": "Chat",
+      "dashboard.loginHistoryLoadFailed": "Failed to load login history",
+      "dashboard.noLoginHistory": "No login history",
+      "dashboard.unknownIp": "Unknown IP",
+      "dashboard.welcome": "Hello, {{username}}",
+      "dashboard.currentUser": "Current user",
+      "dashboard.adminRoleBadge": "Administrator",
+      "dashboard.adminMeta": "Profile, Personalization & Site",
+      "dashboard.userMeta": "Profile & Personalization",
+      "dashboard.adminProfileMeta": "Manage your profile, device preferences, and site settings",
+      "dashboard.userProfileMeta": "Manage your profile, devices and preferences",
+      "dashboard.adminOnlyTag": "Only admins can create tags",
+      "dashboard.llmConfigLoadFailed": "Failed to load LLM Config",
+      "dashboard.availableConfigLoadFailed": "Failed to load available configs",
+      "dashboard.botListLoadFailed": "Failed to load Bot list",
+      "dashboard.siteInfoLoadFailed": "Failed to load site info",
+      "dashboard.tagListLoadFailed": "Failed to load Tag list",
+      "dashboard.editTag": "Edit Tag",
+      "dashboard.addTag": "Add Tag",
+      "dashboard.tagSaving": "Saving...",
+      "dashboard.tagCreating": "Creating...",
+      "dashboard.tagSaveFailed": "Save failed",
+      "dashboard.tagSaved": "Saved",
+      "dashboard.tagCreated": "Created",
+      "dashboard.tagSaveFailedRetry": "Save failed, please retry",
+      "dashboard.confirmDeleteTag": 'Delete Tag "{{name}}"?',
+      "dashboard.tagDeleted": "Deleted Tag: {{name}}",
+      "dashboard.llmTestMissingFields": "Please fill in Base URL, Model and API Key before testing",
+      "dashboard.llmTesting": "Testing model config...",
+      "dashboard.llmTestSuccess": "Connection successful, config works",
+      "dashboard.llmTestFailed": "Test failed",
+      "dashboard.llmConfigSaving": "Saving config...",
+      "dashboard.llmConfigCreating": "Creating config...",
+      "dashboard.llmConfigMissingFields": "Please fill in name, Base URL and Model",
+      "dashboard.llmConfigUpdated": "Config updated",
+      "dashboard.llmConfigCreated": "Config created",
+      "dashboard.updateConfig": "Update config",
+      "dashboard.apiKeySaved": "API Key saved. Leave empty to keep current value.",
+      "dashboard.confirmDeleteConfig": 'Delete config "{{name}}"? Bound bots must be rebound or deleted first.',
+      "dashboard.configDeleted": "Deleted config: {{name}}",
+      "dashboard.botMissingFields": "Please fill in Bot name and select a config",
+      "dashboard.botSaving": "Saving Bot...",
+      "dashboard.botCreating": "Creating Bot...",
+      "dashboard.botUpdated": "Bot updated",
+      "dashboard.botCreated": "Bot created",
+      "dashboard.updateBot": "Update Bot",
+      "dashboard.confirmDeleteBot": 'Delete Bot "{{name}}"? This will also remove the bot user.',
+      "dashboard.botDeleted": "Deleted Bot: {{name}}",
+      "dashboard.savingSiteInfo": "Saving site info...",
+      "dashboard.siteInfoSaved": "Site info saved",
+      "dashboard.selectImageFile": "Please select an image file",
+      "dashboard.uploadingSiteIcon": "Uploading site icon...",
+      "dashboard.siteIconUpdated": "Site icon updated",
+      "dashboard.certUnsupportedFormat": "Only .p8, .p12, .pem, .cer, .crt, .key files are supported",
+      "dashboard.uploadingCert": "Uploading {{env}} APNs Key / .p8...",
+      "dashboard.certUpdated": "{{env}} APNs Key / .p8 updated",
+      "dashboard.confirmDeleteCert": "Delete {{env}} APNs Key / .p8?",
+      "dashboard.deletingCert": "Deleting {{env}} APNs Key / .p8...",
+      "dashboard.certDeleted": "{{env}} APNs Key / .p8 deleted",
+      "dashboard.logoutFailed": "Logout failed, please retry",
+      "dashboard.logoutNetworkFailed": "Logout failed, please check your network",
+      "dashboard.entryLoadFailed": "Failed to load entries",
+      "dashboard.noEntries": "No entries",
+      "dashboard.entryReadFailed": "Failed to load",
+      "dashboard.emptyContent": "Empty content",
+      "dashboard.confirmDeleteEntry": "Delete this entry?",
+      "dashboard.selectImageFileWithPeriod": "Please select an image file.",
+      "dashboard.canceledEdit": "Edit cancelled.",
+      "dashboard.generatingImageFailed": "Failed to generate image.",
+      "dashboard.avatarUpdated": "Avatar updated.",
+      "dashboard.networkErrorPeriod": "Network error, please retry.",
+      "dashboard.passkeyNotSupported": "Your browser does not support Passkey.",
+      "dashboard.passkeyStarting": "Starting Passkey...",
+      "dashboard.passkeyBeginFailed": "Cannot initiate Passkey registration",
+      "dashboard.passkeySuccess": "Passkey registered successfully!",
+      "dashboard.passkeyFailed": "Passkey registration failed",
+      "dashboard.unknownTime": "Unknown time",
+      // Nav
+      "nav.dashboard": "Dashboard",
+      "nav.posts": "Posts",
+      "nav.markdowns": "Markdowns",
+      "nav.chat": "Chat",
+      "nav.editor": "Editor",
+      "nav.latch": "Latch",
+      "nav.bots": "Bot Management",
+      "nav.userAdmin": "User Admin",
+      "bots.title": "Bot Management",
+      "bots.topbarTitle": "Bot Management",
+      "nav.settings": "Settings",
+      // Admin
+      "admin.title": "User Management",
+      "admin.topbarTitle": "Admin Center",
+      "admin.loading": "Loading...",
+      "admin.welcome": "Welcome, {{username}}",
+      "admin.userQuery": "User Query",
+      "admin.userCount": "Total users: {{count}}",
+      "admin.userCountDash": "Total users: -",
+      "admin.searchPlaceholder": "Search by username / email / user ID",
+      "admin.search": "Search",
+      "admin.reset": "Reset",
+      "admin.prevPage": "Prev",
+      "admin.nextPage": "Next",
+      "admin.pageInfo": "Page {{current}} / {{total}}",
+      "admin.pageInfoDash": "Page -",
+      "admin.accountManagement": "Account Management",
+      "admin.selectUser": "Select a user on the left",
+      "admin.changePassword": "Change Password",
+      "admin.newPasswordPlaceholder": "New password (min 6 chars)",
+      "admin.confirmPasswordPlaceholder": "Confirm new password",
+      "admin.updatePassword": "Update Password",
+      "admin.loginHistory": "Login History",
+      "admin.noLoginHistory": "No login records",
+      "admin.noMatchingUsers": "No matching users",
+      "admin.loadUsersFailed": "Failed to load users",
+      "admin.loadHistoryFailed": "Failed to load login history",
+      "admin.selectUserFirst": "Please select a user first",
+      "admin.passwordTooShort": "Password must be at least 6 characters",
+      "admin.passwordMismatch": "Passwords do not match",
+      "admin.updatingPassword": "Updating password...",
+      "admin.passwordUpdated": "Password updated",
+      "admin.updateFailed": "Update failed",
+      "admin.networkError": "Network error, please retry",
+      "admin.logoutFailed": "Logout failed",
+      "admin.unknownIp": "Unknown IP",
+      "admin.unknownLocation": "Unknown location",
+      "admin.loginMethodPasskey": "Passkey",
+      "admin.loginMethodRegister": "Register",
+      "admin.loginMethodPassword": "Password",
+      "admin.online": "online",
+      "admin.createdAt": "Created: {{time}}"
+    };
+    zhCN = {
+      "common.loading": "\u52A0\u8F7D\u4E2D...",
+      "common.networkError": "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5",
+      "common.networkErrorRetry": "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5",
+      "common.save": "\u4FDD\u5B58",
+      "common.saving": "\u6B63\u5728\u4FDD\u5B58...",
+      "common.saveFailed": "\u4FDD\u5B58\u5931\u8D25",
+      "common.saveFailedRetry": "\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5",
+      "common.create": "\u521B\u5EFA",
+      "common.creating": "\u6B63\u5728\u521B\u5EFA...",
+      "common.createSuccess": "\u521B\u5EFA\u6210\u529F",
+      "common.edit": "\u7F16\u8F91",
+      "common.delete": "\u5220\u9664",
+      "common.deleteFailed": "\u5220\u9664\u5931\u8D25",
+      "common.close": "\u5173\u95ED",
+      "device.browser": "\u6D4F\u89C8\u5668",
+      "common.cancel": "\u53D6\u6D88",
+      "common.confirmDelete": "\u786E\u8BA4\u5220\u9664",
+      "common.uploading": "\u6B63\u5728\u4E0A\u4F20...",
+      "common.send": "\u53D1\u9001",
+      "common.submit": "\u63D0\u4EA4",
+      "common.submitting": "\u6B63\u5728\u63D0\u4EA4...",
+      "common.submitFailed": "\u63D0\u4EA4\u5931\u8D25",
+      "brand.loading": "\u6B63\u5728\u52A0\u8F7D\u7AD9\u70B9\u4FE1\u606F...",
+      "brand.icon": "\u7AD9\u70B9\u56FE\u6807",
+      "login.title": "\u767B\u5F55",
+      "login.welcome": "\u6B22\u8FCE\u56DE\u6765",
+      "login.subtitle": "\u4F7F\u7528\u90AE\u7BB1\u548C\u5BC6\u7801\u767B\u5F55",
+      "login.email": "\u90AE\u7BB1",
+      "login.password": "\u5BC6\u7801",
+      "login.submit": "\u767B\u5F55",
+      "login.passkey": "\u4F7F\u7528 Passkey \u767B\u5F55",
+      "login.passkeyHint": "\u9700\u8981\u5148\u5728\u8D26\u6237\u5185\u7ED1\u5B9A Passkey",
+      "login.noAccount": "\u6CA1\u6709\u8D26\u6237\uFF1F\u53BB\u6CE8\u518C",
+      "login.failed": "\u767B\u5F55\u5931\u8D25",
+      "login.success": "\u767B\u5F55\u6210\u529F\uFF0C\u6B63\u5728\u8DF3\u8F6C...",
+      "login.passkeyNotSupported": "\u5F53\u524D\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 Passkey\u3002",
+      "login.passkeyEnterEmail": "\u8BF7\u5148\u8F93\u5165\u90AE\u7BB1\u5730\u5740\u3002",
+      "login.passkeyStarting": "\u6B63\u5728\u542F\u52A8 Passkey...",
+      "login.passkeyBeginFailed": "\u65E0\u6CD5\u53D1\u8D77 Passkey \u767B\u5F55",
+      "login.passkeySuccess": "Passkey \u767B\u5F55\u6210\u529F\uFF0C\u6B63\u5728\u8DF3\u8F6C...",
+      "login.passkeyFailed": "Passkey \u767B\u5F55\u5931\u8D25",
+      "register.title": "\u6CE8\u518C",
+      "register.heading": "\u521B\u5EFA\u8D26\u6237",
+      "register.subtitle": "\u5FEB\u901F\u6CE8\u518C\u5E76\u5F00\u59CB\u4F53\u9A8C",
+      "register.username": "\u7528\u6237\u540D",
+      "register.email": "\u90AE\u7BB1",
+      "register.password": "\u5BC6\u7801",
+      "register.passwordPlaceholder": "\u81F3\u5C116\u4F4D",
+      "register.submit": "\u6CE8\u518C",
+      "register.hasAccount": "\u5DF2\u6709\u8D26\u6237\uFF1F\u53BB\u767B\u5F55",
+      "register.failed": "\u6CE8\u518C\u5931\u8D25",
+      "register.success": "\u6CE8\u518C\u6210\u529F\uFF0C\u6B63\u5728\u8DF3\u8F6C...",
+      "register.inviteCode": "\u9080\u8BF7\u7801",
+      "register.inviteCodePlaceholder": "\u8BF7\u8F93\u5165\u9080\u8BF7\u7801",
+      "register.inviteCodeHelp": "\u5F53\u524D\u7AD9\u70B9\u6CE8\u518C\u9700\u8981\u6709\u6548\u9080\u8BF7\u7801\u3002",
+      "index.status": "\u6B63\u5728\u68C0\u67E5\u767B\u5F55\u72B6\u6001...",
+      "index.selectAction": "\u8BF7\u9009\u62E9\u64CD\u4F5C",
+      "index.login": "\u767B\u5F55",
+      "index.register": "\u6CE8\u518C",
+      "index.newMarkdown": "\u65B0\u5EFA Markdown",
+      "chat.title": "\u79C1\u804A",
+      "chat.loading": "\u6B63\u5728\u52A0\u8F7D...",
+      "chat.welcome": "\u4F60\u597D\uFF0C{{username}}\uFF0C\u548C\u597D\u53CB\u804A\u4E24\u53E5\u5427\u3002",
+      "chat.noConversations": "\u6682\u65E0\u4F1A\u8BDD",
+      "chat.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u4F1A\u8BDD",
+      "chat.createFailed": "\u65E0\u6CD5\u521B\u5EFA\u4F1A\u8BDD",
+      "chat.online": "\u5728\u7EBF \xB7 {{device}}",
+      "chat.offline": "\u79BB\u7EBF \xB7 \u4E0A\u6B21\u5728\u7EBF {{time}}",
+      "chat.offlineDevice": "\u79BB\u7EBF \xB7 \u6700\u8FD1\u8BBE\u5907 {{device}}",
+      "chat.noMessages": "\u6682\u65E0\u6D88\u606F",
+      "chat.noPreview": "\u6682\u65E0\u6D88\u606F",
+      "chat.defaultTopic": "\u9ED8\u8BA4\u8BDD\u9898",
+      "chat.newTopic": "\u65B0\u8BDD\u9898",
+      "chat.systemAssistant": "\u5B98\u65B9 system \u52A9\u7406",
+      "chat.noTopicSelected": "\u672A\u9009\u62E9\u8BDD\u9898",
+      "chat.selectTopicFirst": "\u8BF7\u5148\u9009\u62E9\u8BDD\u9898",
+      "chat.noConfigs": "\u6682\u65E0\u53EF\u7528\u914D\u7F6E",
+      "chat.followBotDefault": "\u8DDF\u968F Bot \u9ED8\u8BA4\u914D\u7F6E",
+      "chat.topicsLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u8BDD\u9898",
+      "chat.modelConfigLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u6A21\u578B\u914D\u7F6E",
+      "chat.messageRevoked": "\u6D88\u606F\u5DF2\u64A4\u56DE",
+      "chat.loadingContent": "\u6B63\u5728\u52A0\u8F7D\u5B8C\u6574\u5185\u5BB9...",
+      "chat.sendFailed": "\u53D1\u9001\u5931\u8D25\uFF0C\u53EF\u91CD\u8BD5",
+      "chat.collapse": "\u7F29\u5C0F",
+      "chat.expand": "\u653E\u5927",
+      "chat.copy": "\u590D\u5236",
+      "chat.sharePublicly": "\u516C\u5F00\u5206\u4EAB",
+      "chat.favorite": "\u6536\u85CF",
+      "chat.revoke": "\u64A4\u56DE",
+      "chat.retrying": "\u6B63\u5728\u91CD\u8BD5\u4E0A\u4E00\u6761\u7528\u6237\u6D88\u606F...",
+      "chat.retryFailed": "\u91CD\u8BD5\u5931\u8D25",
+      "chat.retrySuccess": "\u5DF2\u91CD\u65B0\u63D0\u4EA4\u4E0A\u4E00\u6761\u7528\u6237\u6D88\u606F",
+      "chat.copyFailed": "\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u62E9\u5185\u5BB9\u590D\u5236",
+      "chat.copySuccess": "Markdown \u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F",
+      "chat.copyPermissionFailed": "\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650",
+      "chat.markdownLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u5B8C\u6574 Markdown",
+      "chat.shareFailed": "\u516C\u5F00\u5206\u4EAB\u5931\u8D25",
+      "chat.shareSuccess": "\u5DF2\u516C\u5F00\u5206\u4EAB",
+      "chat.favoriteFailed": "\u6536\u85CF\u5931\u8D25",
+      "chat.favoriteSuccess": "\u5DF2\u6536\u85CF\u5230\u6211\u7684 Markdown",
+      "chat.createTopicFailed": "\u521B\u5EFA\u65B0\u8BDD\u9898\u5931\u8D25",
+      "chat.renameTopicPrompt": "\u8F93\u5165\u65B0\u7684\u8BDD\u9898\u6807\u9898",
+      "chat.topicTitleEmpty": "\u8BDD\u9898\u6807\u9898\u4E0D\u80FD\u4E3A\u7A7A",
+      "chat.renameFailed": "\u91CD\u547D\u540D\u5931\u8D25",
+      "chat.renameSuccess": "\u8BDD\u9898\u6807\u9898\u5DF2\u66F4\u65B0",
+      "chat.selectModelFirst": "\u8BF7\u9009\u62E9\u8981\u5207\u6362\u7684\u6A21\u578B\u914D\u7F6E",
+      "chat.switchModelFailed": "\u5207\u6362\u6A21\u578B\u5931\u8D25",
+      "chat.switchModelSuccess": "\u5F53\u524D\u8BDD\u9898\u6A21\u578B\u5DF2\u5207\u6362",
+      "chat.cannotChatWithSelf": "\u4E0D\u80FD\u548C\u81EA\u5DF1\u804A\u5929",
+      "chat.failed": "\u5931\u8D25",
+      "chat.aiMarkdownReply": "AI Markdown \u56DE\u590D",
+      "chat.conversationList": "\u4F1A\u8BDD\u5217\u8868",
+      "chat.selectConversation": "\u9009\u62E9\u4E00\u4E2A\u4F1A\u8BDD",
+      "chat.selectFromLeft": "\u4ECE\u5DE6\u4FA7\u9009\u62E9\u6216\u4ECE\u5E16\u5B50\u7528\u6237\u540D\u8FDB\u5165",
+      "chat.newTopicBtn": "\u65B0\u8BDD\u9898",
+      "chat.renameTopicBtn": "\u91CD\u547D\u540D",
+      "chat.refreshBtn": "\u5237\u65B0",
+      "chat.send": "\u53D1\u9001",
+      "chat.currentTopic": "\u5F53\u524D\u8BDD\u9898",
+      "chat.currentModel": "\u5F53\u524D\u6A21\u578B",
+      "chat.followDefaultConfig": "\u8DDF\u968F\u9ED8\u8BA4\u914D\u7F6E",
+      "chat.switchModel": "\u5207\u6362\u6A21\u578B",
+      "chat.messagePlaceholder": "\u5199\u70B9\u4EC0\u4E48...",
+      "chat.backToPosts": "\u8FD4\u56DE\u5E16\u5B50\u5E7F\u573A",
+      "chat.backToDashboard": "\u8FD4\u56DE\u63A7\u5236\u53F0",
+      "chat.sendAttachment": "\u53D1\u9001\u9644\u4EF6",
+      "chat.uploading": "\u6B63\u5728\u4E0A\u4F20...",
+      "chat.attachmentFailed": "\u9644\u4EF6\u53D1\u9001\u5931\u8D25",
+      "chat.downloadFile": "\u4E0B\u8F7D",
+      "chat.fileSizeKB": "{{size}} KB",
+      "chat.fileSizeMB": "{{size}} MB",
+      "editor.heading": "Markdown \u7F16\u8F91\u5668",
+      "editor.newEntry": "\u65B0\u5EFA\u4E00\u6761\u8BB0\u5F55",
+      "editor.editEntry": "\u7F16\u8F91\u8BB0\u5F55",
+      "editor.publicPreview": "\u516C\u5F00\u6587\u6863\u53EA\u8BFB\u9884\u89C8",
+      "editor.backToDashboard": "\u8FD4\u56DE\u63A7\u5236\u53F0",
+      "editor.titlePlaceholder": "\u6807\u9898",
+      "editor.save": "\u4FDD\u5B58",
+      "editor.publicLabel": "\u516C\u5F00\u53EF\u89C1\uFF08\u5176\u4ED6\u7528\u6237\u53EF\u67E5\u770B\uFF0C\u4F46\u4E0D\u80FD\u7F16\u8F91\uFF09",
+      "editor.previewBadge": "\u9884\u89C8\uFF08\u539F\u6587\uFF09",
+      "editor.noContent": "\u6682\u65E0\u5185\u5BB9",
+      "editor.contentPlaceholder": "\u5728\u8FD9\u91CC\u8F93\u5165 Markdown \u5185\u5BB9...",
+      "editor.publicByDefault": "\u9ED8\u8BA4\u4EC5\u81EA\u5DF1\u53EF\u89C1\u3002",
+      "editor.publicReadOnly": "\u5F53\u524D\u662F\u516C\u5F00\u53EA\u8BFB\u6587\u6863\uFF1A{{url}}",
+      "editor.readOnly": "\u5F53\u524D\u6587\u6863\u4E3A\u53EA\u8BFB\uFF0C\u53EA\u6709\u4F5C\u8005\u53EF\u4EE5\u7F16\u8F91\u3002",
+      "editor.publicUrl": "\u5176\u4ED6\u7528\u6237\u53EF\u901A\u8FC7 {{url}} \u67E5\u770B\u6B64\u6587\u6863\u3002",
+      "editor.publicAfterSave": "\u4FDD\u5B58\u540E\u4F1A\u751F\u6210\u516C\u5F00\u8BBF\u95EE\u94FE\u63A5\uFF0C\u5176\u4ED6\u7528\u6237\u53EF\u67E5\u770B\u4F46\u4E0D\u80FD\u7F16\u8F91\u3002",
+      "editor.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u8BB0\u5F55",
+      "editor.readingPublic": "\u4F60\u6B63\u5728\u67E5\u770B\u516C\u5F00\u6587\u6863\uFF0C\u53EA\u80FD\u9605\u8BFB\uFF0C\u4E0D\u80FD\u7F16\u8F91\u3002",
+      "editor.titleContentRequired": "\u6807\u9898\u548C\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A",
+      "editor.updateSuccess": "\u66F4\u65B0\u6210\u529F",
+      "editor.saveSuccess": "\u4FDD\u5B58\u6210\u529F\uFF08ID: {{id}}\uFF09",
+      "profile.title": "\u7528\u6237 Profile",
+      "profile.loading": "\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u8D44\u6599...",
+      "profile.backToPosts": "\u5E16\u5B50",
+      "profile.backToChat": "\u79C1\u804A",
+      "profile.backToDashboard": "\u63A7\u5236\u53F0",
+      "profile.myProfile": "\u6211\u7684\u8D44\u6599",
+      "profile.userProfile": "\u7528\u6237\u8D44\u6599",
+      "profile.email": "\u90AE\u7BB1\uFF1A",
+      "profile.userId": "\u7528\u6237 ID\uFF1A{{id}}",
+      "profile.joinedAt": "\u52A0\u5165\u65F6\u95F4\uFF1A{{time}}",
+      "profile.bio": "\u81EA\u6211\u4ECB\u7ECD",
+      "profile.personalBio": "\u4E2A\u4EBA\u4ECB\u7ECD",
+      "profile.bioPlaceholder": "\u4ECB\u7ECD\u4E00\u4E0B\u81EA\u5DF1\u64C5\u957F\u4EC0\u4E48\u3001\u505A\u8FC7\u54EA\u4E9B\u4EFB\u52A1\u3001\u53EF\u670D\u52A1\u7684\u65F6\u95F4\u6BB5...",
+      "profile.avatar": "\u5934\u50CF",
+      "profile.emailVerificationStatus": "\u90AE\u7BB1\u9A8C\u8BC1\u72B6\u6001",
+      "profile.emailVerified": "\u5DF2\u9A8C\u8BC1",
+      "profile.emailUnverified": "\u672A\u9A8C\u8BC1",
+      "profile.sendVerificationEmail": "\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6",
+      "profile.sendingVerificationEmail": "\u6B63\u5728\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6...",
+      "profile.verificationEmailSent": "\u9A8C\u8BC1\u90AE\u4EF6\u5DF2\u53D1\u9001",
+      "profile.emailVerificationSendFailed": "\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6\u5931\u8D25",
+      "profile.emailUnavailable": "\u6682\u65E0\u90AE\u7BB1\u5730\u5740",
+      "profile.saveProfile": "\u4FDD\u5B58\u8D44\u6599",
+      "profile.saving": "\u6B63\u5728\u4FDD\u5B58...",
+      "profile.saveFailed": "\u4FDD\u5B58\u5931\u8D25",
+      "profile.avatarUploadFailed": "\u5934\u50CF\u4E0A\u4F20\u5931\u8D25",
+      "profile.profileUpdated": "\u8D44\u6599\u5DF2\u66F4\u65B0",
+      "profile.noBio": "\u8FD9\u4E2A\u7528\u6237\u6682\u65F6\u8FD8\u6CA1\u6709\u586B\u5199\u81EA\u6211\u4ECB\u7ECD\u3002",
+      "profile.writeRecommendation": "\u5199 Recommendation",
+      "profile.recommendationPlaceholder": "\u5199\u4E0B\u4F60\u548C TA \u5408\u4F5C\u8FC7\u7684\u611F\u53D7\u3001\u53EF\u9760\u6027\u3001\u6267\u884C\u529B\u7B49...",
+      "profile.submitRecommendation": "\u63D0\u4EA4 Recommendation",
+      "profile.recommendationRequired": "\u8BF7\u8F93\u5165 Recommendation \u5185\u5BB9",
+      "profile.submitting": "\u6B63\u5728\u63D0\u4EA4...",
+      "profile.submitFailed": "\u63D0\u4EA4\u5931\u8D25",
+      "profile.recommendationSaved": "Recommendation \u5DF2\u4FDD\u5B58",
+      "profile.noRecommendations": "\u8FD8\u6CA1\u6709 Recommendation",
+      "profile.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u7528\u6237\u8D44\u6599",
+      "profile.completeProfile": "\u5B8C\u5584\u4F60\u7684\u5934\u50CF\u548C\u81EA\u6211\u4ECB\u7ECD\uFF0C\u8BA9\u4EFB\u52A1\u53D1\u5E03\u8005\u66F4\u5BB9\u6613\u9009\u62E9\u4F60\u3002",
+      "profile.viewingProfile": "\u67E5\u770B {{username}} \u7684\u8D44\u6599\u4E0E Recommendation\u3002",
+      "profile.recommendation": "Recommendation",
+      "profile.sendMessage": "\u53D1\u79C1\u4FE1",
+      "profile.blockUser": "\u62C9\u9ED1",
+      "profile.unblockUser": "\u53D6\u6D88\u62C9\u9ED1",
+      "profile.youBlockedUser": "\u4F60\u5DF2\u62C9\u9ED1\u8BE5\u7528\u6237\u3002\u5386\u53F2\u6D88\u606F\u4ECD\u53EF\u67E5\u770B\uFF0C\u4F46\u4E0D\u80FD\u7EE7\u7EED\u53D1\u79C1\u4FE1\u3002",
+      "profile.userBlockedYou": "\u5BF9\u65B9\u5DF2\u62C9\u9ED1\u4F60\u3002\u5386\u53F2\u6D88\u606F\u4ECD\u53EF\u67E5\u770B\uFF0C\u4F46\u4E0D\u80FD\u7EE7\u7EED\u53D1\u79C1\u4FE1\u3002",
+      "profile.blockActionFailed": "\u62C9\u9ED1\u64CD\u4F5C\u5931\u8D25",
+      "profile.recommendationBlockedByYou": "\u4F60\u5DF2\u62C9\u9ED1\u8BE5\u7528\u6237\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u63D0\u4EA4 Recommendation\u3002",
+      "profile.recommendationBlockedByOther": "\u5BF9\u65B9\u5DF2\u62C9\u9ED1\u4F60\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u63D0\u4EA4 Recommendation\u3002",
+      "profile.followUser": "\u5173\u6CE8",
+      "profile.unfollowUser": "\u53D6\u6D88\u5173\u6CE8",
+      "profile.followActionFailed": "\u5173\u6CE8\u64CD\u4F5C\u5931\u8D25",
+      "profile.followersLabel": "\u7C89\u4E1D",
+      "profile.followingLabel": "\u5173\u6CE8\u4E2D",
+      "profile.followsYou": "Ta \u6B63\u5728\u5173\u6CE8\u4F60",
+      "profile.followSection": "\u5173\u6CE8\u4E0E\u7C89\u4E1D",
+      "profile.tabFollowers": "\u7C89\u4E1D\uFF08{{count}}\uFF09",
+      "profile.tabFollowing": "\u5173\u6CE8\uFF08{{count}}\uFF09",
+      "profile.noFollowers": "\u8FD8\u6CA1\u6709\u7C89\u4E1D\u3002",
+      "profile.noFollowing": "\u8FD8\u6CA1\u6709\u5173\u6CE8\u4EFB\u4F55\u4EBA\u3002",
+      "profile.loadingFollowList": "\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u5217\u8868...",
+      "profile.followListLoadFailed": "\u5217\u8868\u52A0\u8F7D\u5931\u8D25",
+      "posts.title": "\u5E16\u5B50\u5E7F\u573A",
+      "posts.loading": "\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u4FE1\u606F...",
+      "posts.backToDashboard": "\u8FD4\u56DE\u63A7\u5236\u53F0",
+      "posts.publicMarkdowns": "\u516C\u5F00 Markdown",
+      "posts.newPost": "\u53D1\u5E16",
+      "posts.filterBadge": "\u5E16\u5B50\u7B5B\u9009",
+      "posts.sectionPosts": "\u677F\u5757\u5E16\u5B50",
+      "posts.gigTasks": "\u96F6\u5DE5\u4EFB\u52A1",
+      "posts.regularPosts": "\u666E\u901A\u5E16\u5B50",
+      "posts.latestPosts": "\u6700\u65B0\u5E16\u5B50",
+      "posts.filterLatest": "\u6700\u65B0\u5E16\u5B50",
+      "posts.filterRegular": "\u666E\u901A\u5E16\u5B50",
+      "posts.filterGigs": "\u96F6\u5DE5",
+      "posts.filterFollowing": "\u5173\u6CE8",
+      "posts.followingPosts": "\u5173\u6CE8\u7684\u7528\u6237\u52A8\u6001",
+      "posts.noFollowingPosts": "\u4F60\u5173\u6CE8\u7684\u7528\u6237\u6682\u65F6\u8FD8\u6CA1\u6709\u53D1\u5E16\u3002",
+      "posts.welcome": "\u4F60\u597D\uFF0C{{username}}\uFF0C\u53D1\u5E03\u4F60\u7684\u7B2C\u4E00\u7BC7\u5E16\u5B50\u5427\u3002",
+      "posts.videoNotSupported": "\u4F60\u7684\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 video \u6807\u7B7E",
+      "posts.gigTaskBadge": "\u96F6\u5DE5\u4EFB\u52A1",
+      "posts.taskTime": "\u65F6\u95F4\uFF1A{{start}} - {{end}}",
+      "posts.workingHours": "Working hours\uFF1A{{hours}}",
+      "posts.applyDeadline": "\u7533\u8BF7\u622A\u6B62\uFF1A{{deadline}}",
+      "posts.applicantCount": "\u7533\u8BF7\u6570\uFF1A{{count}}",
+      "posts.liked": "\u5DF2\u70B9\u8D5E",
+      "posts.like": "\u70B9\u8D5E",
+      "posts.viewDetails": "\u67E5\u770B\u8BE6\u60C5",
+      "posts.deletePost": "\u5220\u9664\u5E16\u5B50",
+      "posts.confirmDelete": "\u786E\u8BA4\u5220\u9664\u8FD9\u6761\u5E16\u5B50\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002",
+      "posts.noPosts": "\u6682\u65E0\u5E16\u5B50",
+      "posts.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u5E16\u5B50",
+      "posts.loadMore": "\u52A0\u8F7D\u66F4\u591A",
+      "post.title": "\u5E16\u5B50\u8BE6\u60C5",
+      "post.welcome": "\u4F60\u597D\uFF0C{{username}}",
+      "post.loading": "\u6B63\u5728\u52A0\u8F7D...",
+      "post.backToPosts": "\u8FD4\u56DE\u5E16\u5B50\u5E7F\u573A",
+      "post.postTypeStan": "\u666E\u901A\u5E16\u5B50",
+      "post.postTypeTask": "\u96F6\u5DE5\u4EFB\u52A1",
+      "post.tagSection": "\u677F\u5757 / Tag",
+      "post.noSection": "\u4E0D\u9009\u62E9\u677F\u5757",
+      "post.contentLabel": "\u5185\u5BB9",
+      "post.contentPlaceholder": "\u5206\u4EAB\u4F60\u7684\u60F3\u6CD5...",
+      "post.taskLocationLabel": "\u5730\u7406\u4F4D\u7F6E\uFF08\u53EF\u9009\uFF09",
+      "post.taskLocationPlaceholder": "\u5982\uFF1A\u4E0A\u6D77\u5F90\u6C47 / \u8FDC\u7A0B",
+      "post.taskStartLabel": "\u5F00\u59CB\u65F6\u95F4",
+      "post.taskEndLabel": "\u7ED3\u675F\u65F6\u95F4",
+      "post.workingHoursLabel": "Working hours",
+      "post.workingHoursPlaceholder": "\u5982\uFF1A4h / 9:00-13:00 / \u5468\u672B\u4E24\u5929",
+      "post.applyDeadlineLabel": "\u7533\u8BF7\u622A\u6B62\u65F6\u95F4",
+      "post.imagesLabel": "\u56FE\u7247\uFF08\u53EF\u9009\uFF0C\u652F\u6301\u591A\u9009\uFF09",
+      "post.videosLabel": "\u89C6\u9891\uFF08\u53EF\u9009\uFF0C\u652F\u6301\u591A\u9009\uFF09",
+      "post.publish": "\u53D1\u5E03",
+      "post.newPostBadge": "\u53D1\u5E03\u65B0\u5E16",
+      "post.loadingReplies": "\u52A0\u8F7D\u4E2D...",
+      "post.repliesLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u56DE\u590D",
+      "post.noReplies": "\u6682\u65E0\u56DE\u590D",
+      "post.timeRange": "\u65F6\u95F4\u8303\u56F4\uFF1A",
+      "post.applyDeadline": "\u7533\u8BF7\u622A\u6B62\uFF1A",
+      "post.location": "\u5730\u7406\u4F4D\u7F6E\uFF1A",
+      "post.noLocation": "\u672A\u9650\u5236",
+      "post.status": "\u7533\u8BF7\u72B6\u6001\uFF1A",
+      "post.statusOpen": "\u5F00\u653E\u4E2D",
+      "post.statusClosed": "\u5DF2\u5173\u95ED",
+      "post.applicantCount": "\u5F53\u524D\u7533\u8BF7\u6570\uFF1A",
+      "post.selectedApplicant": "\u5DF2\u9009\u5019\u9009\u4EBA\uFF1A",
+      "post.withdrawApplication": "\u64A4\u9500\u7533\u8BF7",
+      "post.applyTask": "\u7533\u8BF7\u4EFB\u52A1",
+      "post.closeApplications": "\u5173\u95ED\u7533\u8BF7",
+      "post.viewApplicants": "\u67E5\u770B\u7533\u8BF7\u8005",
+      "post.taskResults": "\u4EFB\u52A1\u6210\u679C",
+      "post.resultDescription": "\u6210\u679C\u8BF4\u660E",
+      "post.resultDescriptionPlaceholder": "\u8865\u5145\u8BF4\u660E\u672C\u6B21\u5B8C\u6210\u5185\u5BB9...",
+      "post.resultImages": "\u6210\u679C\u56FE\u7247",
+      "post.resultVideos": "\u6210\u679C\u89C6\u9891",
+      "post.submitResult": "\u63D0\u4EA4\u4EFB\u52A1\u6210\u679C",
+      "post.replyPlaceholder": "\u5199\u4E0B\u4F60\u7684\u56DE\u590D...",
+      "post.prevImage": "\u4E0A\u4E00\u5F20",
+      "post.nextImage": "\u4E0B\u4E00\u5F20",
+      "post.loadingApplicants": "\u52A0\u8F7D\u7533\u8BF7\u8005\u4E2D...",
+      "post.applicantsLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u7533\u8BF7\u8005",
+      "post.noApplicants": "\u6682\u65E0\u7533\u8BF7\u8005",
+      "post.invitationDefault": "\u4F60\u597D\uFF0C\u4F60\u5DF2\u88AB\u9009\u4E3A\u8BE5\u96F6\u5DE5\u4EFB\u52A1\u7684\u5019\u9009\u4EBA\u3002\n\n\u4EFB\u52A1\u5185\u5BB9\uFF1A{{content}}\n\u5982\u679C\u4F60\u786E\u8BA4\u53C2\u4E0E\uFF0C\u8BF7\u76F4\u63A5\u56DE\u590D\u3002",
+      "post.confirmAndMessage": "\u786E\u8BA4\u5E76\u53D1\u9001\u79C1\u4FE1",
+      "post.submittingResult": "\u6B63\u5728\u63D0\u4EA4\u4EFB\u52A1\u6210\u679C...",
+      "post.resultSubmitted": "\u4EFB\u52A1\u6210\u679C\u5DF2\u63D0\u4EA4",
+      "post.loadingResults": "\u52A0\u8F7D\u4EFB\u52A1\u6210\u679C\u4E2D...",
+      "post.resultsLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u4EFB\u52A1\u6210\u679C",
+      "post.noResults": "\u6682\u672A\u63D0\u4EA4\u4EFB\u52A1\u6210\u679C",
+      "post.invalidPost": "\u65E0\u6548\u7684\u5E16\u5B50",
+      "post.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u5E16\u5B50",
+      "post.notFound": "\u672A\u627E\u5230\u5E16\u5B50",
+      "post.contentRequired": "\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A",
+      "post.taskInfoRequired": "\u8BF7\u586B\u5199\u5B8C\u6574\u7684\u4EFB\u52A1\u4FE1\u606F",
+      "post.publishing": "\u6B63\u5728\u53D1\u5E03...",
+      "post.publishFailed": "\u53D1\u5E03\u5931\u8D25",
+      "post.publishSuccess": "\u53D1\u5E03\u6210\u529F",
+      "post.publishFailedRetry": "\u53D1\u5E03\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5",
+      "post.liked": "\u5DF2\u70B9\u8D5E",
+      "post.like": "\u70B9\u8D5E",
+      "post.deletePost": "\u5220\u9664\u5E16\u5B50",
+      "post.confirmDelete": "\u786E\u8BA4\u5220\u9664\u8FD9\u6761\u5E16\u5B50\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002",
+      "post.videoNotSupported": "\u4F60\u7684\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 video \u6807\u7B7E",
+      "post.gigTaskBadge": "\u96F6\u5DE5\u4EFB\u52A1",
+      "post.workingHours": "Working hours\uFF1A{{hours}}",
+      "post.sendReply": "\u53D1\u9001",
+      "post.assistToggle": "AI \u8F85\u52A9",
+      "post.assistBot": "Bot",
+      "post.assistLLM": "\u6A21\u578B\uFF08\u53EF\u9009\uFF09",
+      "post.assistDefaultLLM": "\u8DDF\u968F Bot \u9ED8\u8BA4\u914D\u7F6E",
+      "post.assistNoBot": "\u6682\u65E0\u53EF\u7528 Bot",
+      "post.assistTopic": "\u9009\u9898 / \u8981\u70B9",
+      "post.assistTopicPlaceholder": "\u53EF\u9009\u7684\u9009\u9898\uFF0C\u5E2E\u52A9 Bot \u8D77\u8349",
+      "post.assistInstruction": "\u98CE\u683C\u8981\u6C42\uFF08\u53EF\u9009\uFF09",
+      "post.assistInstructionPlaceholder": "\u4F8B\u5982\uFF1A\u53E3\u543B\u8F7B\u677E\uFF0C\u63A7\u5236\u5728 200 \u5B57\u4EE5\u5185",
+      "post.assistRun": "\u751F\u6210\u8349\u7A3F",
+      "post.assistApply": "\u5E94\u7528\u5230\u6B63\u6587",
+      "post.assistBotRequired": "\u8BF7\u5148\u9009\u62E9\u4E00\u4E2A Bot",
+      "post.assistTopicOrDraftRequired": "\u8BF7\u5148\u586B\u5199\u9009\u9898\u6216\u8349\u7A3F",
+      "post.assistRunning": "\u6B63\u5728\u751F\u6210\u8349\u7A3F\uFF0C\u8BF7\u7A0D\u5019...",
+      "post.assistFailed": "\u8349\u7A3F\u751F\u6210\u5931\u8D25",
+      "post.assistDone": "\u8349\u7A3F\u5DF2\u751F\u6210",
+      "post.assistApplied": "\u5DF2\u5E94\u7528\u5230\u6B63\u6587",
+      "post.replyAssistToggle": "AI \u8F85\u52A9\u56DE\u590D",
+      "post.replyAssistRun": "\u751F\u6210\u8BC4\u8BBA",
+      "post.replyAssistApply": "\u5E94\u7528\u5230\u56DE\u590D",
+      "markdowns.title": "\u516C\u5F00 Markdown",
+      "markdowns.browse": "\u6D4F\u89C8\u6240\u6709\u516C\u5F00\u53D1\u5E03\u7684\u6587\u6863",
+      "markdowns.backToDashboard": "\u8FD4\u56DE\u63A7\u5236\u53F0",
+      "markdowns.latestBadge": "\u6700\u65B0\u516C\u5F00\u6587\u6863",
+      "markdowns.loadMore": "\u52A0\u8F7D\u66F4\u591A",
+      "markdowns.clickToView": "\u70B9\u51FB\u8FDB\u5165\u53EA\u8BFB\u9875\u9762\u67E5\u770B\u5B8C\u6574 Markdown",
+      "markdowns.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u516C\u5F00 Markdown",
+      "markdowns.noPosts": "\u6682\u65E0\u516C\u5F00 Markdown",
+      "markdown.title": "\u516C\u5F00 Markdown",
+      "markdown.loginToEdit": "\u767B\u5F55\u540E\u7F16\u8F91\u81EA\u5DF1\u7684\u6587\u6863",
+      "markdown.loading": "\u6B63\u5728\u52A0\u8F7D\u5185\u5BB9...",
+      "markdown.publicReadOnly": "\u516C\u5F00\u53EA\u8BFB\u6587\u6863",
+      "markdown.readOnlyPreview": "\u53EA\u8BFB\u9884\u89C8",
+      "markdown.authReadOnlyPreview": "\u767B\u5F55\u6001\u53EA\u8BFB\u9884\u89C8",
+      "markdown.missingId": "\u7F3A\u5C11\u6587\u6863 ID",
+      "markdown.loadContentFailed": "\u65E0\u6CD5\u52A0\u8F7D\u5185\u5BB9",
+      "markdown.loadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u6587\u6863",
+      "markdown.notFound": "\u672A\u627E\u5230\u516C\u5F00\u6587\u6863",
+      "markdown.loadError": "\u52A0\u8F7D\u5931\u8D25",
+      "dashboard.title": "\u63A7\u5236\u53F0",
+      "dashboard.loading": "\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u4FE1\u606F...",
+      "dashboard.drawerToggle": "\u8BB0\u5F55\u5217\u8868",
+      "dashboard.profileSettings": "Profile / \u8BBE\u7F6E",
+      "dashboard.newMarkdown": "\u65B0\u5EFA Markdown",
+      "dashboard.publicMarkdowns": "\u516C\u5F00 Markdown",
+      "dashboard.posts": "\u5E16\u5B50",
+      "dashboard.markdownEntries": "Markdown \u8BB0\u5F55",
+      "dashboard.drawerHelp": "\u5FEB\u901F\u8FDB\u5165\u79C1\u804A\u4F1A\u8BDD\u5217\u8868\u6216\u8054\u7CFB AI \u52A9\u7406\u3002",
+      "dashboard.privateChat": "\u79C1\u804A",
+      "dashboard.aiAssistant": "AI \u52A9\u7406",
+      "dashboard.newTag": "\u65B0\u5EFA Tag",
+      "dashboard.loadMore": "\u52A0\u8F7D\u66F4\u591A",
+      "dashboard.userAvatar": "\u7528\u6237\u5934\u50CF",
+      "dashboard.loadingUser": "\u52A0\u8F7D\u4E2D...",
+      "dashboard.profile": "Profile",
+      "dashboard.settingsCenter": "\u8BBE\u7F6E\u4E2D\u5FC3",
+      "dashboard.logout": "\u9000\u51FA\u767B\u5F55",
+      "dashboard.contentPreview": "\u5185\u5BB9\u9884\u89C8",
+      "dashboard.selectEntry": "\u8BF7\u9009\u62E9\u4FA7\u8FB9\u680F\u4E2D\u7684\u8BB0\u5F55",
+      "dashboard.editEntry": "\u7F16\u8F91",
+      "dashboard.deleteEntry": "\u5220\u9664",
+      "dashboard.tagModalAdd": "\u6DFB\u52A0 Tag",
+      "dashboard.tagNameLabel": "\u540D\u79F0",
+      "dashboard.tagNamePlaceholder": "\u4F8B\u5982\uFF1AGo\u8BED\u8A00",
+      "dashboard.tagSlugLabel": "\u6807\u8BC6\uFF08\u53EF\u9009\uFF09",
+      "dashboard.tagSlugPlaceholder": "\u4F8B\u5982\uFF1Agolang",
+      "dashboard.tagDescLabel": "\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09",
+      "dashboard.tagDescPlaceholder": "\u7B80\u77ED\u63CF\u8FF0",
+      "dashboard.tagOrderLabel": "\u6392\u5E8F\uFF08\u53EF\u9009\uFF09",
+      "dashboard.tagCreateBtn": "\u521B\u5EFA",
+      "dashboard.settingsCenterTitle": "\u8BBE\u7F6E\u4E2D\u5FC3",
+      "dashboard.navProfile": "Profile",
+      "dashboard.navPersonalization": "\u4E2A\u6027\u5316",
+      "dashboard.navSettings": "\u8BBE\u7F6E",
+      "dashboard.navSystem": "\u7CFB\u7EDF\u4FE1\u606F",
+      "dashboard.navBots": "Bot \u7BA1\u7406",
+      "dashboard.navSite": "\u7AD9\u70B9\u7BA1\u7406",
+      "dashboard.systemTitle": "\u7CFB\u7EDF\u4FE1\u606F",
+      "dashboard.systemLead": "\u67E5\u770B\u5F53\u524D\u5B9E\u4F8B\u7684\u7248\u672C\u3001\u7CFB\u7EDF\u73AF\u5883\u4E0E\u7A0B\u5E8F\u6240\u5728\u5206\u533A\u7684\u5269\u4F59\u5BB9\u91CF\u3002",
+      "dashboard.systemRunInfo": "\u8FD0\u884C\u4FE1\u606F",
+      "dashboard.systemRunInfoDesc": "\u67E5\u770B\u5F53\u524D\u5B9E\u4F8B\u7684\u7248\u672C\u3001\u7CFB\u7EDF\u73AF\u5883\u548C\u7A0B\u5E8F\u6240\u5728\u5206\u533A\u5269\u4F59\u5BB9\u91CF\u3002",
+      "dashboard.systemCpuArch": "CPU \u67B6\u6784",
+      "dashboard.systemDiskCapacity": "\u8FD0\u884C\u5206\u533A\u5269\u4F59\u5BB9\u91CF",
+      "dashboard.preferencesBadge": "\u504F\u597D\u4E0E\u7BA1\u7406",
+      "dashboard.personalCenter": "\u4E2A\u4EBA\u4E2D\u5FC3",
+      "dashboard.profileLead": "\u7EF4\u62A4\u5934\u50CF\u3001\u767B\u5F55\u65B9\u5F0F\u548C\u6700\u8FD1\u767B\u5F55\u8BB0\u5F55\uFF0C\u628A Profile \u4E0E\u8D26\u6237\u76F8\u5173\u4FE1\u606F\u96C6\u4E2D\u6536\u597D\u3002",
+      "dashboard.viewPublicProfile": "\u67E5\u770B\u516C\u5F00 Profile",
+      "dashboard.changeAvatar": "\u66F4\u6362\u5934\u50CF",
+      "dashboard.zoomLabel": "\u7F29\u653E",
+      "dashboard.saveAvatar": "\u4FDD\u5B58\u5934\u50CF",
+      "dashboard.cancelAvatar": "\u53D6\u6D88",
+      "dashboard.avatarHint": "\u652F\u6301\u4E0A\u4F20\u4E0E\u7B80\u5355\u88C1\u5207\u3002",
+      "dashboard.securityTitle": "\u8D26\u6237\u5B89\u5168",
+      "dashboard.emailVerificationTitle": "\u90AE\u7BB1\u9A8C\u8BC1",
+      "dashboard.emailVerificationText": "\u9A8C\u8BC1\u4F60\u7684\u90AE\u7BB1\u5730\u5740\uFF0C\u4FBF\u4E8E\u540E\u7EED\u8D26\u53F7\u627E\u56DE\u548C\u5B89\u5168\u6D41\u7A0B\u63A5\u5165\u3002",
+      "dashboard.sendVerificationEmail": "\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6",
+      "dashboard.sendingVerificationEmail": "\u6B63\u5728\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6...",
+      "dashboard.verificationEmailSent": "\u9A8C\u8BC1\u90AE\u4EF6\u5DF2\u53D1\u9001",
+      "dashboard.emailVerificationSendFailed": "\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6\u5931\u8D25",
+      "dashboard.emailVerifiedState": "\u5DF2\u9A8C\u8BC1",
+      "dashboard.emailUnverifiedState": "\u672A\u9A8C\u8BC1",
+      "dashboard.emailUnavailable": "\u6682\u65E0\u90AE\u7BB1\u5730\u5740",
+      "dashboard.securityText": "\u7ED1\u5B9A Passkey \u540E\u53EF\u4F7F\u7528\u6307\u7EB9\u6216\u4EBA\u8138\u5FEB\u901F\u767B\u5F55\u3002",
+      "dashboard.bindPasskey": "\u7ED1\u5B9A Passkey",
+      "dashboard.recentLogins": "\u6700\u8FD1\u767B\u5F55",
+      "dashboard.recentLoginsText": "\u67E5\u770B\u6700\u8FD1\u767B\u5F55\u8BBE\u5907\u3001IP \u548C\u4F4D\u7F6E\u8BB0\u5F55\u3002",
+      "dashboard.interfaceStyle": "\u754C\u9762\u6837\u5F0F",
+      "dashboard.interfaceStyleText": "\u5728\u9ED8\u8BA4\u98CE\u683C\u548C\u9ED1\u767D\u98CE\u683C\u4E4B\u95F4\u5207\u6362\uFF0C\u7ACB\u5373\u9884\u89C8\u9875\u9762\u53D8\u5316\u3002",
+      "dashboard.themeDefault": "\u9ED8\u8BA4",
+      "dashboard.themeMonochrome": "\u9ED1\u767D",
+      "dashboard.switchToMonochrome": "\u5207\u6362\u5230\u9ED1\u767D\u6837\u5F0F",
+      "dashboard.switchToDefault": "\u5207\u6362\u5230\u9ED8\u8BA4\u6837\u5F0F",
+      "dashboard.browsingHabits": "\u5185\u5BB9\u6D4F\u89C8\u4E60\u60EF",
+      "dashboard.browsingHabitsText": "\u5F53\u524D\u4FDD\u6301\u6E05\u723D\u3001\u8F7B\u91CF\u7684\u5DE5\u4F5C\u53F0\u5E03\u5C40\uFF0C\u540E\u7EED\u53EF\u7EE7\u7EED\u6269\u5C55\u66F4\u591A\u4E2A\u6027\u5316\u9009\u9879\u3002",
+      "dashboard.llmConfigNameLabel": "\u914D\u7F6E\u540D\u79F0",
+      "dashboard.llmConfigNamePlaceholder": "\u4F8B\u5982\uFF1AOpenAI \u751F\u4EA7\u914D\u7F6E",
+      "dashboard.llmConfigApiKeyLabel": "API Key",
+      "dashboard.llmConfigApiKeyPlaceholder": "\u65B0\u589E\u65F6\u5EFA\u8BAE\u586B\u5199\uFF0C\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u6301\u539F\u503C",
+      "dashboard.llmConfigSystemPromptLabel": "\u6D4B\u8BD5 Prompt\uFF08\u53EF\u9009\uFF09",
+      "dashboard.llmConfigSystemPromptPlaceholder": "\u4EC5\u7528\u4E8E\u6D4B\u8BD5\u914D\u7F6E\u8FDE\u901A\u6027\uFF0C\u4E0D\u4F5C\u4E3A Bot \u8FD0\u884C\u65F6 Prompt",
+      "dashboard.llmConfigSharedLabel": "\u5171\u4EAB\u7ED9\u5176\u4ED6\u7528\u6237\u4F7F\u7528\u8FD9\u4E2A LLM Config",
+      "dashboard.llmConfigClear": "\u6E05\u7A7A",
+      "dashboard.llmConfigTest": "\u6D4B\u8BD5\u914D\u7F6E",
+      "dashboard.llmConfigSave": "\u4FDD\u5B58\u914D\u7F6E",
+      "dashboard.botHelp": "\u6BCF\u4E2A Bot \u90FD\u662F\u4E00\u4E2A\u53EF\u79C1\u804A\u7684\u7528\u6237\u3002\u8FD9\u91CC\u7EF4\u62A4 Bot \u9ED8\u8BA4\u6A21\u578B\u914D\u7F6E\u548C Bot Prompt\u3002",
+      "dashboard.botNameLabel": "Bot \u540D\u79F0",
+      "dashboard.botNamePlaceholder": "\u4F8B\u5982\uFF1A\u7FFB\u8BD1\u52A9\u624B",
+      "dashboard.botConfigLabel": "\u7ED1\u5B9A\u914D\u7F6E",
+      "dashboard.botDescriptionLabel": "Bot \u7B80\u4ECB",
+      "dashboard.botDescriptionPlaceholder": "\u544A\u8BC9\u7528\u6237\u8FD9\u4E2A Bot \u64C5\u957F\u505A\u4EC0\u4E48",
+      "dashboard.botSystemPromptLabel": "Bot \u914D\u7F6E Prompt",
+      "dashboard.botSystemPromptPlaceholder": "\u5B9A\u4E49\u8FD9\u4E2A Bot \u7684\u4EBA\u8BBE\u3001\u56DE\u7B54\u98CE\u683C\u3001\u8FB9\u754C\u548C\u884C\u4E3A\u89C4\u5219",
+      "dashboard.botClear": "\u6E05\u7A7A",
+      "dashboard.botSave": "\u4FDD\u5B58 Bot",
+      "dashboard.siteManagementBadge": "\u7AD9\u70B9\u7BA1\u7406",
+      "dashboard.siteHelp": "\u5728\u8FD9\u91CC\u7EF4\u62A4\u7AD9\u70B9 logo\u3001intro\u3001APNs Key / .p8\uFF0C\u4EE5\u53CA Tag \u7BA1\u7406\u3002",
+      "dashboard.siteIconLabel": "\u7AD9\u70B9\u56FE\u6807",
+      "dashboard.siteIconHint": "\u5EFA\u8BAE\u4F7F\u7528\u65B9\u5F62\u56FE\u6807\uFF0C\u4E0A\u4F20\u540E\u4F1A\u7ACB\u5373\u751F\u6548\u3002",
+      "dashboard.siteNameLabel": "\u7AD9\u70B9\u540D\u79F0",
+      "dashboard.siteNamePlaceholder": "\u8F93\u5165\u7AD9\u70B9\u540D\u79F0",
+      "dashboard.siteDescriptionLabel": "\u7AD9\u70B9\u4ECB\u7ECD",
+      "dashboard.siteDescriptionPlaceholder": "\u4E00\u53E5\u8BDD\u4ECB\u7ECD\u4F60\u7684\u7AD9\u70B9",
+      "dashboard.registrationInviteRequiredLabel": "\u6CE8\u518C\u9700\u8981\u9080\u8BF7\u7801",
+      "dashboard.registrationInviteRequiredHint": "\u5F00\u542F\u540E\uFF0C\u65B0\u7528\u6237\u6CE8\u518C\u5FC5\u987B\u586B\u5199\u6709\u6548\u9080\u8BF7\u7801\u3002",
+      "dashboard.saveSite": "\u4FDD\u5B58\u7AD9\u70B9\u4FE1\u606F",
+      "dashboard.inviteCodeBadge": "\u9080\u8BF7\u7801",
+      "dashboard.inviteCodeHelp": "\u4E3A\u65B0\u7528\u6237\u6CE8\u518C\u751F\u6210\u4E00\u6B21\u6027\u9080\u8BF7\u7801\u3002",
+      "dashboard.generateInviteCode": "\u751F\u6210",
+      "dashboard.noInviteCodes": "\u8FD8\u6CA1\u6709\u9080\u8BF7\u7801\u3002",
+      "dashboard.inviteCodeAvailable": "\u53EF\u7528",
+      "dashboard.inviteCodeUsed": "\u5DF2\u4F7F\u7528",
+      "dashboard.inviteCodeLoadFailed": "\u9080\u8BF7\u7801\u52A0\u8F7D\u5931\u8D25",
+      "dashboard.generatingInviteCode": "\u6B63\u5728\u751F\u6210\u9080\u8BF7\u7801...",
+      "dashboard.inviteCodeGenerateFailed": "\u9080\u8BF7\u7801\u751F\u6210\u5931\u8D25",
+      "dashboard.inviteCodeGenerated": "\u5DF2\u751F\u6210 {{count}} \u4E2A\u9080\u8BF7\u7801",
+      "dashboard.applePushBadge": "APNs Key / .p8",
+      "dashboard.applePushHelp": "\u4E3A\u540E\u7EED APNs \u63A8\u9001\u9884\u5148\u7EF4\u62A4\u5F00\u53D1\u73AF\u5883\u4E0E\u751F\u4EA7\u73AF\u5883 Key\u3002",
+      "dashboard.applePushDevLabel": "\u5F00\u53D1\u73AF\u5883 APNs Key\uFF08.p8\uFF09",
+      "dashboard.applePushProdLabel": "\u751F\u4EA7\u73AF\u5883 APNs Key\uFF08.p8\uFF09",
+      "dashboard.notUploaded": "\u672A\u4E0A\u4F20",
+      "dashboard.deleteDevCert": "\u5220\u9664 dev Key",
+      "dashboard.deleteProdCert": "\u5220\u9664 prod Key",
+      "dashboard.tagManagementBadge": "Tag \u7BA1\u7406",
+      "dashboard.tagManagementHelp": "\u53EF\u65B0\u589E\u3001\u7F16\u8F91\u6216\u5220\u9664\u7AD9\u70B9\u5185\u7684\u5185\u5BB9\u6807\u7B7E\u3002",
+      "dashboard.siteNewTag": "\u65B0\u5EFA Tag",
+      "dashboard.drawerClose": "\u6536\u8D77",
+      "dashboard.quickAccess": "\u5FEB\u6377\u5165\u53E3",
+      "dashboard.modalClose": "\u5173\u95ED",
+      "dashboard.personalizationTitle": "\u4E2A\u6027\u5316",
+      "dashboard.personalizationLead": "\u7BA1\u7406\u754C\u9762\u98CE\u683C\u548C\u4E2A\u4EBA\u504F\u597D\uFF0C\u8BA9\u5DE5\u4F5C\u53F0\u66F4\u8D34\u8FD1\u4F60\u7684\u4F7F\u7528\u4E60\u60EF\u3002",
+      "dashboard.languageTitle": "\u8BED\u8A00",
+      "dashboard.languageText": "\u9009\u62E9\u8FD9\u4E2A\u6D4F\u89C8\u5668\u91CC\u7684\u754C\u9762\u8BED\u8A00\u3002",
+      "dashboard.languageEnglish": "\u82F1\u6587",
+      "dashboard.languageChinese": "\u4E2D\u6587",
+      "dashboard.switchToChinese": "\u5207\u6362\u5230\u4E2D\u6587",
+      "dashboard.switchToEnglish": "\u5207\u6362\u5230\u82F1\u6587",
+      "dashboard.settingsTitle": "\u8BBE\u7F6E",
+      "dashboard.botsManagementTitle": "Bot \u7BA1\u7406",
+      "dashboard.botsLead": "\u5728\u8FD9\u91CC\u7EF4\u62A4 Bot \u7684\u9ED8\u8BA4\u6A21\u578B\u914D\u7F6E\u3001\u7B80\u4ECB\u548C\u4E13\u5C5E Prompt\u3002",
+      "dashboard.siteManagementTitle": "\u7AD9\u70B9\u7BA1\u7406",
+      "dashboard.siteLead": "\u7BA1\u7406\u5458\u53EF\u89C1\u7684\u7AD9\u70B9 logo\u3001intro\u3001APNs Key / .p8 \u548C Tag \u7BA1\u7406\u9879\u3002",
+      "dashboard.unknownLocation": "\u4F4D\u7F6E\u672A\u77E5",
+      "dashboard.loginMethodRegister": "\u6CE8\u518C",
+      "dashboard.loginMethodPassword": "\u5BC6\u7801",
+      "dashboard.certMeta": "\u5F53\u524D\u6587\u4EF6\uFF1A{{filename}} \xB7 \u4E0A\u4F20\u65F6\u95F4\uFF1A{{time}}",
+      "dashboard.noTags": "\u8FD8\u6CA1\u6709 Tag\uFF0C\u5148\u521B\u5EFA\u7B2C\u4E00\u4E2A\u5427\u3002",
+      "dashboard.tagOrder": "\u6392\u5E8F {{order}}",
+      "dashboard.noDescription": "\u6682\u65E0\u63CF\u8FF0",
+      "dashboard.saveConfigBtn": "\u4FDD\u5B58\u914D\u7F6E",
+      "dashboard.saveBotBtn": "\u4FDD\u5B58 Bot",
+      "dashboard.noLLMConfigs": "\u8FD8\u6CA1\u6709 LLM Config\uFF0C\u5148\u521B\u5EFA\u4E00\u4E2A\u5427\u3002",
+      "dashboard.keySaved": "Key \u5DF2\u4FDD\u5B58",
+      "dashboard.noKey": "\u65E0 Key",
+      "dashboard.shared": "\u5171\u4EAB",
+      "dashboard.private": "\u79C1\u6709",
+      "dashboard.noSystemPrompt": "\u672A\u8BBE\u7F6E System Prompt",
+      "dashboard.createLLMConfigFirst": "\u8BF7\u5148\u521B\u5EFA LLM Config",
+      "dashboard.noBots": "\u8FD8\u6CA1\u6709 Bot\uFF0C\u521B\u5EFA\u540E\u5C31\u80FD\u76F4\u63A5\u79C1\u804A\u4F7F\u7528\u3002",
+      "dashboard.botUserId": "\u7528\u6237 ID\uFF1A{{id}}",
+      "dashboard.botPromptPreview": "Bot Prompt\uFF1A{{preview}}...",
+      "dashboard.noBotPrompt": "\u672A\u914D\u7F6E Bot Prompt",
+      "dashboard.chat": "\u5BF9\u8BDD",
+      "dashboard.loginHistoryLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u767B\u5F55\u8BB0\u5F55",
+      "dashboard.noLoginHistory": "\u6682\u65E0\u767B\u5F55\u8BB0\u5F55",
+      "dashboard.unknownIp": "\u672A\u77E5 IP",
+      "dashboard.welcome": "\u4F60\u597D\uFF0C{{username}}",
+      "dashboard.currentUser": "\u5F53\u524D\u7528\u6237",
+      "dashboard.adminRoleBadge": "\u7BA1\u7406\u5458",
+      "dashboard.adminMeta": "Profile\u3001\u4E2A\u6027\u5316\u4E0E\u7AD9\u70B9\u7BA1\u7406",
+      "dashboard.userMeta": "Profile \u4E0E\u4E2A\u6027\u5316",
+      "dashboard.adminProfileMeta": "\u7EF4\u62A4\u4F60\u7684\u4E2A\u4EBA\u8D44\u6599\u3001\u8BBE\u5907\u504F\u597D\u4E0E\u7AD9\u70B9\u914D\u7F6E",
+      "dashboard.userProfileMeta": "\u7EF4\u62A4\u4F60\u7684\u4E2A\u4EBA\u8D44\u6599\u3001\u8BBE\u5907\u4E0E\u504F\u597D",
+      "dashboard.adminOnlyTag": "\u4EC5\u7BA1\u7406\u5458\u53EF\u65B0\u5EFA Tag",
+      "dashboard.llmConfigLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D LLM Config",
+      "dashboard.availableConfigLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u53EF\u7528\u914D\u7F6E",
+      "dashboard.botListLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D Bot \u5217\u8868",
+      "dashboard.siteInfoLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u7AD9\u70B9\u4FE1\u606F",
+      "dashboard.tagListLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D Tag \u5217\u8868",
+      "dashboard.editTag": "\u7F16\u8F91 Tag",
+      "dashboard.addTag": "\u6DFB\u52A0 Tag",
+      "dashboard.tagSaving": "\u6B63\u5728\u4FDD\u5B58...",
+      "dashboard.tagCreating": "\u6B63\u5728\u521B\u5EFA...",
+      "dashboard.tagSaveFailed": "\u4FDD\u5B58\u5931\u8D25",
+      "dashboard.tagSaved": "\u4FDD\u5B58\u6210\u529F",
+      "dashboard.tagCreated": "\u521B\u5EFA\u6210\u529F",
+      "dashboard.tagSaveFailedRetry": "\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5",
+      "dashboard.confirmDeleteTag": '\u786E\u5B9A\u5220\u9664 Tag "{{name}}" \u5417\uFF1F',
+      "dashboard.tagDeleted": "\u5DF2\u5220\u9664 Tag\uFF1A{{name}}",
+      "dashboard.llmTestMissingFields": "\u6D4B\u8BD5\u524D\u8BF7\u5148\u586B\u5199 Base URL\u3001Model \u548C API Key",
+      "dashboard.llmTesting": "\u6B63\u5728\u6D4B\u8BD5\u6A21\u578B\u914D\u7F6E...",
+      "dashboard.llmTestSuccess": "\u8FDE\u63A5\u6210\u529F\uFF0C\u6A21\u578B\u914D\u7F6E\u53EF\u7528",
+      "dashboard.llmTestFailed": "\u6D4B\u8BD5\u5931\u8D25",
+      "dashboard.llmConfigSaving": "\u6B63\u5728\u4FDD\u5B58\u914D\u7F6E...",
+      "dashboard.llmConfigCreating": "\u6B63\u5728\u521B\u5EFA\u914D\u7F6E...",
+      "dashboard.llmConfigMissingFields": "\u8BF7\u5148\u586B\u5199\u540D\u79F0\u3001Base URL \u548C Model",
+      "dashboard.llmConfigUpdated": "\u914D\u7F6E\u5DF2\u66F4\u65B0",
+      "dashboard.llmConfigCreated": "\u914D\u7F6E\u5DF2\u521B\u5EFA",
+      "dashboard.updateConfig": "\u66F4\u65B0\u914D\u7F6E",
+      "dashboard.apiKeySaved": "\u5DF2\u4FDD\u5B58 API Key\uFF0C\u7559\u7A7A\u8868\u793A\u4FDD\u6301\u539F\u503C",
+      "dashboard.confirmDeleteConfig": '\u786E\u5B9A\u5220\u9664\u914D\u7F6E"{{name}}"\u5417\uFF1F\u5DF2\u7ED1\u5B9A\u7684 Bot \u9700\u8981\u5148\u6539\u7ED1\u6216\u5220\u9664\u3002',
+      "dashboard.configDeleted": "\u5DF2\u5220\u9664\u914D\u7F6E\uFF1A{{name}}",
+      "dashboard.botMissingFields": "\u8BF7\u5148\u586B\u5199 Bot \u540D\u79F0\u5E76\u9009\u62E9\u4E00\u4E2A\u914D\u7F6E",
+      "dashboard.botSaving": "\u6B63\u5728\u4FDD\u5B58 Bot...",
+      "dashboard.botCreating": "\u6B63\u5728\u521B\u5EFA Bot...",
+      "dashboard.botUpdated": "Bot \u5DF2\u66F4\u65B0",
+      "dashboard.botCreated": "Bot \u5DF2\u521B\u5EFA",
+      "dashboard.updateBot": "\u66F4\u65B0 Bot",
+      "dashboard.confirmDeleteBot": '\u786E\u5B9A\u5220\u9664 Bot "{{name}}"\u5417\uFF1F\u8FD9\u4F1A\u540C\u65F6\u79FB\u9664\u8FD9\u4E2A Bot \u7528\u6237\u3002',
+      "dashboard.botDeleted": "\u5DF2\u5220\u9664 Bot\uFF1A{{name}}",
+      "dashboard.savingSiteInfo": "\u6B63\u5728\u4FDD\u5B58\u7AD9\u70B9\u4FE1\u606F...",
+      "dashboard.siteInfoSaved": "\u7AD9\u70B9\u4FE1\u606F\u5DF2\u4FDD\u5B58",
+      "dashboard.selectImageFile": "\u8BF7\u9009\u62E9\u56FE\u7247\u6587\u4EF6",
+      "dashboard.uploadingSiteIcon": "\u6B63\u5728\u4E0A\u4F20\u7AD9\u70B9\u56FE\u6807...",
+      "dashboard.siteIconUpdated": "\u7AD9\u70B9\u56FE\u6807\u5DF2\u66F4\u65B0",
+      "dashboard.certUnsupportedFormat": "\u4EC5\u652F\u6301 .p8\u3001.p12\u3001.pem\u3001.cer\u3001.crt\u3001.key \u6587\u4EF6",
+      "dashboard.uploadingCert": "\u6B63\u5728\u4E0A\u4F20 {{env}} APNs Key / .p8...",
+      "dashboard.certUpdated": "{{env}} APNs Key / .p8 \u5DF2\u66F4\u65B0",
+      "dashboard.confirmDeleteCert": "\u786E\u5B9A\u5220\u9664 {{env}} APNs Key / .p8 \u5417\uFF1F",
+      "dashboard.deletingCert": "\u6B63\u5728\u5220\u9664 {{env}} APNs Key / .p8...",
+      "dashboard.certDeleted": "{{env}} APNs Key / .p8 \u5DF2\u5220\u9664",
+      "dashboard.logoutFailed": "\u9000\u51FA\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5",
+      "dashboard.logoutNetworkFailed": "\u9000\u51FA\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u540E\u91CD\u8BD5",
+      "dashboard.entryLoadFailed": "\u65E0\u6CD5\u52A0\u8F7D\u8BB0\u5F55",
+      "dashboard.noEntries": "\u6682\u65E0\u8BB0\u5F55",
+      "dashboard.entryReadFailed": "\u8BFB\u53D6\u5931\u8D25",
+      "dashboard.emptyContent": "\u7A7A\u5185\u5BB9",
+      "dashboard.confirmDeleteEntry": "\u786E\u5B9A\u8981\u5220\u9664\u8BE5\u8BB0\u5F55\u5417\uFF1F",
+      "dashboard.selectImageFileWithPeriod": "\u8BF7\u9009\u62E9\u56FE\u7247\u6587\u4EF6\u3002",
+      "dashboard.canceledEdit": "\u5DF2\u53D6\u6D88\u7F16\u8F91\u3002",
+      "dashboard.generatingImageFailed": "\u751F\u6210\u56FE\u7247\u5931\u8D25\u3002",
+      "dashboard.avatarUpdated": "\u5934\u50CF\u5DF2\u66F4\u65B0\u3002",
+      "dashboard.networkErrorPeriod": "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5\u3002",
+      "dashboard.passkeyNotSupported": "\u5F53\u524D\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 Passkey\u3002",
+      "dashboard.passkeyStarting": "\u6B63\u5728\u542F\u52A8 Passkey...",
+      "dashboard.passkeyBeginFailed": "\u65E0\u6CD5\u53D1\u8D77 Passkey \u7ED1\u5B9A",
+      "dashboard.passkeySuccess": "Passkey \u7ED1\u5B9A\u6210\u529F\uFF01",
+      "dashboard.passkeyFailed": "Passkey \u7ED1\u5B9A\u5931\u8D25",
+      "dashboard.unknownTime": "\u672A\u77E5\u65F6\u95F4",
+      // Nav
+      "nav.dashboard": "Dashboard",
+      "nav.posts": "Posts",
+      "nav.markdowns": "Markdowns",
+      "nav.chat": "Chat",
+      "nav.editor": "Editor",
+      "nav.latch": "Latch",
+      "nav.bots": "Bot \u7BA1\u7406",
+      "nav.userAdmin": "\u7528\u6237\u7BA1\u7406",
+      "bots.title": "Bot \u7BA1\u7406",
+      "bots.topbarTitle": "Bot \u7BA1\u7406",
+      "nav.settings": "\u8BBE\u7F6E",
+      // Admin
+      "admin.title": "\u7528\u6237\u7BA1\u7406",
+      "admin.topbarTitle": "\u7BA1\u7406\u5458\u4E2D\u5FC3",
+      "admin.loading": "\u52A0\u8F7D\u4E2D...",
+      "admin.welcome": "\u6B22\u8FCE\u4F60\uFF0C{{username}}",
+      "admin.userQuery": "\u7528\u6237\u67E5\u8BE2",
+      "admin.userCount": "\u7528\u6237\u603B\u6570: {{count}}",
+      "admin.userCountDash": "\u7528\u6237\u603B\u6570: -",
+      "admin.searchPlaceholder": "\u6309\u7528\u6237\u540D / \u90AE\u7BB1 / \u7528\u6237ID \u641C\u7D22",
+      "admin.search": "\u641C\u7D22",
+      "admin.reset": "\u91CD\u7F6E",
+      "admin.prevPage": "\u4E0A\u4E00\u9875",
+      "admin.nextPage": "\u4E0B\u4E00\u9875",
+      "admin.pageInfo": "\u7B2C {{current}} / {{total}} \u9875",
+      "admin.pageInfoDash": "\u7B2C - \u9875",
+      "admin.accountManagement": "\u8D26\u53F7\u7BA1\u7406",
+      "admin.selectUser": "\u8BF7\u9009\u62E9\u5DE6\u4FA7\u7528\u6237",
+      "admin.changePassword": "\u4FEE\u6539\u5BC6\u7801",
+      "admin.newPasswordPlaceholder": "\u65B0\u5BC6\u7801\uFF08\u81F3\u5C116\u4F4D\uFF09",
+      "admin.confirmPasswordPlaceholder": "\u786E\u8BA4\u65B0\u5BC6\u7801",
+      "admin.updatePassword": "\u66F4\u65B0\u5BC6\u7801",
+      "admin.loginHistory": "\u767B\u5F55\u4FE1\u606F\u67E5\u770B",
+      "admin.noLoginHistory": "\u6682\u65E0\u767B\u5F55\u8BB0\u5F55",
+      "admin.noMatchingUsers": "\u6CA1\u6709\u5339\u914D\u7528\u6237",
+      "admin.loadUsersFailed": "\u52A0\u8F7D\u7528\u6237\u5931\u8D25",
+      "admin.loadHistoryFailed": "\u52A0\u8F7D\u767B\u5F55\u8BB0\u5F55\u5931\u8D25",
+      "admin.selectUserFirst": "\u8BF7\u5148\u9009\u62E9\u7528\u6237",
+      "admin.passwordTooShort": "\u65B0\u5BC6\u7801\u81F3\u5C11 6 \u4F4D",
+      "admin.passwordMismatch": "\u4E24\u6B21\u8F93\u5165\u5BC6\u7801\u4E0D\u4E00\u81F4",
+      "admin.updatingPassword": "\u6B63\u5728\u66F4\u65B0\u5BC6\u7801...",
+      "admin.passwordUpdated": "\u5BC6\u7801\u5DF2\u66F4\u65B0",
+      "admin.updateFailed": "\u66F4\u65B0\u5931\u8D25",
+      "admin.networkError": "\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5",
+      "admin.logoutFailed": "\u9000\u51FA\u5931\u8D25",
+      "admin.unknownIp": "\u672A\u77E5 IP",
+      "admin.unknownLocation": "\u672A\u77E5\u4F4D\u7F6E",
+      "admin.loginMethodPasskey": "Passkey",
+      "admin.loginMethodRegister": "\u6CE8\u518C",
+      "admin.loginMethodPassword": "\u5BC6\u7801",
+      "admin.online": "online",
+      "admin.createdAt": "\u521B\u5EFA\u65F6\u95F4: {{time}}"
+    };
+    locales = { en, "zh-CN": zhCN };
+  }
+});
+
+// src/lib/site.ts
+function resolveSite(site) {
+  return {
+    name: site?.name?.trim() || fallbackSite.name,
+    description: site?.description?.trim() || fallbackSite.description,
+    icon_url: site?.icon_url || ""
+  };
+}
+function renderSiteBrand(site) {
+  const safeSite = resolveSite(site);
+  const iconSrc = safeSite.icon_url || makeDefaultAvatar(safeSite.name, 160);
+  document.querySelectorAll("[data-site-brand]").forEach((container) => {
+    const nameEl = container.querySelector("[data-site-name]");
+    const descEl = container.querySelector("[data-site-description]");
+    const iconEl = container.querySelector("[data-site-icon]");
+    if (nameEl) {
+      nameEl.textContent = safeSite.name;
+    }
+    if (descEl) {
+      descEl.textContent = safeSite.description;
+    }
+    if (iconEl) {
+      iconEl.src = iconSrc;
+      iconEl.alt = `${safeSite.name} ${t("brand.icon")}`;
+    }
+  });
+}
+function initSettingsButton() {
+  const isDashboard = window.location.pathname.endsWith("/dashboard.html") || window.location.pathname === "/";
+  if (isDashboard) {
+    return;
+  }
+  document.querySelectorAll("[data-open-settings-center]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.settingsTarget || "personalization";
+      window.location.href = `/dashboard.html?settings=${encodeURIComponent(target)}`;
+    });
+  });
+}
+function initSidebarToggle() {
+  const topbar = document.querySelector(".lp-topbar");
+  const app = document.querySelector(".lp-app");
+  if (!topbar || !app) {
+    return;
+  }
+  if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") {
+    app.classList.add("sidebar-collapsed");
+  }
+  const btn = document.createElement("button");
+  btn.className = "lp-sidebar-toggle";
+  btn.title = "Toggle sidebar";
+  btn.setAttribute("aria-label", "Toggle sidebar");
+  btn.textContent = "\u2630";
+  btn.addEventListener("click", () => {
+    const collapsed = app.classList.toggle("sidebar-collapsed");
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  });
+  topbar.insertBefore(btn, topbar.firstChild);
+}
+async function hydrateSiteBrand() {
+  applyI18n();
+  initSidebarToggle();
+  initSettingsButton();
+  await hydrateSidebarFoot();
+  if (!document.querySelector("[data-site-brand]")) {
+    return;
+  }
+  try {
+    const response = await fetch("/api/site-settings", { credentials: "include" });
+    if (!response.ok) {
+      renderSiteBrand();
+      return;
+    }
+    const data = await response.json();
+    renderSiteBrand(data.site);
+  } catch {
+    renderSiteBrand();
+  }
+}
+function renderSidebarFoot(user) {
+  const nameEl = document.getElementById("lpFootName");
+  const roleEl = document.getElementById("lpFootRole");
+  const avatarEl = document.getElementById("lpFootAvatar");
+  if (!nameEl && !roleEl && !avatarEl) {
+    return;
+  }
+  const username = (user?.username || "").trim();
+  if (nameEl) {
+    nameEl.textContent = username || "\u2014";
+  }
+  if (roleEl) {
+    roleEl.textContent = user?.role === "admin" ? "Administrator" : "Member";
+  }
+  if (avatarEl) {
+    const avatar = username ? username.slice(0, 1).toUpperCase() : "U";
+    if (user?.icon_url) {
+      avatarEl.style.backgroundImage = `url(${user.icon_url})`;
+      avatarEl.style.backgroundSize = "cover";
+      avatarEl.style.backgroundPosition = "center";
+      avatarEl.textContent = "";
+    } else {
+      avatarEl.style.backgroundImage = "";
+      avatarEl.style.backgroundSize = "";
+      avatarEl.style.backgroundPosition = "";
+      avatarEl.textContent = avatar;
+    }
+  }
+  const isAdmin = user?.role === "admin";
+  document.querySelectorAll("[data-admin-nav]").forEach((el) => {
+    el.hidden = !isAdmin;
+  });
+}
+async function hydrateSidebarFoot() {
+  const hasFoot = document.getElementById("lpFootName") || document.getElementById("lpFootRole") || document.getElementById("lpFootAvatar");
+  if (!hasFoot) {
+    return;
+  }
+  try {
+    const response = await fetch("/api/me", { credentials: "include" });
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    renderSidebarFoot(data);
+  } catch {
+  }
+}
+var fallbackSite, SIDEBAR_COLLAPSED_KEY;
+var init_site = __esm({
+  "src/lib/site.ts"() {
+    init_avatar();
+    init_i18n();
+    fallbackSite = {
+      name: "Polar-",
+      description: "AI-assisted product prototyping workspace",
+      icon_url: ""
+    };
+    SIDEBAR_COLLAPSED_KEY = "lp_sidebar_collapsed";
+  }
+});
+
+// src/lib/theme.ts
+function applyTheme(theme, persist = false) {
+  const nextTheme = theme === "mono" ? "mono" : "default";
+  document.documentElement.dataset.theme = nextTheme;
+  if (persist) {
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  }
+  return nextTheme;
+}
+function initStoredTheme(persist = false) {
+  return applyTheme(localStorage.getItem(THEME_STORAGE_KEY) || "default", persist);
+}
+function bindThemeSync(onChange) {
+  window.addEventListener("storage", (event) => {
+    if (event.key !== THEME_STORAGE_KEY) {
+      return;
+    }
+    const nextTheme = applyTheme(event.newValue || "default");
+    onChange?.(nextTheme);
+  });
+}
+var THEME_STORAGE_KEY;
+var init_theme = __esm({
+  "src/lib/theme.ts"() {
+    THEME_STORAGE_KEY = "app-theme";
+  }
+});
+
+// src/api/http.ts
+function buildApiUrl(path) {
+  return `${API_BASE2}${path}`;
+}
+function mergeHeaders(headers) {
+  return new Headers(headers);
+}
+async function request(path, init = {}) {
+  const headers = mergeHeaders(init.headers);
+  return fetch(buildApiUrl(path), {
+    ...init,
+    headers,
+    credentials: "include"
+  });
+}
+async function requestJson(path, init = {}) {
+  const headers = mergeHeaders(init.headers);
+  let body = init.body;
+  if (init.body !== void 0 && init.body !== null && !(init.body instanceof FormData) && !(init.body instanceof Blob) && !(init.body instanceof URLSearchParams) && !(init.body instanceof ArrayBuffer) && !ArrayBuffer.isView(init.body) && !(typeof ReadableStream !== "undefined" && init.body instanceof ReadableStream)) {
+    body = JSON.stringify(init.body);
+  }
+  if (init.body !== void 0 && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const response = await request(path, {
+    ...init,
+    headers,
+    body
+  });
+  const data = await response.json();
+  return { response, data };
+}
+var API_BASE2;
+var init_http = __esm({
+  "src/api/http.ts"() {
+    API_BASE2 = "";
+  }
+});
+
+// src/api/dashboard.ts
+async function fetchTags(limit = 100, offset = 0) {
+  return requestJson(`/api/tags?limit=${limit}&offset=${offset}`);
+}
+var init_dashboard = __esm({
+  "src/api/dashboard.ts"() {
+    init_http();
+  }
+});
+
+// src/api/session.ts
+async function logout() {
+  return request("/api/logout", { method: "POST" });
+}
+var init_session = __esm({
+  "src/api/session.ts"() {
+    init_http();
+  }
+});
+
+// src/posts.ts
+var require_posts = __commonJS({
+  "src/posts.ts"() {
+    init_avatar();
+    init_dom();
+    init_site();
+    init_theme();
+    init_dashboard();
+    init_i18n();
+    init_session();
+    var API_BASE3 = "";
+    var postWelcome = byId("postWelcome");
+    var postList = byId("postList");
+    var postLoadMoreBtn = byId("postLoadMoreBtn");
+    var postTypeFilters = byId("postTypeFilters");
+    var tagFilters = byId("tagFilters");
+    var postListBadge = byId("postListBadge");
+    var nextOffset = 0;
+    var hasMore = true;
+    var currentUserId = "";
+    var currentUserRole = "user";
+    var videoModal = null;
+    var videoModalPlayer = null;
+    var imageModal = null;
+    var imageModalViewer = null;
+    var imageModalCounter = null;
+    var imageModalPrevBtn = null;
+    var imageModalNextBtn = null;
+    var currentImageGallery = [];
+    var currentImageIndex = 0;
+    var currentPostTypeFilter = "all";
+    var currentTagFilter = null;
+    var currentScope = "all";
+    var currentTags = [];
+    initStoredTheme();
+    bindThemeSync();
+    function formatTime(value) {
+      return new Date(value).toLocaleString();
+    }
+    function profileUrl(userId) {
+      return `/profile.html?user_id=${encodeURIComponent(userId)}`;
+    }
+    function getTagName(tagId) {
+      if (!tagId) {
+        return "";
+      }
+      return currentTags.find((item) => item.id === tagId)?.name || "";
+    }
+    function updateListBadge() {
+      if (currentScope === "following") {
         postListBadge.textContent = t("posts.followingPosts");
         return;
-    }
-    if (currentTagFilter) {
+      }
+      if (currentTagFilter) {
         postListBadge.textContent = getTagName(currentTagFilter) || t("posts.sectionPosts");
         return;
+      }
+      postListBadge.textContent = currentPostTypeFilter === "task" ? t("posts.gigTasks") : currentPostTypeFilter === "standard" ? t("posts.regularPosts") : t("posts.latestPosts");
     }
-    postListBadge.textContent =
-        currentPostTypeFilter === "task" ? t("posts.gigTasks") : currentPostTypeFilter === "standard" ? t("posts.regularPosts") : t("posts.latestPosts");
-}
-function renderTypeFilters() {
-    const items = [
+    function renderTypeFilters() {
+      const items = [
         { label: t("posts.filterLatest"), value: "all", scope: "all" },
         { label: t("posts.filterFollowing"), value: "all", scope: "following" },
         { label: t("posts.filterRegular"), value: "standard", scope: "all" },
-        { label: t("posts.filterGigs"), value: "task", scope: "all" },
-    ];
-    postTypeFilters.innerHTML = items
-        .map((item, idx) => {
+        { label: t("posts.filterGigs"), value: "task", scope: "all" }
+      ];
+      postTypeFilters.innerHTML = items.map((item, idx) => {
         const scope = item.scope || "all";
-        const active = !currentTagFilter
-            && currentScope === scope
-            && (scope === "following" || currentPostTypeFilter === item.value);
+        const active = !currentTagFilter && currentScope === scope && (scope === "following" || currentPostTypeFilter === item.value);
         return `<button class="btn-inline btn-secondary post-filter-btn ${active ? "active" : ""}" data-filter-idx="${idx}" data-post-type="${item.value}" data-scope="${scope}" type="button">${item.label}</button>`;
-    })
-        .join("");
-    postTypeFilters.querySelectorAll(".post-filter-btn").forEach((button) => {
+      }).join("");
+      postTypeFilters.querySelectorAll(".post-filter-btn").forEach((button) => {
         button.addEventListener("click", async () => {
-            currentPostTypeFilter = button.dataset.postType || "all";
-            currentScope = button.dataset.scope || "all";
-            currentTagFilter = null;
-            renderTypeFilters();
-            renderTagFilters();
-            updateListBadge();
-            await loadPosts(true);
+          currentPostTypeFilter = button.dataset.postType || "all";
+          currentScope = button.dataset.scope || "all";
+          currentTagFilter = null;
+          renderTypeFilters();
+          renderTagFilters();
+          updateListBadge();
+          await loadPosts(true);
         });
-    });
-}
-function renderTagFilters() {
-    tagFilters.innerHTML = currentTags
-        .map((tag) => `<button class="tag-chip post-tag-filter ${currentTagFilter === tag.id ? "active" : ""}" data-tag-id="${tag.id}" type="button">${tag.name}</button>`)
-        .join("");
-    tagFilters.querySelectorAll(".post-tag-filter").forEach((button) => {
+      });
+    }
+    function renderTagFilters() {
+      tagFilters.innerHTML = currentTags.map(
+        (tag) => `<button class="tag-chip post-tag-filter ${currentTagFilter === tag.id ? "active" : ""}" data-tag-id="${tag.id}" type="button">${tag.name}</button>`
+      ).join("");
+      tagFilters.querySelectorAll(".post-tag-filter").forEach((button) => {
         button.addEventListener("click", async () => {
-            currentTagFilter = Number(button.dataset.tagId);
-            currentPostTypeFilter = "all";
-            currentScope = "all";
-            renderTypeFilters();
-            renderTagFilters();
-            updateListBadge();
-            await loadPosts(true);
+          currentTagFilter = Number(button.dataset.tagId);
+          currentPostTypeFilter = "all";
+          currentScope = "all";
+          renderTypeFilters();
+          renderTagFilters();
+          updateListBadge();
+          await loadPosts(true);
         });
-    });
-}
-async function loadTags() {
-    renderTypeFilters();
-    updateListBadge();
-    const { response, data } = await fetchTags();
-    if (!response.ok) {
-        return;
+      });
     }
-    currentTags = data.tags || [];
-    renderTypeFilters();
-    renderTagFilters();
-    updateListBadge();
-}
-function ensureImageModal() {
-    if (imageModal) {
+    async function loadTags() {
+      renderTypeFilters();
+      updateListBadge();
+      const { response, data } = await fetchTags();
+      if (!response.ok) {
         return;
+      }
+      currentTags = data.tags || [];
+      renderTypeFilters();
+      renderTagFilters();
+      updateListBadge();
     }
-    const modal = document.createElement("div");
-    modal.className = "image-modal";
-    modal.innerHTML = `
+    function ensureImageModal() {
+      if (imageModal) {
+        return;
+      }
+      const modal = document.createElement("div");
+      modal.className = "image-modal";
+      modal.innerHTML = `
     <div class="image-modal-backdrop"></div>
     <div class="image-modal-content">
       <div class="image-modal-toolbar">
@@ -131,214 +1783,208 @@ function ensureImageModal() {
       </div>
     </div>
   `;
-    document.body.appendChild(modal);
-    imageModal = modal;
-    imageModalViewer = query(modal, ".image-modal-viewer");
-    imageModalCounter = query(modal, ".image-modal-counter");
-    imageModalPrevBtn = query(modal, ".image-modal-prev");
-    imageModalNextBtn = query(modal, ".image-modal-next");
-    const close = () => {
+      document.body.appendChild(modal);
+      imageModal = modal;
+      imageModalViewer = query(modal, ".image-modal-viewer");
+      imageModalCounter = query(modal, ".image-modal-counter");
+      imageModalPrevBtn = query(modal, ".image-modal-prev");
+      imageModalNextBtn = query(modal, ".image-modal-next");
+      const close = () => {
         if (!imageModal || !imageModalViewer) {
-            return;
+          return;
         }
         imageModal.classList.remove("open");
         imageModalViewer.removeAttribute("src");
         currentImageGallery = [];
         currentImageIndex = 0;
-    };
-    query(modal, ".image-modal-backdrop").addEventListener("click", close);
-    query(modal, ".image-modal-close").addEventListener("click", close);
-    imageModalPrevBtn.addEventListener("click", () => stepImageModal(-1));
-    imageModalNextBtn.addEventListener("click", () => stepImageModal(1));
-    document.addEventListener("keydown", (event) => {
+      };
+      query(modal, ".image-modal-backdrop").addEventListener("click", close);
+      query(modal, ".image-modal-close").addEventListener("click", close);
+      imageModalPrevBtn.addEventListener("click", () => stepImageModal(-1));
+      imageModalNextBtn.addEventListener("click", () => stepImageModal(1));
+      document.addEventListener("keydown", (event) => {
         if (!imageModal?.classList.contains("open")) {
-            return;
+          return;
         }
         if (event.key === "Escape") {
-            close();
-            return;
+          close();
+          return;
         }
         if (event.key === "ArrowLeft") {
-            event.preventDefault();
-            stepImageModal(-1);
-            return;
+          event.preventDefault();
+          stepImageModal(-1);
+          return;
         }
         if (event.key === "ArrowRight") {
-            event.preventDefault();
-            stepImageModal(1);
+          event.preventDefault();
+          stepImageModal(1);
         }
-    });
-}
-function renderImageModal() {
-    if (!imageModal || !imageModalViewer || !imageModalCounter || !imageModalPrevBtn || !imageModalNextBtn) {
-        return;
+      });
     }
-    if (!currentImageGallery.length) {
+    function renderImageModal() {
+      if (!imageModal || !imageModalViewer || !imageModalCounter || !imageModalPrevBtn || !imageModalNextBtn) {
+        return;
+      }
+      if (!currentImageGallery.length) {
         imageModal.classList.remove("open");
         return;
+      }
+      currentImageIndex = (currentImageIndex + currentImageGallery.length) % currentImageGallery.length;
+      imageModalViewer.src = currentImageGallery[currentImageIndex];
+      imageModalCounter.textContent = `${currentImageIndex + 1} / ${currentImageGallery.length}`;
+      const multiple = currentImageGallery.length > 1;
+      imageModalPrevBtn.disabled = !multiple;
+      imageModalNextBtn.disabled = !multiple;
     }
-    currentImageIndex = (currentImageIndex + currentImageGallery.length) % currentImageGallery.length;
-    imageModalViewer.src = currentImageGallery[currentImageIndex];
-    imageModalCounter.textContent = `${currentImageIndex + 1} / ${currentImageGallery.length}`;
-    const multiple = currentImageGallery.length > 1;
-    imageModalPrevBtn.disabled = !multiple;
-    imageModalNextBtn.disabled = !multiple;
-}
-function openImageModal(images, index) {
-    if (!images.length) {
+    function openImageModal(images, index) {
+      if (!images.length) {
         return;
-    }
-    ensureImageModal();
-    if (!imageModal) {
+      }
+      ensureImageModal();
+      if (!imageModal) {
         return;
+      }
+      currentImageGallery = images;
+      currentImageIndex = index;
+      renderImageModal();
+      imageModal.classList.add("open");
     }
-    currentImageGallery = images;
-    currentImageIndex = index;
-    renderImageModal();
-    imageModal.classList.add("open");
-}
-function stepImageModal(step) {
-    if (!currentImageGallery.length) {
+    function stepImageModal(step) {
+      if (!currentImageGallery.length) {
         return;
+      }
+      currentImageIndex += step;
+      renderImageModal();
     }
-    currentImageIndex += step;
-    renderImageModal();
-}
-function enhancePostImages(container) {
-    container.querySelectorAll(".post-images img").forEach((imageEl) => {
+    function enhancePostImages(container) {
+      container.querySelectorAll(".post-images img").forEach((imageEl) => {
         imageEl.addEventListener("click", (event) => {
-            event.stopPropagation();
-            const siblings = Array.from(imageEl.closest(".post-images").querySelectorAll("img"));
-            const gallery = siblings.map((el) => el.dataset.original || el.src);
-            const index = siblings.indexOf(imageEl);
-            openImageModal(gallery, index);
+          event.stopPropagation();
+          const siblings = Array.from(imageEl.closest(".post-images").querySelectorAll("img"));
+          const gallery = siblings.map((el) => el.dataset.original || el.src);
+          const index = siblings.indexOf(imageEl);
+          openImageModal(gallery, index);
         });
-    });
-}
-function ensureVideoModal() {
-    if (videoModal) {
-        return;
+      });
     }
-    const modal = document.createElement("div");
-    modal.className = "video-modal";
-    modal.innerHTML = `
+    function ensureVideoModal() {
+      if (videoModal) {
+        return;
+      }
+      const modal = document.createElement("div");
+      modal.className = "video-modal";
+      modal.innerHTML = `
     <div class="video-modal-backdrop"></div>
     <div class="video-modal-content panel">
       <button class="video-modal-close btn-inline btn-secondary" type="button">${t("common.close")}</button>
       <video class="video-modal-player" controls autoplay preload="metadata"></video>
     </div>
   `;
-    document.body.appendChild(modal);
-    videoModal = modal;
-    videoModalPlayer = query(modal, ".video-modal-player");
-    const close = () => {
+      document.body.appendChild(modal);
+      videoModal = modal;
+      videoModalPlayer = query(modal, ".video-modal-player");
+      const close = () => {
         if (!videoModal) {
-            return;
+          return;
         }
         videoModal.classList.remove("open");
         if (videoModalPlayer) {
-            videoModalPlayer.pause();
-            videoModalPlayer.removeAttribute("src");
-            videoModalPlayer.load();
+          videoModalPlayer.pause();
+          videoModalPlayer.removeAttribute("src");
+          videoModalPlayer.load();
         }
-    };
-    query(modal, ".video-modal-backdrop").addEventListener("click", close);
-    query(modal, ".video-modal-close").addEventListener("click", close);
-    document.addEventListener("keydown", (event) => {
+      };
+      query(modal, ".video-modal-backdrop").addEventListener("click", close);
+      query(modal, ".video-modal-close").addEventListener("click", close);
+      document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
-            close();
+          close();
         }
-    });
-}
-function openVideoModal(url) {
-    if (!url) {
-        return;
+      });
     }
-    ensureVideoModal();
-    if (!videoModal || !videoModalPlayer) {
+    function openVideoModal(url) {
+      if (!url) {
         return;
+      }
+      ensureVideoModal();
+      if (!videoModal || !videoModalPlayer) {
+        return;
+      }
+      videoModalPlayer.src = url;
+      videoModal.classList.add("open");
+      void videoModalPlayer.play().catch(() => {
+      });
     }
-    videoModalPlayer.src = url;
-    videoModal.classList.add("open");
-    void videoModalPlayer.play().catch(() => { });
-}
-function normalizeVideoItems(post) {
-    if (Array.isArray(post.video_items) && post.video_items.length > 0) {
-        return post.video_items
-            .filter((item) => item && item.url)
-            .map((item) => ({
-            url: buildAssetUrl(item.url),
-            posterUrl: item.poster_url ? buildAssetUrl(item.poster_url) : "",
+    function normalizeVideoItems(post) {
+      if (Array.isArray(post.video_items) && post.video_items.length > 0) {
+        return post.video_items.filter((item) => item && item.url).map((item) => ({
+          url: buildAssetUrl(item.url),
+          posterUrl: item.poster_url ? buildAssetUrl(item.poster_url) : ""
         }));
-    }
-    return (post.videos || []).map((url) => ({
+      }
+      return (post.videos || []).map((url) => ({
         url: buildAssetUrl(url),
-        posterUrl: "",
-    }));
-}
-function normalizePostImages(post, variant) {
-    if (Array.isArray(post.image_items) && post.image_items.length > 0) {
-        return post.image_items
-            .filter((item) => item && (item.original_url || item.medium_url || item.small_url))
-            .map((item) => {
-            if (variant === "small") {
-                return buildAssetUrl(item.small_url || item.medium_url || item.original_url);
-            }
-            if (variant === "medium") {
-                return buildAssetUrl(item.medium_url || item.original_url || item.small_url);
-            }
-            return buildAssetUrl(item.original_url || item.medium_url || item.small_url);
-        });
+        posterUrl: ""
+      }));
     }
-    return (post.images || []).map((url) => buildAssetUrl(url));
-}
-function enhancePostVideos(container) {
-    container.querySelectorAll(".post-videos video").forEach((videoEl) => {
-        videoEl.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const source = videoEl.querySelector("source");
-            const src = videoEl.currentSrc || source?.src || "";
-            videoEl.pause();
-            openVideoModal(src);
+    function normalizePostImages(post, variant) {
+      if (Array.isArray(post.image_items) && post.image_items.length > 0) {
+        return post.image_items.filter((item) => item && (item.original_url || item.medium_url || item.small_url)).map((item) => {
+          if (variant === "small") {
+            return buildAssetUrl(item.small_url || item.medium_url || item.original_url);
+          }
+          if (variant === "medium") {
+            return buildAssetUrl(item.medium_url || item.original_url || item.small_url);
+          }
+          return buildAssetUrl(item.original_url || item.medium_url || item.small_url);
         });
-    });
-}
-async function loadProfile() {
-    const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
-    if (!res.ok) {
+      }
+      return (post.images || []).map((url) => buildAssetUrl(url));
+    }
+    function enhancePostVideos(container) {
+      container.querySelectorAll(".post-videos video").forEach((videoEl) => {
+        videoEl.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const source = videoEl.querySelector("source");
+          const src = videoEl.currentSrc || source?.src || "";
+          videoEl.pause();
+          openVideoModal(src);
+        });
+      });
+    }
+    async function loadProfile() {
+      const res = await fetch(`${API_BASE3}/api/me`, { credentials: "include" });
+      if (!res.ok) {
         window.location.href = "/login.html";
         return;
+      }
+      const data = await res.json();
+      currentUserId = data.user_id;
+      currentUserRole = data.role || "user";
+      postWelcome.textContent = t("posts.welcome", { username: data.username });
+      renderSidebarFoot(data);
     }
-    const data = await res.json();
-    currentUserId = data.user_id;
-    currentUserRole = data.role || "user";
-    postWelcome.textContent = t("posts.welcome", { username: data.username });
-    renderSidebarFoot(data);
-}
-function createPostCard(post) {
-    const card = document.createElement("div");
-    card.className = "post-card panel";
-    const smallImages = normalizePostImages(post, "small");
-    const origImages = normalizePostImages(post, "original");
-    const images = smallImages
-        .map((url, i) => `<img src="${url}" data-original="${origImages[i] ?? url}" alt="post image" loading="lazy" />`)
-        .join("");
-    const videos = normalizeVideoItems(post)
-        .map((item) => `
+    function createPostCard(post) {
+      const card = document.createElement("div");
+      card.className = "post-card panel";
+      const smallImages = normalizePostImages(post, "small");
+      const origImages = normalizePostImages(post, "original");
+      const images = smallImages.map((url, i) => `<img src="${url}" data-original="${origImages[i] ?? url}" alt="post image" loading="lazy" />`).join("");
+      const videos = normalizeVideoItems(post).map(
+        (item) => `
         <video controls preload="metadata" ${item.posterUrl ? `poster="${item.posterUrl}"` : ""}>
           <source src="${item.url}" />
           ${t("posts.videoNotSupported")}
         </video>
-      `)
-        .join("");
-    const videoSection = videos ? `<div class="post-videos">${videos}</div>` : "";
-    const isSelf = currentUserId && post.user_id === currentUserId;
-    const canDelete = currentUserRole === "admin" || isSelf;
-    const authorLabel = `<a class="post-author-name" href="${profileUrl(post.user_id)}">${post.username}</a>`;
-    const avatar = resolveAvatar(post.username, post.user_icon, 64);
-    const taskSummary = post.post_type === "task" && post.task
-        ? `
+      `
+      ).join("");
+      const videoSection = videos ? `<div class="post-videos">${videos}</div>` : "";
+      const isSelf = currentUserId && post.user_id === currentUserId;
+      const canDelete = currentUserRole === "admin" || isSelf;
+      const authorLabel = `<a class="post-author-name" href="${profileUrl(post.user_id)}">${post.username}</a>`;
+      const avatar = resolveAvatar(post.username, post.user_icon, 64);
+      const taskSummary = post.post_type === "task" && post.task ? `
         <div class="task-summary-strip">
           <span class="badge">${t("posts.gigTaskBadge")}</span>
           <span>${t("posts.taskTime", { start: formatTime(post.task.start_at), end: formatTime(post.task.end_at) })}</span>
@@ -346,17 +1992,16 @@ function createPostCard(post) {
           <span>${t("posts.applyDeadline", { deadline: formatTime(post.task.apply_deadline) })}</span>
           <span>${t("posts.applicantCount", { count: String(post.task.applicant_count || 0) })}</span>
         </div>
-      `
-        : "";
-    const tagName = getTagName(post.tag_id);
-    const tagSummary = tagName ? `<span class="tag-chip">${tagName}</span>` : "";
-    card.innerHTML = `
+      ` : "";
+      const tagName = getTagName(post.tag_id);
+      const tagSummary = tagName ? `<span class="tag-chip">${tagName}</span>` : "";
+      card.innerHTML = `
     <div class="post-header">
       <div class="post-author">
         <a href="${profileUrl(post.user_id)}"><img class="avatar-sm" src="${avatar}" alt="${post.username}" /></a>
         ${authorLabel}
       </div>
-      <div class="post-time">${tagSummary}${tagSummary ? " · " : ""}${formatTime(post.created_at)}</div>
+      <div class="post-time">${tagSummary}${tagSummary ? " \xB7 " : ""}${formatTime(post.created_at)}</div>
     </div>
     <div class="post-content">${post.content}</div>
     ${taskSummary}
@@ -364,137 +2009,139 @@ function createPostCard(post) {
     ${videoSection}
     <div class="post-actions">
       <button class="btn-inline btn-secondary like-btn" type="button">
-        ${post.liked_by_me ? t("posts.liked") : t("posts.like")} · ${post.like_count}
+        ${post.liked_by_me ? t("posts.liked") : t("posts.like")} \xB7 ${post.like_count}
       </button>
       <button class="btn-inline btn-secondary view-details-btn" type="button" data-post-id="${post.id}">${t("posts.viewDetails")}</button>
       ${canDelete ? `<button class="btn-inline btn-secondary delete-post-btn" type="button">${t("posts.deletePost")}</button>` : ""}
     </div>
   `;
-    const likeBtn = query(card, ".like-btn");
-    const viewBtn = query(card, ".view-details-btn");
-    const deleteBtn = card.querySelector(".delete-post-btn");
-    enhancePostVideos(card);
-    enhancePostImages(card);
-    viewBtn.addEventListener("click", () => {
+      const likeBtn = query(card, ".like-btn");
+      const viewBtn = query(card, ".view-details-btn");
+      const deleteBtn = card.querySelector(".delete-post-btn");
+      enhancePostVideos(card);
+      enhancePostImages(card);
+      viewBtn.addEventListener("click", () => {
         window.location.href = `/post.html?id=${post.id}`;
-    });
-    likeBtn.addEventListener("click", async () => {
+      });
+      likeBtn.addEventListener("click", async () => {
         const method = post.liked_by_me ? "DELETE" : "POST";
-        const res = await fetch(`${API_BASE}/api/posts/${post.id}/like`, {
-            method,
-            credentials: "include",
+        const res = await fetch(`${API_BASE3}/api/posts/${post.id}/like`, {
+          method,
+          credentials: "include"
         });
         if (!res.ok) {
-            return;
+          return;
         }
         post.liked_by_me = !post.liked_by_me;
         post.like_count += post.liked_by_me ? 1 : -1;
-        likeBtn.textContent = `${post.liked_by_me ? t("posts.liked") : t("posts.like")} · ${post.like_count}`;
-    });
-    if (deleteBtn) {
+        likeBtn.textContent = `${post.liked_by_me ? t("posts.liked") : t("posts.like")} \xB7 ${post.like_count}`;
+      });
+      if (deleteBtn) {
         let pendingDelete = false;
         const actionsDiv = query(card, ".post-actions");
         const renderDeleteActions = () => {
-            if (pendingDelete) {
-                deleteBtn.textContent = t("common.confirmDelete");
-                deleteBtn.classList.add("btn-danger");
-                if (!actionsDiv.querySelector(".cancel-delete-btn")) {
-                    const cancelBtn = document.createElement("button");
-                    cancelBtn.className = "btn-inline btn-secondary cancel-delete-btn";
-                    cancelBtn.type = "button";
-                    cancelBtn.textContent = t("common.cancel");
-                    cancelBtn.addEventListener("click", () => {
-                        pendingDelete = false;
-                        cancelBtn.remove();
-                        deleteBtn.textContent = t("posts.deletePost");
-                        deleteBtn.classList.remove("btn-danger");
-                    });
-                    actionsDiv.appendChild(cancelBtn);
-                }
+          if (pendingDelete) {
+            deleteBtn.textContent = t("common.confirmDelete");
+            deleteBtn.classList.add("btn-danger");
+            if (!actionsDiv.querySelector(".cancel-delete-btn")) {
+              const cancelBtn = document.createElement("button");
+              cancelBtn.className = "btn-inline btn-secondary cancel-delete-btn";
+              cancelBtn.type = "button";
+              cancelBtn.textContent = t("common.cancel");
+              cancelBtn.addEventListener("click", () => {
+                pendingDelete = false;
+                cancelBtn.remove();
+                deleteBtn.textContent = t("posts.deletePost");
+                deleteBtn.classList.remove("btn-danger");
+              });
+              actionsDiv.appendChild(cancelBtn);
             }
+          }
         };
         deleteBtn.addEventListener("click", async () => {
-            if (!pendingDelete) {
-                pendingDelete = true;
-                renderDeleteActions();
-                return;
-            }
-            deleteBtn.disabled = true;
-            const res = await fetch(`${API_BASE}/api/posts/${post.id}`, {
-                method: "DELETE",
-                credentials: "include",
-            });
-            if (!res.ok) {
-                deleteBtn.disabled = false;
-                return;
-            }
-            card.remove();
-            if (!postList.querySelector(".post-card")) {
-                postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
-            }
+          if (!pendingDelete) {
+            pendingDelete = true;
+            renderDeleteActions();
+            return;
+          }
+          deleteBtn.disabled = true;
+          const res = await fetch(`${API_BASE3}/api/posts/${post.id}`, {
+            method: "DELETE",
+            credentials: "include"
+          });
+          if (!res.ok) {
+            deleteBtn.disabled = false;
+            return;
+          }
+          card.remove();
+          if (!postList.querySelector(".post-card")) {
+            postList.innerHTML = `<div class='post-empty'>${t("posts.noPosts")}</div>`;
+          }
         });
+      }
+      return card;
     }
-    return card;
-}
-async function loadPosts(reset = false) {
-    if (reset) {
+    async function loadPosts(reset = false) {
+      if (reset) {
         nextOffset = 0;
         hasMore = true;
         postList.innerHTML = "";
-    }
-    if (!hasMore) {
+      }
+      if (!hasMore) {
         return;
-    }
-    const params = new URLSearchParams({
+      }
+      const params = new URLSearchParams({
         limit: "10",
         offset: String(nextOffset),
-        post_type: currentTagFilter ? "all" : currentPostTypeFilter,
-    });
-    if (currentTagFilter) {
+        post_type: currentTagFilter ? "all" : currentPostTypeFilter
+      });
+      if (currentTagFilter) {
         params.set("tag_id", String(currentTagFilter));
-    }
-    if (currentScope === "following") {
+      }
+      if (currentScope === "following") {
         params.set("scope", "following");
-    }
-    const res = await fetch(`${API_BASE}/api/posts?${params.toString()}`, {
-        credentials: "include",
-    });
-    if (!res.ok) {
+      }
+      const res = await fetch(`${API_BASE3}/api/posts?${params.toString()}`, {
+        credentials: "include"
+      });
+      if (!res.ok) {
         postList.innerHTML = `<div class='post-empty'>${t("posts.loadFailed")}</div>`;
         return;
-    }
-    const data = await res.json();
-    const posts = data.posts || [];
-    if (reset && posts.length === 0) {
+      }
+      const data = await res.json();
+      const posts = data.posts || [];
+      if (reset && posts.length === 0) {
         const emptyKey = currentScope === "following" ? "posts.noFollowingPosts" : "posts.noPosts";
         postList.innerHTML = `<div class='post-empty'>${t(emptyKey)}</div>`;
         hasMore = false;
         postLoadMoreBtn.style.display = "none";
         return;
-    }
-    posts.forEach((post) => {
+      }
+      posts.forEach((post) => {
         postList.appendChild(createPostCard(post));
+      });
+      hasMore = Boolean(data.has_more);
+      nextOffset = Number(data.next_offset || 0);
+      postLoadMoreBtn.style.display = hasMore ? "inline-flex" : "none";
+    }
+    postLoadMoreBtn.addEventListener("click", () => {
+      void loadPosts(false);
     });
-    hasMore = Boolean(data.has_more);
-    nextOffset = Number(data.next_offset || 0);
-    postLoadMoreBtn.style.display = hasMore ? "inline-flex" : "none";
-}
-postLoadMoreBtn.addEventListener("click", () => {
-    void loadPosts(false);
-});
-async function init() {
-    await hydrateSiteBrand();
-    await loadProfile();
-    await loadTags();
-    await loadPosts(true);
-}
-void init();
-// Logout
-document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-    try {
+    async function init() {
+      await hydrateSiteBrand();
+      await loadProfile();
+      await loadTags();
+      await loadPosts(true);
+    }
+    void init();
+    document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+      try {
         await logout();
-    }
-    finally {
+      } finally {
         window.location.replace("/login.html");
-    }
+      }
+    });
+  }
 });
+export default require_posts();
+//# sourceMappingURL=posts.js.map

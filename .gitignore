@@ -2,6 +2,7 @@
 data/
 ui/node_modules/
 ui/dist/
+ui/public/scripts/*.js.map
 .DS_Store
 .cache/
 .claude/
