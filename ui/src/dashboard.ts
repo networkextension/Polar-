@@ -11,10 +11,12 @@ import {
   fetchEntry,
   fetchLLMConfigs,
   fetchLoginHistory,
+  fetchInviteCodes,
   fetchPasskeys,
   fetchSiteSettings,
   fetchTags,
   finishPasskeyRegistration,
+  generateInviteCodes,
   removePasskey,
   removeBotUser,
   removeLLMConfig,
@@ -43,6 +45,7 @@ import type {
   BotPayload,
   BotUser,
   EntrySummary,
+  InviteCode,
   LLMConfig,
   LLMConfigPayload,
   LoginRecord,
@@ -141,8 +144,13 @@ const botUserStatus = byId<HTMLElement>("botUserStatus");
 const botUserList = byId<HTMLUListElement>("botUserList");
 const siteNameInput = byId<HTMLInputElement>("siteNameInput");
 const siteDescriptionInput = byId<HTMLTextAreaElement>("siteDescriptionInput");
+const siteRegistrationInviteRequired = byId<HTMLInputElement>("siteRegistrationInviteRequired");
 const saveSiteBtn = byId<HTMLButtonElement>("saveSiteBtn");
 const siteStatus = byId<HTMLElement>("siteStatus");
+const inviteCodeCountInput = byId<HTMLInputElement>("inviteCodeCountInput");
+const generateInviteCodeBtn = byId<HTMLButtonElement>("generateInviteCodeBtn");
+const inviteCodeStatus = byId<HTMLElement>("inviteCodeStatus");
+const inviteCodeList = byId<HTMLUListElement>("inviteCodeList");
 const siteIconPreview = byId<HTMLImageElement>("siteIconPreview");
 const siteIconFile = byId<HTMLInputElement>("siteIconFile");
 const applePushDevFile = byId<HTMLInputElement>("applePushDevFile");
@@ -178,6 +186,7 @@ let editingBotUserId: number | null = null;
 let currentLLMConfigs: LLMConfig[] = [];
 let currentAvailableLLMConfigs: LLMConfig[] = [];
 let currentBotUsers: BotUser[] = [];
+let currentInviteCodes: InviteCode[] = [];
 let activeSettingsSection: "profile" | "personalization" | "settings" | "system" | "bots" | "site" = "personalization";
 
 function populateLLMProviderPresets(): void {
@@ -415,6 +424,7 @@ function renderSiteSettings(site?: SiteSettings): void {
   const safeSite: SiteSettings = site || { name: "Polar-", description: "", icon_url: "" };
   siteNameInput.value = safeSite.name || "Polar-";
   siteDescriptionInput.value = safeSite.description || "";
+  siteRegistrationInviteRequired.checked = Boolean(safeSite.registration_requires_invite);
   siteIconPreview.src = safeSite.icon_url || defaultSiteIcon(safeSite.name || "Polar-");
   applePushDevMeta.textContent = formatCertificateMeta(safeSite.apple_push_dev_cert);
   applePushProdMeta.textContent = formatCertificateMeta(safeSite.apple_push_prod_cert);
@@ -422,6 +432,44 @@ function renderSiteSettings(site?: SiteSettings): void {
   applePushProdDeleteBtn.disabled = !safeSite.apple_push_prod_cert?.file_url;
   renderSystemInfo(safeSite.system_info);
   renderSiteBrand(safeSite);
+}
+
+function renderInviteCodeList(codes: InviteCode[]): void {
+  if (!codes.length) {
+    inviteCodeList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noInviteCodes")}</li>`;
+    return;
+  }
+  inviteCodeList.innerHTML = codes
+    .map((item) => {
+      const state = item.used_at ? t("dashboard.inviteCodeUsed") : t("dashboard.inviteCodeAvailable");
+      const usedBy = item.used_by ? ` · ${item.used_by}` : "";
+      const timeText = item.created_at ? new Date(item.created_at).toLocaleString() : "-";
+      return `
+        <li class="tag-item">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${item.code}</strong>
+              <span class="tag-chip">${state}</span>
+            </div>
+            <div class="tag-item-meta">${timeText}${usedBy}</div>
+          </div>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+async function loadInviteCodes(): Promise<void> {
+  if (!isAdmin) {
+    return;
+  }
+  const { response, data } = await fetchInviteCodes(40);
+  if (!response.ok) {
+    inviteCodeStatus.textContent = data.error || t("dashboard.inviteCodeLoadFailed");
+    return;
+  }
+  currentInviteCodes = data.codes || [];
+  renderInviteCodeList(currentInviteCodes);
 }
 
 function renderTagList(tags: Tag[]): void {
@@ -675,6 +723,14 @@ async function loadSiteAdminData(): Promise<void> {
         botUserStatus.textContent = availableResult.data.error || t("dashboard.availableConfigLoadFailed");
         syncBotConfigOptions(currentAvailableLLMConfigs);
       }
+    })(),
+    (async () => {
+      if (!isAdmin) {
+        currentInviteCodes = [];
+        renderInviteCodeList(currentInviteCodes);
+        return;
+      }
+      await loadInviteCodes();
     })(),
     (async () => {
       const { response, data } = await fetchBotUsers();
@@ -1204,6 +1260,7 @@ saveSiteBtn.addEventListener("click", async () => {
       name: siteNameInput.value.trim(),
       description: siteDescriptionInput.value.trim(),
       icon_url: siteIconPreview.src,
+      registration_requires_invite: siteRegistrationInviteRequired.checked,
     });
     if (!response.ok) {
       siteStatus.textContent = data.error || t("common.saveFailed");
@@ -1215,6 +1272,25 @@ saveSiteBtn.addEventListener("click", async () => {
     siteStatus.textContent = t("common.networkErrorRetry");
   } finally {
     saveSiteBtn.disabled = false;
+  }
+});
+
+generateInviteCodeBtn.addEventListener("click", async () => {
+  const count = Math.max(1, Math.min(50, Number(inviteCodeCountInput.value || "1")));
+  inviteCodeStatus.textContent = t("dashboard.generatingInviteCode");
+  generateInviteCodeBtn.disabled = true;
+  try {
+    const { response, data } = await generateInviteCodes(count);
+    if (!response.ok) {
+      inviteCodeStatus.textContent = data.error || t("dashboard.inviteCodeGenerateFailed");
+      return;
+    }
+    inviteCodeStatus.textContent = t("dashboard.inviteCodeGenerated", { count: String((data.codes || []).length) });
+    await loadInviteCodes();
+  } catch {
+    inviteCodeStatus.textContent = t("common.networkErrorRetry");
+  } finally {
+    generateInviteCodeBtn.disabled = false;
   }
 });
 

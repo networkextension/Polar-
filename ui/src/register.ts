@@ -6,11 +6,14 @@ import { t } from "./lib/i18n.js";
 const API_BASE = "";
 const form = byId<HTMLFormElement>("registerForm");
 const alertBox = byId<HTMLElement>("alert");
+const inviteCodeWrap = byId<HTMLElement>("inviteCodeWrap");
+const inviteCodeInput = byId<HTMLInputElement>("invitation_code");
 
 type RegisterFormElements = HTMLFormControlsCollection & {
   username: HTMLInputElement;
   email: HTMLInputElement;
   password: HTMLInputElement;
+  invitation_code: HTMLInputElement;
 };
 
 form.addEventListener("submit", async (event) => {
@@ -23,6 +26,7 @@ form.addEventListener("submit", async (event) => {
     username: elements.username.value.trim(),
     email: elements.email.value.trim(),
     password: elements.password.value,
+    invitation_code: elements.invitation_code?.value.trim() || "",
   };
 
   try {
@@ -63,4 +67,24 @@ async function redirectIfLoggedIn(): Promise<void> {
 }
 
 void redirectIfLoggedIn();
+
+async function loadInviteRequirement(): Promise<void> {
+  try {
+    const response = await fetch("/api/site-settings", { credentials: "include" });
+    if (!response.ok) {
+      inviteCodeWrap.hidden = true;
+      inviteCodeInput.required = false;
+      return;
+    }
+    const data = await response.json();
+    const required = Boolean(data?.site?.registration_requires_invite);
+    inviteCodeWrap.hidden = !required;
+    inviteCodeInput.required = required;
+  } catch {
+    inviteCodeWrap.hidden = true;
+    inviteCodeInput.required = false;
+  }
+}
+
 void hydrateSiteBrand();
+void loadInviteRequirement();

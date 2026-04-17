@@ -1,4 +1,4 @@
-import { createBotUser, createLLMConfig, beginPasskeyRegistration, createTag, deleteApplePushCertificate, deleteEntry, fetchAvailableLLMConfigs, fetchBotUsers, fetchEntries, fetchEntry, fetchLLMConfigs, fetchLoginHistory, fetchPasskeys, fetchSiteSettings, fetchTags, finishPasskeyRegistration, removePasskey, removeBotUser, removeLLMConfig, removeTag, testLLMConfig, updateBotUser, updateLLMConfig, updateSiteSettings, updateTag, uploadApplePushCertificate, uploadSiteIcon, uploadUserIcon, } from "./api/dashboard.js";
+import { createBotUser, createLLMConfig, beginPasskeyRegistration, createTag, deleteApplePushCertificate, deleteEntry, fetchAvailableLLMConfigs, fetchBotUsers, fetchEntries, fetchEntry, fetchLLMConfigs, fetchLoginHistory, fetchInviteCodes, fetchPasskeys, fetchSiteSettings, fetchTags, finishPasskeyRegistration, generateInviteCodes, removePasskey, removeBotUser, removeLLMConfig, removeTag, testLLMConfig, updateBotUser, updateLLMConfig, updateSiteSettings, updateTag, uploadApplePushCertificate, uploadSiteIcon, uploadUserIcon, } from "./api/dashboard.js";
 import { fetchCurrentUser, logout, sendEmailVerification } from "./api/session.js";
 import { formatDeviceType } from "./lib/client.js";
 import { makeDefaultAvatar } from "./lib/avatar.js";
@@ -97,8 +97,13 @@ const botUserStatus = byId("botUserStatus");
 const botUserList = byId("botUserList");
 const siteNameInput = byId("siteNameInput");
 const siteDescriptionInput = byId("siteDescriptionInput");
+const siteRegistrationInviteRequired = byId("siteRegistrationInviteRequired");
 const saveSiteBtn = byId("saveSiteBtn");
 const siteStatus = byId("siteStatus");
+const inviteCodeCountInput = byId("inviteCodeCountInput");
+const generateInviteCodeBtn = byId("generateInviteCodeBtn");
+const inviteCodeStatus = byId("inviteCodeStatus");
+const inviteCodeList = byId("inviteCodeList");
 const siteIconPreview = byId("siteIconPreview");
 const siteIconFile = byId("siteIconFile");
 const applePushDevFile = byId("applePushDevFile");
@@ -132,6 +137,7 @@ let editingBotUserId = null;
 let currentLLMConfigs = [];
 let currentAvailableLLMConfigs = [];
 let currentBotUsers = [];
+let currentInviteCodes = [];
 let activeSettingsSection = "personalization";
 function populateLLMProviderPresets() {
     llmProviderPresetSelect.innerHTML = LLM_PROVIDER_PRESETS
@@ -349,6 +355,7 @@ function renderSiteSettings(site) {
     const safeSite = site || { name: "Polar-", description: "", icon_url: "" };
     siteNameInput.value = safeSite.name || "Polar-";
     siteDescriptionInput.value = safeSite.description || "";
+    siteRegistrationInviteRequired.checked = Boolean(safeSite.registration_requires_invite);
     siteIconPreview.src = safeSite.icon_url || defaultSiteIcon(safeSite.name || "Polar-");
     applePushDevMeta.textContent = formatCertificateMeta(safeSite.apple_push_dev_cert);
     applePushProdMeta.textContent = formatCertificateMeta(safeSite.apple_push_prod_cert);
@@ -356,6 +363,42 @@ function renderSiteSettings(site) {
     applePushProdDeleteBtn.disabled = !safeSite.apple_push_prod_cert?.file_url;
     renderSystemInfo(safeSite.system_info);
     renderSiteBrand(safeSite);
+}
+function renderInviteCodeList(codes) {
+    if (!codes.length) {
+        inviteCodeList.innerHTML = `<li class="tag-item tag-item-empty">${t("dashboard.noInviteCodes")}</li>`;
+        return;
+    }
+    inviteCodeList.innerHTML = codes
+        .map((item) => {
+        const state = item.used_at ? t("dashboard.inviteCodeUsed") : t("dashboard.inviteCodeAvailable");
+        const usedBy = item.used_by ? ` · ${item.used_by}` : "";
+        const timeText = item.created_at ? new Date(item.created_at).toLocaleString() : "-";
+        return `
+        <li class="tag-item">
+          <div class="tag-item-main">
+            <div class="tag-item-header">
+              <strong>${item.code}</strong>
+              <span class="tag-chip">${state}</span>
+            </div>
+            <div class="tag-item-meta">${timeText}${usedBy}</div>
+          </div>
+        </li>
+      `;
+    })
+        .join("");
+}
+async function loadInviteCodes() {
+    if (!isAdmin) {
+        return;
+    }
+    const { response, data } = await fetchInviteCodes(40);
+    if (!response.ok) {
+        inviteCodeStatus.textContent = data.error || t("dashboard.inviteCodeLoadFailed");
+        return;
+    }
+    currentInviteCodes = data.codes || [];
+    renderInviteCodeList(currentInviteCodes);
 }
 function renderTagList(tags) {
     if (!tags.length) {
@@ -586,6 +629,14 @@ async function loadSiteAdminData() {
                 botUserStatus.textContent = availableResult.data.error || t("dashboard.availableConfigLoadFailed");
                 syncBotConfigOptions(currentAvailableLLMConfigs);
             }
+        })(),
+        (async () => {
+            if (!isAdmin) {
+                currentInviteCodes = [];
+                renderInviteCodeList(currentInviteCodes);
+                return;
+            }
+            await loadInviteCodes();
         })(),
         (async () => {
             const { response, data } = await fetchBotUsers();
@@ -1050,6 +1101,7 @@ saveSiteBtn.addEventListener("click", async () => {
             name: siteNameInput.value.trim(),
             description: siteDescriptionInput.value.trim(),
             icon_url: siteIconPreview.src,
+            registration_requires_invite: siteRegistrationInviteRequired.checked,
         });
         if (!response.ok) {
             siteStatus.textContent = data.error || t("common.saveFailed");
@@ -1063,6 +1115,26 @@ saveSiteBtn.addEventListener("click", async () => {
     }
     finally {
         saveSiteBtn.disabled = false;
+    }
+});
+generateInviteCodeBtn.addEventListener("click", async () => {
+    const count = Math.max(1, Math.min(50, Number(inviteCodeCountInput.value || "1")));
+    inviteCodeStatus.textContent = t("dashboard.generatingInviteCode");
+    generateInviteCodeBtn.disabled = true;
+    try {
+        const { response, data } = await generateInviteCodes(count);
+        if (!response.ok) {
+            inviteCodeStatus.textContent = data.error || t("dashboard.inviteCodeGenerateFailed");
+            return;
+        }
+        inviteCodeStatus.textContent = t("dashboard.inviteCodeGenerated", { count: String((data.codes || []).length) });
+        await loadInviteCodes();
+    }
+    catch {
+        inviteCodeStatus.textContent = t("common.networkErrorRetry");
+    }
+    finally {
+        generateInviteCodeBtn.disabled = false;
     }
 });
 siteIconFile.addEventListener("change", async () => {

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,9 +12,10 @@ import (
 
 func (s *Server) handleRegister(c *gin.Context) {
 	var req struct {
-		Username string `json:"username" binding:"required,min=3"`
-		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required,min=6"`
+		Username       string `json:"username" binding:"required,min=3"`
+		Email          string `json:"email" binding:"required,email"`
+		Password       string `json:"password" binding:"required,min=6"`
+		InvitationCode string `json:"invitation_code"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -21,24 +23,58 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	existingUser, err := s.getUserByEmail(req.Email)
+	now := time.Now()
+	settings, err := s.getSiteSettings()
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "common.server_error")
 		return
 	}
+	inviteRequired := settings != nil && settings.RegistrationRequiresInvite
+	inviteCode := normalizeInviteCode(req.InvitationCode)
+	inviteMarker := ""
+	if inviteRequired {
+		if inviteCode == "" {
+			jsonError(c, http.StatusForbidden, "auth.invite_required")
+			return
+		}
+		inviteMarker = "pending:" + strings.ToLower(strings.TrimSpace(req.Email)) + ":" + generateResourceID()[:8]
+		consumed, err := s.consumeInviteCode(inviteCode, inviteMarker, now)
+		if err != nil {
+			jsonError(c, http.StatusInternalServerError, "common.server_error")
+			return
+		}
+		if !consumed {
+			jsonError(c, http.StatusForbidden, "auth.invite_invalid")
+			return
+		}
+	}
+
+	existingUser, err := s.getUserByEmail(req.Email)
+	if err != nil {
+		if inviteMarker != "" {
+			_ = s.releaseInviteCode(inviteCode, inviteMarker)
+		}
+		jsonError(c, http.StatusInternalServerError, "common.server_error")
+		return
+	}
 	if existingUser != nil {
+		if inviteMarker != "" {
+			_ = s.releaseInviteCode(inviteCode, inviteMarker)
+		}
 		jsonError(c, http.StatusConflict, "auth.email_registered")
 		return
 	}
 
 	hashedPassword, err := hashPassword(req.Password)
 	if err != nil {
+		if inviteMarker != "" {
+			_ = s.releaseInviteCode(inviteCode, inviteMarker)
+		}
 		jsonError(c, http.StatusInternalServerError, "common.server_error")
 		return
 	}
 
 	deviceType, pushToken, deviceID := s.parseClientInfo(c.GetHeader("X-Device-Type"), c.GetHeader("X-Push-Token"), c.GetHeader("X-Device-Id"))
-	now := time.Now()
 
 	user := &User{
 		ID:         generateSessionID()[:16],
@@ -49,12 +85,20 @@ func (s *Server) handleRegister(c *gin.Context) {
 		CreatedAt:  now,
 	}
 	if err := s.createUser(user); err != nil {
+		if inviteMarker != "" {
+			_ = s.releaseInviteCode(inviteCode, inviteMarker)
+		}
 		if err == errEmailExists {
 			jsonError(c, http.StatusConflict, "auth.email_registered")
 			return
 		}
 		jsonError(c, http.StatusInternalServerError, "common.server_error")
 		return
+	}
+	if inviteMarker != "" {
+		if err := s.bindInviteCodeToUser(inviteCode, inviteMarker, user.ID); err != nil {
+			log.Printf("bind invite code failed: code=%s user=%s err=%v", inviteCode, user.ID, err)
+		}
 	}
 
 	if err := s.upsertUserDeviceWithID(user.ID, deviceType, deviceID, pushToken, now); err != nil {

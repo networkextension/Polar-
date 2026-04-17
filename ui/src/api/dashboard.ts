@@ -6,6 +6,7 @@ import type {
   EntryDetailResponse,
   EntryListResponse,
   ErrorResponse,
+  InviteCodeResponse,
   IconUploadResponse,
   LLMConfigListResponse,
   LLMConfigPayload,
@@ -145,6 +146,17 @@ export async function updateSiteSettings(payload: SiteSettings) {
   return requestJson<SiteSettingsResponse>("/api/site-settings", {
     method: "PUT",
     body: payload,
+  });
+}
+
+export async function fetchInviteCodes(limit = 30) {
+  return requestJson<InviteCodeResponse>(`/api/site-settings/invite-codes?limit=${limit}`);
+}
+
+export async function generateInviteCodes(count = 1) {
+  return requestJson<InviteCodeResponse>("/api/site-settings/invite-codes", {
+    method: "POST",
+    body: { count },
   });
 }
 

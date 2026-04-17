@@ -53,10 +53,20 @@ export type SiteSettings = {
   name: string;
   description: string;
   icon_url?: string;
+  registration_requires_invite?: boolean;
   apple_push_dev_cert?: ApplePushCertificate;
   apple_push_prod_cert?: ApplePushCertificate;
   system_info?: SystemInfo;
   updated_at?: string;
+};
+
+export type InviteCode = {
+  code: string;
+  created_by?: string;
+  created_at: string;
+  used_by?: string;
+  used_at?: string;
+  disabled: boolean;
 };
 
 export type SystemInfo = {
@@ -76,6 +86,10 @@ export type ApplePushCertificate = {
 
 export type SiteSettingsResponse = ErrorResponse & {
   site?: SiteSettings;
+};
+
+export type InviteCodeResponse = ErrorResponse & {
+  codes?: InviteCode[];
 };
 
 export type ErrorResponse = {

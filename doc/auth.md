@@ -49,6 +49,10 @@ This removes session validation from the relational database hot path and makes 
 ### Register: `POST /api/register`
 
 - validate `username`, `email`, `password`
+- when site setting `registration_requires_invite=true`, require `invitation_code`
+  - tentatively consume the invite code with a pending marker before creating the user
+  - release the code if later steps (email check, hashing, user creation) fail
+  - bind the code to the new `user_id` after the user row is created
 - ensure email uniqueness
 - hash the password with `bcrypt`
 - create user in PostgreSQL

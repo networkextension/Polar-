@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,8 +60,9 @@ func (s *Server) handleSiteSettingsGet(c *gin.Context) {
 
 func (s *Server) handleSiteSettingsUpdate(c *gin.Context) {
 	var req struct {
-		Name        string `json:"name" binding:"required"`
-		Description string `json:"description"`
+		Name                       string `json:"name" binding:"required"`
+		Description                string `json:"description"`
+		RegistrationRequiresInvite bool   `json:"registration_requires_invite"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -74,7 +76,7 @@ func (s *Server) handleSiteSettingsUpdate(c *gin.Context) {
 		return
 	}
 
-	if err := s.updateSiteSettings(name, strings.TrimSpace(req.Description)); err != nil {
+	if err := s.updateSiteSettings(name, strings.TrimSpace(req.Description), req.RegistrationRequiresInvite); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
 		return
 	}
@@ -89,6 +91,57 @@ func (s *Server) handleSiteSettingsUpdate(c *gin.Context) {
 		"message": "保存成功",
 		"site":    s.hydrateSiteSettings(settings),
 	})
+}
+
+func (s *Server) handleInviteCodeGenerate(c *gin.Context) {
+	var req struct {
+		Count int `json:"count"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.Count = 1
+	}
+	if req.Count <= 0 {
+		req.Count = 1
+	}
+	if req.Count > 50 {
+		req.Count = 50
+	}
+
+	adminID, _ := c.Get("user_id")
+	adminIDStr, _ := adminID.(string)
+	codes, err := s.createInviteCodes(adminIDStr, req.Count, time.Now())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "邀请码生成失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "邀请码已生成",
+		"codes":   codes,
+	})
+}
+
+func (s *Server) handleInviteCodeList(c *gin.Context) {
+	limit := 30
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 limit 参数"})
+			return
+		}
+		if parsed > 200 {
+			parsed = 200
+		}
+		limit = parsed
+	}
+
+	codes, err := s.listInviteCodes(limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "邀请码加载失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"codes": codes})
 }
 
 func (s *Server) handleSiteIconUpload(c *gin.Context) {

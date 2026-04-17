@@ -92,6 +92,15 @@ export async function updateSiteSettings(payload) {
         body: payload,
     });
 }
+export async function fetchInviteCodes(limit = 30) {
+    return requestJson(`/api/site-settings/invite-codes?limit=${limit}`);
+}
+export async function generateInviteCodes(count = 1) {
+    return requestJson("/api/site-settings/invite-codes", {
+        method: "POST",
+        body: { count },
+    });
+}
 export async function uploadSiteIcon(formData) {
     return requestJson("/api/site-settings/icon", {
         method: "POST",
