@@ -28,8 +28,7 @@ func (s *Server) handleDevicePushTokenUpdate(c *gin.Context) {
 
 	deviceType := req.DeviceType
 	if strings.TrimSpace(deviceType) == "" {
-		sessionID, _ := c.Cookie(SessionCookieName)
-		if session := s.getSession(sessionID); session != nil {
+		if session := s.getAccessSession(extractAccessToken(c)); session != nil {
 			deviceType = session.DeviceType
 			if strings.TrimSpace(req.DeviceID) == "" {
 				req.DeviceID = session.DeviceID
@@ -63,8 +62,7 @@ func (s *Server) handleDevicePushTokenDelete(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req)
 	if strings.TrimSpace(req.DeviceID) == "" {
-		sessionID, _ := c.Cookie(SessionCookieName)
-		if session := s.getSession(sessionID); session != nil {
+		if session := s.getAccessSession(extractAccessToken(c)); session != nil {
 			req.DeviceID = session.DeviceID
 		}
 	}

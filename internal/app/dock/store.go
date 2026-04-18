@@ -53,6 +53,9 @@ type AdminUserSummary struct {
 	CreatedAt  time.Time  `json:"created_at"`
 }
 
+// Session is the short-lived access session injected into the Gin
+// context by AuthMiddleware. It is the access-token half of the
+// refresh-token scheme documented in doc/auth-refresh.md.
 type Session struct {
 	ID         string
 	UserID     string
@@ -61,7 +64,26 @@ type Session struct {
 	DeviceType string
 	DeviceID   string
 	PushToken  string
+	FamilyID   string
+	RefreshID  string
+	Scopes     []string
 	ExpiresAt  time.Time
+}
+
+// RefreshToken is the long-lived record that can mint new access
+// tokens. Rotated on every use; the whole family is revoked on
+// replay (see doc/auth-refresh.md).
+type RefreshToken struct {
+	ID          string
+	UserID      string
+	DeviceType  string
+	DeviceID    string
+	PushToken   string
+	FamilyID    string
+	PrevRefresh string
+	Revoked     bool
+	ExpiresAt   time.Time
+	IssuedAt    time.Time
 }
 
 type UserDevice struct {

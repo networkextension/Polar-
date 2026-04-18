@@ -411,10 +411,8 @@ func (s *Server) handlePublicMarkdownRead(c *gin.Context) {
 	}
 
 	viewerUserID := ""
-	if sessionID, err := c.Cookie(SessionCookieName); err == nil {
-		if session := s.getSession(sessionID); session != nil {
-			viewerUserID = session.UserID
-		}
+	if session := s.getAccessSession(extractAccessToken(c)); session != nil {
+		viewerUserID = session.UserID
 	}
 
 	entry, _, err := s.getMarkdownEntryForUser(viewerUserID, entryID)

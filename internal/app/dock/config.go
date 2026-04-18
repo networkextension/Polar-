@@ -3,11 +3,28 @@ package dock
 import "time"
 
 const (
-	SessionCookieName    = "session_id"
+	// AccessCookieName is the cookie that carries the short-lived access
+	// token on every authenticated API request. See doc/auth-refresh.md.
+	AccessCookieName = "access_token"
+	// RefreshCookieName is the cookie that carries the long-lived refresh
+	// token; it is only sent on the refresh endpoint because of the
+	// narrow Path scope.
+	RefreshCookieName = "refresh_token"
+	// RefreshCookiePath limits where the refresh cookie is transmitted so
+	// the token doesn't accompany every API call.
+	RefreshCookiePath = "/api/token"
+	// AccessTokenTTL controls the access cookie Max-Age and the Redis TTL
+	// of the access token record. Kept short so a leaked token expires
+	// quickly.
+	AccessTokenTTL = 30 * time.Minute
+	// RefreshTokenTTL controls the refresh cookie Max-Age and the Redis
+	// TTL of the refresh token record. Refresh rotation on use means a
+	// clone is detected long before this window elapses.
+	RefreshTokenTTL = 30 * 24 * time.Hour
+
 	DefaultRedisAddr     = "localhost:6379"
 	DefaultRedisDB       = 0
 	DefaultRedisPrefix   = "polar"
-	SessionDuration      = 24 * time.Hour
 	DefaultMarkdownDir   = "data/markdown"
 	DefaultUploadDir     = "data/uploads"
 	DefaultGeoLiteDBPath = "data/GeoLite2-City.mmdb"

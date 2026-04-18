@@ -110,12 +110,12 @@ func (s *Server) handleRegister(c *gin.Context) {
 		return
 	}
 
-	sessionID, err := s.createSession(user, deviceType, deviceID, pushToken)
+	accessToken, refreshToken, _, err := s.createTokenFamily(user, deviceType, deviceID, pushToken)
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "common.server_error")
 		return
 	}
-	c.SetCookie(SessionCookieName, sessionID, int(SessionDuration.Seconds()), "/", "", false, true)
+	setAuthCookies(c, accessToken, refreshToken)
 	s.recordLoginEvent(c, user.ID, "register", deviceType)
 
 	jsonMessage(c, http.StatusCreated, "auth.register_success", gin.H{
@@ -156,12 +156,12 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 
-	sessionID, err := s.createSession(user, deviceType, deviceID, pushToken)
+	accessToken, refreshToken, _, err := s.createTokenFamily(user, deviceType, deviceID, pushToken)
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "common.server_error")
 		return
 	}
-	c.SetCookie(SessionCookieName, sessionID, int(SessionDuration.Seconds()), "/", "", false, true)
+	setAuthCookies(c, accessToken, refreshToken)
 	s.recordLoginEvent(c, user.ID, "password", deviceType)
 
 	jsonMessage(c, http.StatusOK, "auth.login_success", gin.H{
@@ -170,22 +170,50 @@ func (s *Server) handleLogin(c *gin.Context) {
 	})
 }
 
+func (s *Server) handleTokenRefresh(c *gin.Context) {
+	presented := extractRefreshToken(c)
+	if presented == "" {
+		clearAuthCookies(c)
+		jsonError(c, http.StatusUnauthorized, "auth.unauthorized")
+		return
+	}
+
+	deviceType, pushToken, deviceID := s.parseClientInfo(c.GetHeader("X-Device-Type"), c.GetHeader("X-Push-Token"), c.GetHeader("X-Device-Id"))
+	accessToken, newRefresh, _, err := s.rotateRefreshToken(presented, deviceType, deviceID, pushToken)
+	if err != nil {
+		// On replay we've already revoked the entire family — force
+		// the client back to a full login instead of a retry loop.
+		clearAuthCookies(c)
+		jsonError(c, http.StatusUnauthorized, "auth.unauthorized")
+		return
+	}
+
+	setAuthCookies(c, accessToken, newRefresh)
+	jsonMessage(c, http.StatusOK, "auth.token_refreshed", nil)
+}
+
 func (s *Server) handleLogout(c *gin.Context) {
-	sessionID, err := c.Cookie(SessionCookieName)
-	if err == nil {
-		if err := s.deleteSession(sessionID); err != nil {
-			log.Printf("logout delete session failed: %v", err)
+	if token := extractAccessToken(c); token != "" {
+		if session := s.getAccessSession(token); session != nil {
+			if session.FamilyID != "" {
+				if err := s.revokeTokenFamily(session.FamilyID); err != nil {
+					log.Printf("logout revoke family failed: %v", err)
+				}
+			}
+		}
+		if err := s.deleteAccessSession(token); err != nil {
+			log.Printf("logout delete access session failed: %v", err)
+		}
+	}
+	if refreshTok := extractRefreshToken(c); refreshTok != "" {
+		if refresh := s.getRefreshToken(refreshTok); refresh != nil && refresh.FamilyID != "" {
+			if err := s.revokeTokenFamily(refresh.FamilyID); err != nil {
+				log.Printf("logout revoke family via refresh failed: %v", err)
+			}
 		}
 	}
 
-	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Expires:  time.Unix(0, 0),
-	})
+	clearAuthCookies(c)
 	jsonMessage(c, http.StatusOK, "auth.logout_success", nil)
 }
 

@@ -248,8 +248,7 @@ func (s *Server) registerRoutes() {
 	s.router.SetHTMLTemplate(tmpl)
 
 	s.router.GET("/", func(c *gin.Context) {
-		sessionID, _ := c.Cookie(SessionCookieName)
-		if sessionID != "" && s.getSession(sessionID) != nil {
+		if session := s.getAccessSession(extractAccessToken(c)); session != nil {
 			c.Redirect(http.StatusFound, "/dashboard")
 			return
 		}
@@ -288,6 +287,7 @@ func (s *Server) registerRoutes() {
 		api.POST("/register", s.handleRegister)
 		api.POST("/login", s.handleLogin)
 		api.POST("/logout", s.handleLogout)
+		api.POST("/token/refresh", s.handleTokenRefresh)
 		api.POST("/passkey/register/begin", s.AuthMiddleware(), s.handlePasskeyRegisterBegin)
 		api.POST("/passkey/register/finish", s.AuthMiddleware(), s.handlePasskeyRegisterFinish)
 		api.GET("/passkeys", s.AuthMiddleware(), s.handlePasskeyList)
