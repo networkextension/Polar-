@@ -57,7 +57,7 @@ async function runEsbuild() {
     sourcemap: "linked",
     logLevel: "info",
     splitting: false,
-    minify: false,
+    minify: true,
     legalComments: "none",
     tsconfig: tsconfigPath,
   });
