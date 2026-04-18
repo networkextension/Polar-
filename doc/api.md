@@ -1,7 +1,14 @@
 # API 文档
 
-基础路径：`/api`  
-认证方式：基于 Cookie 的 Session，登录成功后服务端会下发 `session_id`。
+基础路径：`/api`
+
+认证方式：Access + Refresh Token（双 Cookie）。登录成功后服务端下发：
+
+- `access_token`（30 分钟，`HttpOnly; Secure; SameSite=Lax; Path=/`）—— 每次业务请求携带
+- `refresh_token`（30 天，`HttpOnly; Secure; SameSite=Strict; Path=/api/token`）—— 仅在 `POST /api/token/refresh` 消费
+
+第三方客户端也可以把 access token 放进 `Authorization: Bearer <tok>`。
+设计细节见 [doc/auth-refresh.md](./auth-refresh.md)。
 
 ## 通用请求头
 
@@ -85,13 +92,39 @@
 }
 ```
 
+响应会下发两枚 cookie：`access_token`（30 分钟）和 `refresh_token`（30 天）。
+
+## 刷新令牌
+
+**POST** `/api/token/refresh`
+
+说明：
+
+- 读取 `refresh_token` cookie（或 `Authorization: Bearer <refresh_tok>`）
+- 校验通过后，**旧 refresh 即刻作废**，签发一对新的 access + refresh
+- 若提交的 refresh 已被消费过（重放），整个 token family 会被撤销——用户需要重新登录
+- 客户端应**串行化** refresh 请求，避免并发 401 触发多次 refresh
+
+成功响应：
+```json
+{
+  "message": "令牌已刷新"
+}
+```
+
+失败响应：
+- `401`：refresh 缺失、过期、或被判定为重放
+- 前端应跳转到登录页
+
 ## 登出
 
 **POST** `/api/logout`
 
 说明：
 
-- 当前接口仅清理 Session Cookie
+- 清除当前 access token
+- 撤销同一 family 下全部 refresh token（其它设备也会被踢掉）
+- 清理 `access_token` 和 `refresh_token` 两枚 cookie
 - 不会主动清空 `user_devices.push_token`
 - 在线状态主要由 websocket 连接生命周期驱动
 
