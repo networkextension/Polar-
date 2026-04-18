@@ -9,15 +9,66 @@ const titleEl = byId<HTMLElement>("markdownTitle");
 const metaEl = byId<HTMLElement>("markdownMeta");
 const alertBox = byId<HTMLElement>("markdownAlert");
 const contentEl = byId<HTMLElement>("markdownContent");
+const copyMdBtn = byId<HTMLButtonElement>("markdownCopyMdBtn");
+const copyHtmlBtn = byId<HTMLButtonElement>("markdownCopyHtmlBtn");
 const entryId = new URLSearchParams(window.location.search).get("id");
 
 initStoredTheme();
 bindThemeSync();
 
+let rawMarkdown = "";
+
 function applyMarkdownPayload(data: { entry?: { title?: string; is_public?: boolean }; content?: string }): void {
   titleEl.textContent = data.entry?.title || t("markdown.title");
   metaEl.textContent = data.entry?.is_public ? t("markdown.publicReadOnly") : t("markdown.readOnlyPreview");
-  contentEl.innerHTML = renderMarkdown(data.content || "");
+  rawMarkdown = data.content || "";
+  contentEl.innerHTML = renderMarkdown(rawMarkdown);
+  copyMdBtn.disabled = false;
+  copyHtmlBtn.disabled = false;
+}
+
+async function writeClipboard(text: string): Promise<boolean> {
+  if (!text) {
+    return false;
+  }
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to the textarea fallback — some browsers block
+      // clipboard writes without an explicit user gesture context,
+      // which shouldn't happen here but we still want a safety net.
+    }
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+async function runCopy(button: HTMLButtonElement, buildPayload: () => string, defaultLabel: string): Promise<void> {
+  const text = buildPayload();
+  if (!text.trim()) {
+    return;
+  }
+  const ok = await writeClipboard(text);
+  const originalLabel = button.textContent || defaultLabel;
+  button.textContent = ok ? t("markdown.copied") : t("markdown.copyFailed");
+  button.disabled = true;
+  window.setTimeout(() => {
+    button.textContent = originalLabel;
+    button.disabled = false;
+  }, 1500);
 }
 
 async function requestMarkdown(path: string): Promise<{ ok: boolean; status: number; data: any }> {
@@ -68,6 +119,17 @@ async function loadPublicMarkdown(): Promise<void> {
     contentEl.textContent = t("markdown.loadError");
   }
 }
+
+copyMdBtn.disabled = true;
+copyHtmlBtn.disabled = true;
+
+copyMdBtn.addEventListener("click", () => {
+  void runCopy(copyMdBtn, () => rawMarkdown, t("markdown.copyMarkdown"));
+});
+
+copyHtmlBtn.addEventListener("click", () => {
+  void runCopy(copyHtmlBtn, () => contentEl.innerHTML, t("markdown.copyHtml"));
+});
 
 void hydrateSiteBrand();
 void loadPublicMarkdown();

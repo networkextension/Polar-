@@ -381,6 +381,11 @@ const en: Record<string, string> = {
   "markdown.loadFailed": "Failed to load document",
   "markdown.notFound": "Public document not found",
   "markdown.loadError": "Load failed",
+  "markdown.showRaw": "Show raw",
+  "markdown.copyMarkdown": "Copy Markdown",
+  "markdown.copyHtml": "Copy HTML",
+  "markdown.copied": "Copied!",
+  "markdown.copyFailed": "Copy failed",
 
   // Dashboard
   "dashboard.title": "Dashboard",
@@ -1075,6 +1080,11 @@ const zhCN: Record<string, string> = {
   "markdown.loadFailed": "无法加载文档",
   "markdown.notFound": "未找到公开文档",
   "markdown.loadError": "加载失败",
+  "markdown.showRaw": "显示源文",
+  "markdown.copyMarkdown": "复制 Markdown",
+  "markdown.copyHtml": "复制 HTML",
+  "markdown.copied": "已复制！",
+  "markdown.copyFailed": "复制失败",
 
   "dashboard.title": "控制台",
   "dashboard.loading": "正在加载用户信息...",
