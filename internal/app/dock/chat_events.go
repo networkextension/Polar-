@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -202,18 +204,35 @@ func (s *Server) preparePushDeliveries(threadID, messageID int64, senderID strin
 	}
 
 	now := time.Now()
-	status := "pending"
-	reason := ""
+	baseStatus := "pending"
+	baseReason := ""
 	if online && viewing {
-		status = "skipped"
-		reason = "active_in_thread"
+		baseStatus = "skipped"
+		baseReason = "active_in_thread"
 	} else if online {
-		reason = "online_not_viewing"
+		baseReason = "online_not_viewing"
 	} else {
-		reason = "offline"
+		baseReason = "offline"
 	}
 
 	for _, device := range devices {
+		status := baseStatus
+		reason := baseReason
+		// Suppress push for any device that currently has its own WebSocket
+		// open — it already got the message in-band, so a push would be a
+		// duplicate banner on that physical device. This is how we stop iOS
+		// from buzzing while the user is actively in the chat on the same
+		// phone, even if the native app doesn't emit the `view_thread`
+		// presence ping.
+		if status != "skipped" {
+			deviceActive, err := s.deviceHasActiveWS(receiverID, device.DeviceID)
+			if err != nil {
+				log.Printf("device ws check failed: %v", err)
+			} else if deviceActive {
+				status = "skipped"
+				reason = "device_ws_active"
+			}
+		}
 		if err := s.createPushDelivery(messageID, receiverID, device.DeviceID, device.PushToken, status, reason, now); err != nil {
 			log.Printf("create push delivery failed: %v", err)
 		}
@@ -296,6 +315,37 @@ func (s *Server) hasActiveWSConnections(userID string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// deviceHasActiveWS reports whether the given device currently holds a live
+// WebSocket connection. When true, the device is already receiving messages
+// in-band, so an APNs/FCM push would be redundant (and on iOS surfaces as
+// a duplicate banner while the user is actively in the chat).
+func (s *Server) deviceHasActiveWS(userID, deviceID string) (bool, error) {
+	if s.redis == nil || userID == "" || deviceID == "" {
+		return false, nil
+	}
+	ctx := context.Background()
+	connIDs, err := s.redis.SMembers(ctx, s.wsUserKey(userID)).Result()
+	if err != nil {
+		return false, err
+	}
+	for _, connID := range connIDs {
+		if connID == "" {
+			continue
+		}
+		candidate, err := s.redis.HGet(ctx, s.wsConnKey(connID), "device_id").Result()
+		if err != nil {
+			if err == redis.Nil {
+				continue
+			}
+			return false, err
+		}
+		if candidate == deviceID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *Server) isUserViewingThread(userID string, threadID int64) (bool, error) {
