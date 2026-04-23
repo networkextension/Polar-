@@ -306,7 +306,7 @@ export type PackTunnelRuleResponse = ErrorResponse & {
 // Latch service
 // ---------------------------------------------------------------------------
 
-export type LatchProxyType = "ss" | "ss3" | "kcp_over_http" | "kcp_over_ss" | "kcp_over_ss3";
+export type LatchProxyType = "ss" | "ss3" | "kcp_over_http" | "kcp_over_ss" | "kcp_over_ss3" | "wireguard";
 
 export type LatchProxy = {
   id: string;
@@ -341,6 +341,20 @@ export type LatchProfile = {
   updated_at: string;
 };
 
+export type LatchServiceNode = {
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
+  proxy_type: LatchProxyType;
+  config: Record<string, unknown>;
+  status: string;
+  last_updated_at: string;
+  created_at: string;
+  updated_at: string;
+  is_deleted: boolean;
+};
+
 export type LatchProxyListResponse = ErrorResponse & {
   proxies?: LatchProxy[];
   proxy?: LatchProxy;
@@ -361,4 +375,17 @@ export type LatchProfileDetail = LatchProfile & {
 export type LatchProfileListResponse = ErrorResponse & {
   profiles?: LatchProfile[] | LatchProfileDetail[];
   profile?: LatchProfile;
+};
+
+export type LatchServiceNodeListResponse = ErrorResponse & {
+  nodes?: LatchServiceNode[];
+  node?: LatchServiceNode;
+  token?: string;
+  meta?: {
+    id: string;
+    node_id: string;
+    created_by: string;
+    created_at: string;
+    revoked: boolean;
+  };
 };

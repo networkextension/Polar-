@@ -23,6 +23,7 @@ import type {
   LatchProxyListResponse,
   LatchRuleListResponse,
   LatchProfileListResponse,
+  LatchServiceNodeListResponse,
 } from "../types/dashboard.js";
 
 export async function fetchLoginHistory(limit = 5) {
@@ -347,6 +348,44 @@ export async function removeLatchProfile(id: string) {
 
 export async function fetchLatchProfiles() {
   return requestJson<LatchProfileListResponse>("/api/latch/profiles");
+}
+
+// ---------------------------------------------------------------------------
+// Latch — Service Nodes
+// ---------------------------------------------------------------------------
+
+export async function fetchLatchServiceNodes(includeDeleted = false) {
+  return requestJson<LatchServiceNodeListResponse>(`/api/latch/admin/service-nodes?include_deleted=${includeDeleted ? "true" : "false"}`);
+}
+
+export async function createLatchServiceNode(payload: {
+  name: string;
+  ip: string;
+  port: number;
+  proxy_type: string;
+  config: unknown;
+  status: string;
+}) {
+  return requestJson<LatchServiceNodeListResponse>("/api/latch/admin/service-nodes", { method: "POST", body: payload });
+}
+
+export async function updateLatchServiceNode(id: string, payload: {
+  name: string;
+  ip: string;
+  port: number;
+  proxy_type: string;
+  config: unknown;
+  status: string;
+}) {
+  return requestJson<LatchServiceNodeListResponse>(`/api/latch/admin/service-nodes/${encodeURIComponent(id)}`, { method: "PUT", body: payload });
+}
+
+export async function removeLatchServiceNode(id: string) {
+  return requestJson<LatchServiceNodeListResponse>(`/api/latch/admin/service-nodes/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function issueLatchServiceNodeAgentToken(id: string) {
+  return requestJson<LatchServiceNodeListResponse>(`/api/latch/admin/service-nodes/${encodeURIComponent(id)}/agent-token`, { method: "POST" });
 }
 
 export async function uploadUserIcon(formData: FormData) {
