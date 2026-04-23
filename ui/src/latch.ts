@@ -103,6 +103,8 @@ const latchServiceNodeIPInput = byId<HTMLInputElement>("latchServiceNodeIPInput"
 const latchServiceNodePortInput = byId<HTMLInputElement>("latchServiceNodePortInput");
 const latchServiceNodeTypeSelect = byId<HTMLSelectElement>("latchServiceNodeTypeSelect");
 const latchServiceNodeStatusSelect = byId<HTMLSelectElement>("latchServiceNodeStatusSelect");
+const latchServiceNodePasteInput = byId<HTMLTextAreaElement>("latchServiceNodePasteInput");
+const latchServiceNodePasteApplyBtn = byId<HTMLButtonElement>("latchServiceNodePasteApplyBtn");
 const latchServiceNodeCfgPassword = byId<HTMLInputElement>("latchServiceNodeCfgPassword");
 const latchServiceNodeCfgMethod = byId<HTMLInputElement>("latchServiceNodeCfgMethod");
 const latchServiceNodeCfgKey = byId<HTMLInputElement>("latchServiceNodeCfgKey");
@@ -260,6 +262,143 @@ function renderServiceNodes(nodes: LatchServiceNode[]): void {
   `).join("");
 }
 
+function normalizeServiceNodeProxyType(input: string): string {
+  const value = input.trim().toLowerCase();
+  const alias: Record<string, string> = {
+    ss: "ss",
+    shadowsocks: "ss",
+    ss3: "ss3",
+    "ss-v3": "ss3",
+    kcp_over_http: "kcp_over_http",
+    "kcp-http": "kcp_over_http",
+    kcp_over_ss: "kcp_over_ss",
+    "kcp-ss": "kcp_over_ss",
+    kcp_over_ss3: "kcp_over_ss3",
+    "kcp-ss3": "kcp_over_ss3",
+    wireguard: "wireguard",
+    wg: "wireguard",
+  };
+  return alias[value] || "";
+}
+
+function parsePastedNodeConfig(raw: string): Record<string, unknown> {
+  const text = raw.trim();
+  if (!text) return {};
+
+  if (text.startsWith("{") && text.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Fallback to line parser.
+    }
+  }
+
+  const out: Record<string, unknown> = {};
+  const lines = text.split(/\r?\n|;/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const match = line.match(/^([^:=]+)\s*[:=]\s*(.+)$/);
+    if (!match) continue;
+    const key = match[1].trim().toLowerCase().replace(/\s+/g, "_");
+    out[key] = match[2].trim();
+  }
+  return out;
+}
+
+function firstStringValue(obj: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+    if (typeof value === "number") return String(value);
+    if (typeof value === "boolean") return value ? "true" : "false";
+  }
+  return "";
+}
+
+function applyServiceNodePasteText(raw: string): void {
+  const parsed = parsePastedNodeConfig(raw);
+  if (!Object.keys(parsed).length) {
+    setStatus(latchServiceNodeStatus, "未识别到可用字段，请检查粘贴内容格式", "error");
+    return;
+  }
+
+  const nestedConfig = parsed.config;
+  const merged: Record<string, unknown> = { ...parsed };
+  if (nestedConfig && typeof nestedConfig === "object" && !Array.isArray(nestedConfig)) {
+    for (const [key, value] of Object.entries(nestedConfig as Record<string, unknown>)) {
+      if (merged[key] === undefined) merged[key] = value;
+    }
+  }
+
+  const name = firstStringValue(merged, ["name", "node_name", "节点名称", "名称"]);
+  const ip = firstStringValue(merged, ["ip", "host", "server", "地址"]);
+  const port = firstStringValue(merged, ["port", "端口"]);
+  const proxyTypeRaw = firstStringValue(merged, ["proxy_type", "type", "协议类型", "协议"]);
+  const status = firstStringValue(merged, ["status", "状态"]);
+  const password = firstStringValue(merged, ["password", "passwd", "密码"]);
+  const method = firstStringValue(merged, ["method", "cipher", "加密方式"]);
+  const key = firstStringValue(merged, ["key", "kcp_key"]);
+  const crypt = firstStringValue(merged, ["crypt", "kcp_crypt"]);
+  const mode = firstStringValue(merged, ["mode", "kcp_mode"]);
+  const mtu = firstStringValue(merged, ["mtu", "kcp_mtu"]);
+  const privateKey = firstStringValue(merged, ["private_key", "wg_private_key"]);
+  const publicKey = firstStringValue(merged, ["public_key", "wg_public_key"]);
+  const endpoint = firstStringValue(merged, ["endpoint", "wg_endpoint"]);
+  const allowedIPs = firstStringValue(merged, ["allowed_ips", "wg_allowed_ips"]);
+  const wireguardRole = firstStringValue(merged, ["wireguard_role", "wg_role", "role"]);
+
+  let touched = 0;
+  const setIf = (value: string, setter: (v: string) => void): void => {
+    if (!value) return;
+    setter(value);
+    touched += 1;
+  };
+
+  setIf(name, (v) => { latchServiceNodeNameInput.value = v; });
+  setIf(ip, (v) => { latchServiceNodeIPInput.value = v; });
+  setIf(port, (v) => {
+    const n = Number(v);
+    if (!Number.isNaN(n) && n > 0) latchServiceNodePortInput.value = String(Math.floor(n));
+  });
+  if (proxyTypeRaw) {
+    const normalized = normalizeServiceNodeProxyType(proxyTypeRaw);
+    if (normalized) {
+      latchServiceNodeTypeSelect.value = normalized;
+      touched += 1;
+    }
+  }
+  setIf(status, (v) => {
+    if (["unknown", "up", "down", "degraded"].includes(v)) {
+      latchServiceNodeStatusSelect.value = v;
+    }
+  });
+  setIf(password, (v) => { latchServiceNodeCfgPassword.value = v; });
+  setIf(method, (v) => { latchServiceNodeCfgMethod.value = v; });
+  setIf(key, (v) => { latchServiceNodeCfgKey.value = v; });
+  setIf(crypt, (v) => { latchServiceNodeCfgCrypt.value = v; });
+  setIf(mode, (v) => { latchServiceNodeCfgMode.value = v; });
+  setIf(mtu, (v) => {
+    const n = Number(v);
+    if (!Number.isNaN(n) && n > 0) latchServiceNodeCfgMTU.value = String(Math.floor(n));
+  });
+  setIf(privateKey, (v) => { latchServiceNodeCfgPrivateKey.value = v; });
+  setIf(publicKey, (v) => { latchServiceNodeCfgPublicKey.value = v; });
+  setIf(endpoint, (v) => { latchServiceNodeCfgEndpoint.value = v; });
+  setIf(allowedIPs, (v) => { latchServiceNodeCfgAllowedIPs.value = v; });
+  setIf(wireguardRole.toLowerCase(), (v) => {
+    latchServiceNodeCfgWireguardRole.value = v === "client" ? "client" : "server";
+  });
+
+  refreshServiceNodeConfigPreview();
+  if (touched === 0) {
+    setStatus(latchServiceNodeStatus, "未匹配到可应用字段，请按示例格式粘贴", "error");
+    return;
+  }
+  setStatus(latchServiceNodeStatus, `已从粘贴内容应用 ${touched} 项字段`, "success");
+}
+
 function buildServiceNodeConfigFromForm(proxyType: string): Record<string, unknown> {
   const config: Record<string, unknown> = {};
   const password = latchServiceNodeCfgPassword.value.trim();
@@ -329,6 +468,7 @@ function refreshServiceNodeConfigPreview(): void {
 
 function resetServiceNodeForm(): void {
   editingServiceNodeId = null;
+  latchServiceNodePasteInput.value = "";
   latchServiceNodeNameInput.value = "";
   latchServiceNodeIPInput.value = "";
   latchServiceNodePortInput.value = "443";
@@ -800,6 +940,9 @@ function wireAdminEvents(): void {
   });
 
   latchServiceNodeResetBtn.addEventListener("click", resetServiceNodeForm);
+  latchServiceNodePasteApplyBtn.addEventListener("click", () => {
+    applyServiceNodePasteText(latchServiceNodePasteInput.value);
+  });
   latchServiceNodeTypeSelect.addEventListener("change", refreshServiceNodeConfigPreview);
   [
     latchServiceNodeCfgPassword,

@@ -6,7 +6,7 @@
     <title>Latch 服务</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260423-readability-1" />
   </head>
   <body class="lp-page">
     <!-- Panel overlay -->
@@ -409,6 +409,18 @@
               <option value="down">down</option>
               <option value="degraded">degraded</option>
             </select>
+          </div>
+        </div>
+        <div class="lp-field">
+          <label class="lp-label" for="latchServiceNodePasteInput">快速粘贴（新手）</label>
+          <textarea
+            id="latchServiceNodePasteInput"
+            class="lp-input lp-textarea"
+            rows="4"
+            placeholder='支持 JSON 或多行 key=value。例如：&#10;name=Tokyo-A&#10;ip=1.2.3.4&#10;port=443&#10;proxy_type=wireguard&#10;wireguard_role=server'
+          ></textarea>
+          <div class="lp-actions" style="margin-top:8px;">
+            <button id="latchServiceNodePasteApplyBtn" class="lp-manage-btn" type="button">应用粘贴内容</button>
           </div>
         </div>
 
