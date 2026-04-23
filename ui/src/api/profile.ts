@@ -22,11 +22,32 @@ export type UserProfileDetail = {
   can_recommend: boolean;
   i_blocked_user?: boolean;
   blocked_me?: boolean;
+  is_following?: boolean;
+  followed_me?: boolean;
+  follower_count?: number;
+  following_count?: number;
   recommendations?: ProfileRecommendation[];
 };
 
 export type UserProfileResponse = {
   profile?: UserProfileDetail;
+  message?: string;
+  error?: string;
+};
+
+export type UserSummary = {
+  id: string;
+  username: string;
+  user_icon?: string;
+  bio?: string;
+  is_following?: boolean;
+};
+
+export type UserListResponse = {
+  users?: UserSummary[];
+  total?: number;
+  has_more?: boolean;
+  next_offset?: number;
   message?: string;
   error?: string;
 };
@@ -59,4 +80,30 @@ export async function unblockUser(userId: string) {
   return requestJson<UserProfileResponse>(`/api/users/${encodeURIComponent(userId)}/block`, {
     method: "DELETE",
   });
+}
+
+export async function followUser(userId: string) {
+  return requestJson<UserProfileResponse>(`/api/users/${encodeURIComponent(userId)}/follow`, {
+    method: "POST",
+  });
+}
+
+export async function unfollowUser(userId: string) {
+  return requestJson<UserProfileResponse>(`/api/users/${encodeURIComponent(userId)}/follow`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchFollowers(userId: string, limit = 20, offset = 0) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return requestJson<UserListResponse>(
+    `/api/users/${encodeURIComponent(userId)}/followers?${params.toString()}`
+  );
+}
+
+export async function fetchFollowing(userId: string, limit = 20, offset = 0) {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  return requestJson<UserListResponse>(
+    `/api/users/${encodeURIComponent(userId)}/following?${params.toString()}`
+  );
 }

@@ -154,9 +154,10 @@ func (s *Server) handleMarkdownAssistWithBot(c *gin.Context) {
 
 func (s *Server) handleMarkdownSubmit(c *gin.Context) {
 	var req struct {
-		Title    string `json:"title" binding:"required"`
-		Content  string `json:"content" binding:"required"`
-		IsPublic bool   `json:"is_public"`
+		Title      string `json:"title" binding:"required"`
+		Content    string `json:"content" binding:"required"`
+		IsPublic   bool   `json:"is_public"`
+		EditorMode string `json:"editor_mode"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -174,18 +175,19 @@ func (s *Server) handleMarkdownSubmit(c *gin.Context) {
 		return
 	}
 
-	entry, _, err := s.saveMarkdownDocument(userIDStr, req.Title, req.Content, req.IsPublic, now)
+	entry, _, err := s.saveMarkdownDocument(userIDStr, req.Title, req.Content, req.EditorMode, req.IsPublic, now)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message":   "保存成功",
-		"id":        entry.ID,
-		"file":      entry.FilePath,
-		"username":  username,
-		"is_public": req.IsPublic,
+		"message":     "保存成功",
+		"id":          entry.ID,
+		"file":        entry.FilePath,
+		"username":    username,
+		"is_public":   req.IsPublic,
+		"editor_mode": entry.EditorMode,
 	})
 }
 
@@ -318,9 +320,10 @@ func (s *Server) handleMarkdownUpdate(c *gin.Context) {
 	}
 
 	var req struct {
-		Title    string `json:"title" binding:"required"`
-		Content  string `json:"content" binding:"required"`
-		IsPublic bool   `json:"is_public"`
+		Title      string `json:"title" binding:"required"`
+		Content    string `json:"content" binding:"required"`
+		IsPublic   bool   `json:"is_public"`
+		EditorMode string `json:"editor_mode"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -348,16 +351,22 @@ func (s *Server) handleMarkdownUpdate(c *gin.Context) {
 		return
 	}
 
+	editorMode := strings.TrimSpace(req.EditorMode)
+	if editorMode == "" {
+		editorMode = entry.EditorMode
+	}
+	editorMode = normalizeEditorMode(editorMode)
 	summary, coverURL := extractMarkdownMeta(content)
-	if err := s.updateMarkdownEntry(userIDStr, entryID, req.Title, entry.FilePath, summary, coverURL, req.IsPublic); err != nil {
+	if err := s.updateMarkdownEntry(userIDStr, entryID, req.Title, entry.FilePath, summary, coverURL, editorMode, req.IsPublic); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":   "更新成功",
-		"id":        entryID,
-		"is_public": req.IsPublic,
+		"message":     "更新成功",
+		"id":          entryID,
+		"is_public":   req.IsPublic,
+		"editor_mode": editorMode,
 	})
 }
 
@@ -402,10 +411,8 @@ func (s *Server) handlePublicMarkdownRead(c *gin.Context) {
 	}
 
 	viewerUserID := ""
-	if sessionID, err := c.Cookie(SessionCookieName); err == nil {
-		if session := s.getSession(sessionID); session != nil {
-			viewerUserID = session.UserID
-		}
+	if session := s.getAccessSession(extractAccessToken(c)); session != nil {
+		viewerUserID = session.UserID
 	}
 
 	entry, _, err := s.getMarkdownEntryForUser(viewerUserID, entryID)

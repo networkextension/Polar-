@@ -1,7 +1,14 @@
 # API 文档
 
-基础路径：`/api`  
-认证方式：基于 Cookie 的 Session，登录成功后服务端会下发 `session_id`。
+基础路径：`/api`
+
+认证方式：Access + Refresh Token（双 Cookie）。登录成功后服务端下发：
+
+- `access_token`（30 分钟，`HttpOnly; Secure; SameSite=Lax; Path=/`）—— 每次业务请求携带
+- `refresh_token`（30 天，`HttpOnly; Secure; SameSite=Strict; Path=/api/token`）—— 仅在 `POST /api/token/refresh` 消费
+
+第三方客户端也可以把 access token 放进 `Authorization: Bearer <tok>`。
+设计细节见 [doc/auth-refresh.md](./auth-refresh.md)。
 
 ## 通用请求头
 
@@ -85,13 +92,39 @@
 }
 ```
 
+响应会下发两枚 cookie：`access_token`（30 分钟）和 `refresh_token`（30 天）。
+
+## 刷新令牌
+
+**POST** `/api/token/refresh`
+
+说明：
+
+- 读取 `refresh_token` cookie（或 `Authorization: Bearer <refresh_tok>`）
+- 校验通过后，**旧 refresh 即刻作废**，签发一对新的 access + refresh
+- 若提交的 refresh 已被消费过（重放），整个 token family 会被撤销——用户需要重新登录
+- 客户端应**串行化** refresh 请求，避免并发 401 触发多次 refresh
+
+成功响应：
+```json
+{
+  "message": "令牌已刷新"
+}
+```
+
+失败响应：
+- `401`：refresh 缺失、过期、或被判定为重放
+- 前端应跳转到登录页
+
 ## 登出
 
 **POST** `/api/logout`
 
 说明：
 
-- 当前接口仅清理 Session Cookie
+- 清除当前 access token
+- 撤销同一 family 下全部 refresh token（其它设备也会被踢掉）
+- 清理 `access_token` 和 `refresh_token` 两枚 cookie
 - 不会主动清空 `user_devices.push_token`
 - 在线状态主要由 websocket 连接生命周期驱动
 
@@ -3420,9 +3453,14 @@ Content-Disposition: attachment; filename="default-rules.conf"
 {
   "title": "Demo Note",
   "content": "# 标题\\n\\n正文内容",
-  "is_public": true
+  "is_public": true,
+  "editor_mode": "markdown"
 }
 ```
+
+- `editor_mode`：可选。标识是由哪种前端编辑器写入的，用于客户端在再次打开时选择对应 UI。
+  允许值：`"markdown"`（默认，Markdown 源码编辑器）、`"rich"`（富文本/WYSIWYG 编辑器）。
+  其它值按 `"markdown"` 处理。存储仍然是统一的 Markdown 文本，此字段只是 UI 提示。
 
 成功响应：
 ```json
@@ -3431,7 +3469,8 @@ Content-Disposition: attachment; filename="default-rules.conf"
   "id": 1,
   "file": "data/markdown/xxx.md",
   "username": "johndoe",
-  "is_public": true
+  "is_public": true,
+  "editor_mode": "markdown"
 }
 ```
 
@@ -3459,6 +3498,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
       "cover_url": "/uploads/cover.png",
       "file_path": "data/markdown/xxx.md",
       "is_public": true,
+      "editor_mode": "markdown",
       "uploaded_at": "2026-03-18T00:00:00Z"
     }
   ],
@@ -3471,6 +3511,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
 
 - `summary`：保存/更新时自动从正文抽取的纯文本摘要，最多 ~200 字，正文为空时为 `""`。
 - `cover_url`：保存/更新时自动从正文中抽取的首张图片链接（支持 `![](...)` 与 `<img src="...">` 两种形式），无图时为 `""`。
+- `editor_mode`：`"markdown"` 或 `"rich"`，提示客户端用哪种编辑器打开；详见 POST `/api/markdown`。
 - `username` / `user_icon`：作者信息，用于列表直接展示，客户端无需再次调 `/api/users/:id/profile`。
 - 列表按上传时间倒序。
 
@@ -3494,6 +3535,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
     "cover_url": "/uploads/cover.png",
     "file_path": "data/markdown/xxx.md",
     "is_public": true,
+    "editor_mode": "markdown",
     "uploaded_at": "2026-03-18T00:00:00Z"
   },
   "content": "# 标题\\n\\n正文内容",
@@ -3510,16 +3552,20 @@ Content-Disposition: attachment; filename="default-rules.conf"
 {
   "title": "新标题",
   "content": "# 新标题\\n\\n更新内容",
-  "is_public": false
+  "is_public": false,
+  "editor_mode": "rich"
 }
 ```
+
+- `editor_mode`：可选。不传时沿用当前记录已有的值；传入未识别的值按 `"markdown"` 处理。
 
 成功响应：
 ```json
 {
   "message": "更新成功",
   "id": 1,
-  "is_public": false
+  "is_public": false,
+  "editor_mode": "rich"
 }
 ```
 
@@ -3554,6 +3600,7 @@ Content-Disposition: attachment; filename="default-rules.conf"
       "title": "Demo Note",
       "summary": "这是一段纯文本摘要...",
       "cover_url": "/uploads/cover.png",
+      "editor_mode": "markdown",
       "uploaded_at": "2026-03-22T08:00:00Z"
     }
   ],

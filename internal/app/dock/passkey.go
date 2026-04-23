@@ -358,12 +358,12 @@ func (s *Server) handlePasskeyLoginFinish(c *gin.Context) {
 		return
 	}
 
-	sessionIDValue, err := s.createSession(user, deviceType, deviceID, pushToken)
+	accessToken, refreshToken, _, err := s.createTokenFamily(user, deviceType, deviceID, pushToken)
 	if err != nil {
 		jsonError(c, http.StatusInternalServerError, "common.server_error")
 		return
 	}
-	c.SetCookie(SessionCookieName, sessionIDValue, int(SessionDuration.Seconds()), "/", "", false, true)
+	setAuthCookies(c, accessToken, refreshToken)
 	s.recordLoginEvent(c, user.ID, "passkey", deviceType)
 
 	jsonMessage(c, http.StatusOK, "auth.login_success", gin.H{

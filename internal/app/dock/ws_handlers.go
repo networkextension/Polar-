@@ -31,12 +31,12 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 func (s *Server) handleChatWS(c *gin.Context) {
-	sessionID, err := c.Cookie(SessionCookieName)
-	if err != nil {
+	token := extractAccessToken(c)
+	if token == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		return
 	}
-	session := s.getSession(sessionID)
+	session := s.getAccessSession(token)
 	if session == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 		return

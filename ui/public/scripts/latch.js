@@ -1,801 +1,96 @@
-import { fetchLatchProxies, createLatchProxy, updateLatchProxy, removeLatchProxy, fetchLatchProxyVersions, rollbackLatchProxy, fetchLatchRules, createLatchRule, createLatchRuleFromFile, updateLatchRule, uploadLatchRuleFile, removeLatchRule, fetchLatchRuleVersions, rollbackLatchRule, fetchLatchAdminProfiles, createLatchProfile, updateLatchProfile, removeLatchProfile, fetchLatchProfiles, } from "./api/dashboard.js";
-import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
-import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
-import { byId } from "./lib/dom.js";
-import { logout } from "./api/session.js";
-// ---------------------------------------------------------------------------
-// DOM refs — layout
-// ---------------------------------------------------------------------------
-const lpOverlay = byId("lpOverlay");
-const latchWelcome = byId("latchWelcome");
-// Tabs / panels
-const latchTabProxies = byId("latchTabProxies");
-const latchTabRules = byId("latchTabRules");
-const latchSubtabBtns = document.querySelectorAll("[data-latch-tab]");
-const latchTabPanels = document.querySelectorAll("[data-latch-panel]");
-// Sidebar nav
-const lpNavBtns = document.querySelectorAll("[data-lp-nav]");
-// Proxy section
-const latchProxyStatus = byId("latchProxyStatus");
-const latchProxyList = byId("latchProxyList"); // <tbody>
-const lpAddProxyBtn = byId("lpAddProxyBtn");
-const lpProxySearch = byId("lpProxySearch");
-// Rule section
-const latchRuleStatus = byId("latchRuleStatus");
-const latchRuleList = byId("latchRuleList"); // <tbody>
-const lpAddRuleBtn = byId("lpAddRuleBtn");
-const lpRuleSearch = byId("lpRuleSearch");
-// Profile section (admin)
-const latchProfileAdminGrid = byId("latchProfileAdminGrid");
-const latchProfileStatus = byId("latchProfileStatus");
-const latchProfileList = byId("latchProfileList"); // <tbody>
-const lpAddProfileBtn = byId("lpAddProfileBtn");
-// Profile section (user)
-const latchProfileUserView = byId("latchProfileUserView");
-const latchProfileUserList = byId("latchProfileUserList");
-// Advanced config quick-nav
-const lpGoRules = byId("lpGoRules");
-const lpGoRulesAlt = byId("lpGoRulesAlt");
-const lpGoProfiles = byId("lpGoProfiles");
-// Proxy slide panel
-const lpProxyPanel = byId("lpProxyPanel");
-const lpProxyClose = byId("lpProxyClose");
-const latchProxyFormTitle = byId("latchProxyFormTitle");
-const latchProxyNameInput = byId("latchProxyNameInput");
-const latchProxyTypeSelect = byId("latchProxyTypeSelect");
-const latchProxyConfigInput = byId("latchProxyConfigInput");
-const latchProxyResetBtn = byId("latchProxyResetBtn");
-const latchProxySubmitBtn = byId("latchProxySubmitBtn");
-// Rule slide panel
-const lpRulePanel = byId("lpRulePanel");
-const lpRuleClose = byId("lpRuleClose");
-const latchRuleFormTitle = byId("latchRuleFormTitle");
-const latchRuleNameInput = byId("latchRuleNameInput");
-const latchRuleSourceInlineBtn = byId("latchRuleSourceInlineBtn");
-const latchRuleSourceFileBtn = byId("latchRuleSourceFileBtn");
-const latchRuleInlineSection = byId("latchRuleInlineSection");
-const latchRuleFileSection = byId("latchRuleFileSection");
-const latchRuleContentInput = byId("latchRuleContentInput");
-const latchRuleFileInput = byId("latchRuleFileInput");
-const latchRuleUploadBtn = byId("latchRuleUploadBtn");
-const latchRuleResetBtn = byId("latchRuleResetBtn");
-const latchRuleSubmitBtn = byId("latchRuleSubmitBtn");
-// Profile slide panel
-const lpProfilePanel = byId("lpProfilePanel");
-const lpProfileClose = byId("lpProfileClose");
-const latchProfileFormTitle = byId("latchProfileFormTitle");
-const latchProfileNameInput = byId("latchProfileNameInput");
-const latchProfileDescInput = byId("latchProfileDescInput");
-const latchProfileEnabledInput = byId("latchProfileEnabledInput");
-const latchProfileShareableInput = byId("latchProfileShareableInput");
-const latchProfileProxyCheckboxes = byId("latchProfileProxyCheckboxes");
-const latchProfileRuleRadios = byId("latchProfileRuleRadios");
-const latchProfileResetBtn = byId("latchProfileResetBtn");
-const latchProfileSubmitBtn = byId("latchProfileSubmitBtn");
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-let isAdmin = false;
-let editingProxyGroupId = null;
-let editingRuleGroupId = null;
-let editingProfileId = null;
-let currentLatchProxies = [];
-let currentLatchRules = [];
-let currentLatchProfiles = [];
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-function setStatus(el, msg, kind = "default") {
-    el.textContent = msg;
-    el.className = "status-text" + (kind === "success" ? " status-success" : kind === "error" ? " status-error" : "");
-}
-function proxyTypeIcon(type) {
-    if (type === "ss")
-        return `<div class="lp-type-icon ss">SS</div>`;
-    if (type === "ss3")
-        return `<div class="lp-type-icon ss3">S3</div>`;
-    if (type.startsWith("kcp"))
-        return `<div class="lp-type-icon kcp">KCP</div>`;
-    return `<div class="lp-type-icon def">PX</div>`;
-}
-// ---------------------------------------------------------------------------
-// Panel helpers
-// ---------------------------------------------------------------------------
-function openPanel(panel) {
-    panel.classList.add("open");
-    lpOverlay.classList.add("open");
-}
-function closeAllPanels() {
-    [lpProxyPanel, lpRulePanel, lpProfilePanel].forEach((p) => p.classList.remove("open"));
-    lpOverlay.classList.remove("open");
-}
-// ---------------------------------------------------------------------------
-// Tab switching
-// ---------------------------------------------------------------------------
-function switchTab(tab) {
-    latchSubtabBtns.forEach((btn) => btn.classList.toggle("active", btn.dataset.latchTab === tab));
-    latchTabPanels.forEach((panel) => { panel.hidden = panel.dataset.latchPanel !== tab; });
-    // Sync sidebar nav
-    lpNavBtns.forEach((btn) => {
-        const nav = btn.dataset.lpNav || "";
-        btn.classList.toggle("active", nav === tab || (nav === "dashboard" && tab === "proxies"));
-    });
-}
-// ---------------------------------------------------------------------------
-// Proxy helpers
-// ---------------------------------------------------------------------------
-function resetProxyForm() {
-    editingProxyGroupId = null;
-    latchProxyNameInput.value = "";
-    latchProxyTypeSelect.value = "ss";
-    latchProxyConfigInput.value = "";
-    latchProxyFormTitle.textContent = "Add Proxy";
-    latchProxySubmitBtn.textContent = "保存代理";
-    setStatus(latchProxyStatus, "");
-}
-function renderProxies(proxies) {
-    if (!proxies.length) {
-        latchProxyList.innerHTML = `<tr><td colspan="4"><div class="lp-empty">暂无代理。点击「Add Proxy」开始添加。</div></td></tr>`;
-        return;
-    }
-    latchProxyList.innerHTML = proxies.map((p) => `
-    <tr data-latch-proxy-gid="${p.group_id}">
+var f=(e,t)=>()=>(e&&(t=e(e=0)),t);var mt=(e,t)=>()=>(t||e((t={exports:{}}).exports,t),t.exports);function be(e){return`${e}`}function fe(e){return new Headers(e)}function bt(e){let t="";typeof e=="string"?t=e:e instanceof URL?t=e.pathname:e instanceof Request&&(t=e.url);try{let a=new URL(t,window.location.origin);return gt.has(a.pathname)}catch{return!1}}function ft(e){return E||(E=(async()=>{try{return(await e(be(ye),{method:"POST",credentials:"include"})).ok}catch{return!1}finally{queueMicrotask(()=>{E=null})}})(),E)}function yt(){if(ge||typeof window>"u"||typeof window.fetch!="function")return;ge=!0;let e=window.fetch.bind(window);window.fetch=async(t,a)=>{let o=await e(t,a);return o.status!==401||bt(t)||!await ft(e)?o:e(t,a)}}async function N(e,t={}){let a=fe(t.headers);return fetch(be(e),{...t,headers:a,credentials:"include"})}async function l(e,t={}){let a=fe(t.headers),o=t.body;t.body!==void 0&&t.body!==null&&!(t.body instanceof FormData)&&!(t.body instanceof Blob)&&!(t.body instanceof URLSearchParams)&&!(t.body instanceof ArrayBuffer)&&!ArrayBuffer.isView(t.body)&&!(typeof ReadableStream<"u"&&t.body instanceof ReadableStream)&&(o=JSON.stringify(t.body)),t.body!==void 0&&!(t.body instanceof FormData)&&!a.has("Content-Type")&&a.set("Content-Type","application/json");let n=await N(e,{...t,headers:a,body:o}),r=await n.json();return{response:n,data:r}}var ye,gt,E,ge,J=f(()=>{ye="/api/token/refresh",gt=new Set([ye,"/api/login","/api/register","/api/logout"]);E=null,ge=!1;yt()});async function Pe(){return l("/api/latch/proxies")}async function ve(e){return l("/api/latch/proxies",{method:"POST",body:e})}async function Le(e,t){return l(`/api/latch/proxies/${encodeURIComponent(e)}`,{method:"PUT",body:t})}async function we(e){return l(`/api/latch/proxies/${encodeURIComponent(e)}`,{method:"DELETE"})}async function ke(e){return l(`/api/latch/proxies/${encodeURIComponent(e)}/versions`)}async function Te(e,t){return l(`/api/latch/proxies/${encodeURIComponent(e)}/rollback/${t}`,{method:"PUT"})}async function Se(){return l("/api/latch/rules")}async function Re(e){return l("/api/latch/rules",{method:"POST",body:e})}async function Ce(e){return l("/api/latch/rules/upload",{method:"POST",body:e})}async function Ee(e,t){return l(`/api/latch/rules/${encodeURIComponent(e)}`,{method:"PUT",body:t})}async function Me(e,t){return l(`/api/latch/rules/${encodeURIComponent(e)}/upload`,{method:"POST",body:t})}async function Fe(e){return l(`/api/latch/rules/${encodeURIComponent(e)}`,{method:"DELETE"})}async function Be(e){return l(`/api/latch/rules/${encodeURIComponent(e)}/versions`)}async function xe(e,t){return l(`/api/latch/rules/${encodeURIComponent(e)}/rollback/${t}`,{method:"PUT"})}async function Ae(){return l("/api/latch/admin/profiles")}async function Ie(e){return l("/api/latch/admin/profiles",{method:"POST",body:e})}async function De(e,t){return l(`/api/latch/admin/profiles/${encodeURIComponent(e)}`,{method:"PUT",body:t})}async function He(e){return l(`/api/latch/admin/profiles/${encodeURIComponent(e)}`,{method:"DELETE"})}async function Ue(){return l("/api/latch/profiles")}var Ne=f(()=>{J()});function $e(e,t=64){let a=document.createElement("canvas");a.width=t,a.height=t;let o=a.getContext("2d");return o?(o.fillStyle="#0f172a",o.fillRect(0,0,a.width,a.height),o.fillStyle="#38bdf8",o.font=`bold ${Math.max(20,Math.floor(t*.45))}px SF Mono, Fira Code, monospace`,o.textAlign="center",o.textBaseline="middle",o.fillText((e||"U").trim().charAt(0).toUpperCase(),a.width/2,a.height/2),a.toDataURL("image/png")):""}var qe=f(()=>{});function _e(){try{return localStorage.getItem(Pt)==="zh-CN"?"zh-CN":"en"}catch{return"en"}}function w(e,t){let a=_e(),n=(Lt[a]??Q)[e]??Q[e]??e;if(t)for(let[r,d]of Object.entries(t))n=n.replace(new RegExp(`\\{\\{${r}\\}\\}`,"g"),d);return n}function Oe(){document.querySelectorAll("[data-i18n]").forEach(e=>{let t=e.getAttribute("data-i18n");e.textContent=w(t)}),document.querySelectorAll("[data-i18n-placeholder]").forEach(e=>{e.placeholder=w(e.getAttribute("data-i18n-placeholder"))}),document.querySelectorAll("[data-i18n-title]").forEach(e=>{document.title=w(e.getAttribute("data-i18n-title"))}),document.querySelectorAll("[data-i18n-tooltip]").forEach(e=>{e.title=w(e.getAttribute("data-i18n-tooltip"))}),document.documentElement.lang=_e()}var Pt,Q,vt,Lt,Ve=f(()=>{Pt="polar_lang",Q={"common.loading":"Loading...","common.networkError":"Network error, please try again later","common.networkErrorRetry":"Network error, please retry","common.save":"Save","common.saving":"Saving...","common.saveFailed":"Save failed","common.saveFailedRetry":"Save failed, please retry","common.create":"Create","common.creating":"Creating...","common.createSuccess":"Created","common.edit":"Edit","common.delete":"Delete","common.deleteFailed":"Delete failed","common.close":"Close","device.browser":"Browser","common.cancel":"Cancel","common.confirmDelete":"Confirm Delete","common.uploading":"Uploading...","common.send":"Send","common.submit":"Submit","common.submitting":"Submitting...","common.submitFailed":"Submission failed","brand.loading":"Loading site info...","brand.icon":"Site icon","login.title":"Login","login.welcome":"Welcome back","login.subtitle":"Sign in with email and password","login.email":"Email","login.password":"Password","login.submit":"Log in","login.passkey":"Log in with Passkey","login.passkeyHint":"You need to bind a Passkey in your account first","login.noAccount":"No account? Register","login.failed":"Login failed","login.success":"Login successful, redirecting...","login.passkeyNotSupported":"Your browser does not support Passkey.","login.passkeyEnterEmail":"Please enter your email address first.","login.passkeyStarting":"Starting Passkey...","login.passkeyBeginFailed":"Cannot initiate Passkey login","login.passkeySuccess":"Passkey login successful, redirecting...","login.passkeyFailed":"Passkey login failed","register.title":"Register","register.heading":"Create account","register.subtitle":"Sign up to get started","register.username":"Username","register.email":"Email","register.password":"Password","register.passwordPlaceholder":"At least 6 characters","register.submit":"Register","register.hasAccount":"Already have an account? Log in","register.failed":"Registration failed","register.success":"Registration successful, redirecting...","register.inviteCode":"Invite code","register.inviteCodePlaceholder":"Enter invite code","register.inviteCodeHelp":"Registration on this site currently requires a valid invite code.","index.status":"Checking login status...","index.selectAction":"Please select an option","index.login":"Log in","index.register":"Register","index.newMarkdown":"New Markdown","chat.title":"Chat","chat.loading":"Loading...","chat.welcome":"Hello, {{username}}, say hi to your friends.","chat.noConversations":"No conversations","chat.loadFailed":"Failed to load conversations","chat.createFailed":"Failed to create conversation","chat.online":"Online \xB7 {{device}}","chat.offline":"Offline \xB7 Last seen {{time}}","chat.offlineDevice":"Offline \xB7 Last device {{device}}","chat.noMessages":"No messages","chat.noPreview":"No messages","chat.defaultTopic":"Default topic","chat.newTopic":"New topic","chat.systemAssistant":"Official system assistant","chat.noTopicSelected":"No topic selected","chat.selectTopicFirst":"Please select a topic first","chat.noConfigs":"No configs available","chat.followBotDefault":"Follow Bot default config","chat.topicsLoadFailed":"Failed to load topics","chat.modelConfigLoadFailed":"Failed to load model config","chat.messageRevoked":"Message revoked","chat.loadingContent":"Loading full content...","chat.sendFailed":"Failed to send, can retry","chat.collapse":"Collapse","chat.expand":"Expand","chat.copy":"Copy","chat.sharePublicly":"Share publicly","chat.favorite":"Favorite","chat.revoke":"Revoke","chat.retrying":"Retrying last user message...","chat.retryFailed":"Retry failed","chat.retrySuccess":"Last user message resubmitted","chat.copyFailed":"Copy failed, please select and copy manually","chat.copySuccess":"Markdown copied to clipboard","chat.copyPermissionFailed":"Copy failed, please check browser permissions","chat.markdownLoadFailed":"Failed to load full Markdown","chat.shareFailed":"Public sharing failed","chat.shareSuccess":"Shared publicly","chat.favoriteFailed":"Favorite failed","chat.favoriteSuccess":"Saved to my Markdown","chat.createTopicFailed":"Failed to create new topic","chat.renameTopicPrompt":"Enter new topic title","chat.topicTitleEmpty":"Topic title cannot be empty","chat.renameFailed":"Rename failed","chat.renameSuccess":"Topic title updated","chat.selectModelFirst":"Please select a model config to switch","chat.switchModelFailed":"Failed to switch model","chat.switchModelSuccess":"Current topic model switched","chat.cannotChatWithSelf":"Cannot chat with yourself","chat.failed":"Failed","chat.aiMarkdownReply":"AI Markdown reply","chat.conversationList":"Conversations","chat.selectConversation":"Select a conversation","chat.selectFromLeft":"Select from left or navigate from a post","chat.newTopicBtn":"New topic","chat.renameTopicBtn":"Rename","chat.refreshBtn":"Refresh","chat.send":"Send","chat.currentTopic":"Current topic","chat.currentModel":"Current model","chat.followDefaultConfig":"Follow default config","chat.switchModel":"Switch model","chat.messagePlaceholder":"Write something...","chat.backToPosts":"Back to Posts","chat.backToDashboard":"Back to Dashboard","chat.sendAttachment":"Send attachment","chat.uploading":"Uploading...","chat.attachmentFailed":"Failed to send attachment","chat.downloadFile":"Download","chat.fileSizeKB":"{{size}} KB","chat.fileSizeMB":"{{size}} MB","editor.heading":"Markdown Editor","editor.newEntry":"New entry","editor.editEntry":"Edit entry","editor.publicPreview":"Public document (read-only)","editor.backToDashboard":"Back to Dashboard","editor.titlePlaceholder":"Title","editor.save":"Save","editor.publicLabel":"Public (others can view but not edit)","editor.previewBadge":"Preview (original)","editor.noContent":"No content","editor.contentPlaceholder":"Enter Markdown content here...","editor.publicByDefault":"Visible only to you by default.","editor.publicReadOnly":"This is a public read-only document: {{url}}","editor.readOnly":"This document is read-only; only the author can edit it.","editor.publicUrl":"Other users can view this document at {{url}}.","editor.publicAfterSave":"A public link will be generated after saving; others can view but not edit.","editor.loadFailed":"Failed to load entry","editor.readingPublic":"You are viewing a public document. Read-only.","editor.titleContentRequired":"Title and content cannot be empty","editor.updateSuccess":"Updated successfully","editor.saveSuccess":"Saved successfully (ID: {{id}})","profile.title":"User Profile","profile.loading":"Loading user profile...","profile.backToPosts":"Posts","profile.backToChat":"Chat","profile.backToDashboard":"Dashboard","profile.myProfile":"My Profile","profile.userProfile":"User Profile","profile.email":"Email: ","profile.userId":"User ID: {{id}}","profile.joinedAt":"Joined: {{time}}","profile.bio":"Bio","profile.personalBio":"Personal bio","profile.bioPlaceholder":"Describe your skills, past tasks, and availability...","profile.avatar":"Avatar","profile.emailVerificationStatus":"Email verification","profile.emailVerified":"Verified","profile.emailUnverified":"Not verified","profile.sendVerificationEmail":"Send verification email","profile.sendingVerificationEmail":"Sending verification email...","profile.verificationEmailSent":"Verification email sent","profile.emailVerificationSendFailed":"Failed to send verification email","profile.emailUnavailable":"No email address available","profile.saveProfile":"Save profile","profile.saving":"Saving...","profile.saveFailed":"Save failed","profile.avatarUploadFailed":"Avatar upload failed","profile.profileUpdated":"Profile updated","profile.noBio":"This user hasn't written a bio yet.","profile.writeRecommendation":"Write a Recommendation","profile.recommendationPlaceholder":"Describe your experience working with this person...","profile.submitRecommendation":"Submit Recommendation","profile.recommendationRequired":"Please enter recommendation content","profile.submitting":"Submitting...","profile.submitFailed":"Submission failed","profile.recommendationSaved":"Recommendation saved","profile.noRecommendations":"No recommendations yet","profile.loadFailed":"Failed to load user profile","profile.completeProfile":"Complete your avatar and bio to be more discoverable.","profile.viewingProfile":"Viewing {{username}}'s profile and recommendations.","profile.recommendation":"Recommendation","profile.sendMessage":"Private Message","profile.blockUser":"Block","profile.unblockUser":"Unblock","profile.youBlockedUser":"You blocked this user. History remains visible, but messaging is disabled.","profile.userBlockedYou":"This user blocked you. History remains visible, but messaging is disabled.","profile.blockActionFailed":"Block action failed","profile.recommendationBlockedByYou":"You blocked this user, so new recommendations are disabled.","profile.recommendationBlockedByOther":"This user blocked you, so new recommendations are disabled.","profile.followUser":"Follow","profile.unfollowUser":"Unfollow","profile.followActionFailed":"Follow action failed","profile.followersLabel":"followers","profile.followingLabel":"following","profile.followsYou":"Follows you","profile.followSection":"Followers & Following","profile.tabFollowers":"Followers ({{count}})","profile.tabFollowing":"Following ({{count}})","profile.noFollowers":"No followers yet.","profile.noFollowing":"Not following anyone yet.","profile.loadingFollowList":"Loading users...","profile.followListLoadFailed":"Failed to load list","posts.title":"Posts Square","posts.loading":"Loading user info...","posts.backToDashboard":"Back to Dashboard","posts.publicMarkdowns":"Public Markdowns","posts.newPost":"New Post","posts.filterBadge":"Filter Posts","posts.sectionPosts":"Section posts","posts.gigTasks":"Gig tasks","posts.regularPosts":"Regular Posts","posts.latestPosts":"Latest Posts","posts.filterLatest":"Latest","posts.filterRegular":"Regular","posts.filterGigs":"Gigs","posts.filterFollowing":"Following","posts.followingPosts":"Posts from people you follow","posts.noFollowingPosts":"People you follow haven't posted anything yet.","posts.welcome":"Hello, {{username}}, publish your first post.","posts.videoNotSupported":"Your browser does not support the video tag","posts.gigTaskBadge":"Gig Task","posts.taskTime":"Time: {{start}} - {{end}}","posts.workingHours":"Working hours: {{hours}}","posts.applyDeadline":"Apply by: {{deadline}}","posts.applicantCount":"Applicants: {{count}}","posts.liked":"Liked","posts.like":"Like","posts.viewDetails":"View Details","posts.deletePost":"Delete Post","posts.confirmDelete":"Delete this post? This cannot be undone.","posts.noPosts":"No posts yet","posts.loadFailed":"Failed to load posts","posts.loadMore":"Load more","post.title":"Post Detail","post.welcome":"Hello, {{username}}","post.loading":"Loading...","post.backToPosts":"Back to Posts Square","post.postTypeStan":"Regular post","post.postTypeTask":"Gig task","post.tagSection":"Section / Tag","post.noSection":"No section","post.contentLabel":"Content","post.contentPlaceholder":"Share your thoughts...","post.taskLocationLabel":"Location (optional)","post.taskLocationPlaceholder":"e.g. Remote / Shanghai","post.taskStartLabel":"Start time","post.taskEndLabel":"End time","post.workingHoursLabel":"Working hours","post.workingHoursPlaceholder":"e.g. 4h / 9:00-13:00 / two weekends","post.applyDeadlineLabel":"Application deadline","post.imagesLabel":"Images (optional, multiple allowed)","post.videosLabel":"Videos (optional, multiple allowed)","post.publish":"Publish","post.newPostBadge":"New Post","post.loadingReplies":"Loading...","post.repliesLoadFailed":"Failed to load replies","post.noReplies":"No replies yet","post.timeRange":"Time Range:","post.applyDeadline":"Apply by:","post.location":"Location:","post.noLocation":"No restriction","post.status":"Status:","post.statusOpen":"Open","post.statusClosed":"Closed","post.applicantCount":"Applicants:","post.selectedApplicant":"Selected:","post.withdrawApplication":"Withdraw application","post.applyTask":"Apply","post.closeApplications":"Close applications","post.viewApplicants":"View applicants","post.taskResults":"Task results","post.resultDescription":"Result description","post.resultDescriptionPlaceholder":"Describe what was completed...","post.resultImages":"Result images","post.resultVideos":"Result videos","post.submitResult":"Submit result","post.replyPlaceholder":"Write your reply...","post.prevImage":"Previous","post.nextImage":"Next","post.loadingApplicants":"Loading applicants...","post.applicantsLoadFailed":"Failed to load applicants","post.noApplicants":"No applicants yet","post.invitationDefault":`Hello, you have been selected as a candidate for this gig task.
+
+Task: {{content}}
+Please reply to confirm.`,"post.confirmAndMessage":"Confirm and send message","post.submittingResult":"Submitting task result...","post.resultSubmitted":"Task result submitted","post.loadingResults":"Loading task results...","post.resultsLoadFailed":"Failed to load task results","post.noResults":"No task results yet","post.invalidPost":"Invalid post","post.loadFailed":"Failed to load post","post.notFound":"Post not found","post.contentRequired":"Content cannot be empty","post.taskInfoRequired":"Please fill in all task details","post.publishing":"Publishing...","post.publishFailed":"Publish failed","post.publishSuccess":"Published successfully","post.publishFailedRetry":"Publish failed, please retry","post.liked":"Liked","post.like":"Like","post.deletePost":"Delete Post","post.confirmDelete":"Delete this post? This cannot be undone.","post.videoNotSupported":"Your browser does not support the video tag","post.gigTaskBadge":"Gig Task","post.workingHours":"Working hours: {{hours}}","post.sendReply":"Send","post.assistToggle":"AI Assist","post.assistBot":"Bot","post.assistLLM":"Model (optional)","post.assistDefaultLLM":"Follow bot default","post.assistNoBot":"No bot available","post.assistTopic":"Topic / idea","post.assistTopicPlaceholder":"Optional topic to seed the draft","post.assistInstruction":"Instruction (optional)","post.assistInstructionPlaceholder":"e.g. keep it casual, under 200 chars","post.assistRun":"Generate draft","post.assistApply":"Apply to content","post.assistBotRequired":"Please select a bot first","post.assistTopicOrDraftRequired":"Provide a topic or some draft first","post.assistRunning":"Generating draft, please wait...","post.assistFailed":"Failed to generate draft","post.assistDone":"Draft ready","post.assistApplied":"Applied to content","post.replyAssistToggle":"AI Assist reply","post.replyAssistRun":"Generate reply","post.replyAssistApply":"Apply to reply","markdowns.title":"Public Markdowns","markdowns.browse":"Browse all publicly published documents","markdowns.backToDashboard":"Back to Dashboard","markdowns.latestBadge":"Latest public documents","markdowns.loadMore":"Load more","markdowns.clickToView":"Click to view full Markdown in read-only mode","markdowns.loadFailed":"Failed to load public Markdowns","markdowns.noPosts":"No public Markdowns yet","markdown.title":"Public Markdown","markdown.loginToEdit":"Log in to edit your own documents","markdown.loading":"Loading content...","markdown.publicReadOnly":"Public read-only document","markdown.readOnlyPreview":"Read-only preview","markdown.authReadOnlyPreview":"Authenticated read-only preview","markdown.missingId":"Missing document ID","markdown.loadContentFailed":"Failed to load content","markdown.loadFailed":"Failed to load document","markdown.notFound":"Public document not found","markdown.loadError":"Load failed","markdown.showRaw":"Show raw","markdown.copyMarkdown":"Copy Markdown","markdown.copyHtml":"Copy HTML","markdown.copied":"Copied!","markdown.copyFailed":"Copy failed","dashboard.title":"Dashboard","dashboard.loading":"Loading user info...","dashboard.drawerToggle":"Entry list","dashboard.profileSettings":"Profile / Settings","dashboard.newMarkdown":"New Markdown","dashboard.publicMarkdowns":"Public Markdowns","dashboard.posts":"Posts","dashboard.markdownEntries":"Markdown entries","dashboard.drawerHelp":"Quick access to direct messages or AI assistant.","dashboard.privateChat":"Chat","dashboard.aiAssistant":"AI Assistant","dashboard.newTag":"New Tag","dashboard.loadMore":"Load more","dashboard.userAvatar":"User avatar","dashboard.loadingUser":"Loading...","dashboard.profile":"Profile","dashboard.settingsCenter":"Settings Center","dashboard.logout":"Log out","dashboard.contentPreview":"Content preview","dashboard.selectEntry":"Select an entry from the sidebar","dashboard.editEntry":"Edit","dashboard.deleteEntry":"Delete","dashboard.tagModalAdd":"Add Tag","dashboard.tagNameLabel":"Name","dashboard.tagNamePlaceholder":"e.g. Go Language","dashboard.tagSlugLabel":"Identifier (optional)","dashboard.tagSlugPlaceholder":"e.g. golang","dashboard.tagDescLabel":"Description (optional)","dashboard.tagDescPlaceholder":"Brief description","dashboard.tagOrderLabel":"Order (optional)","dashboard.tagCreateBtn":"Create","dashboard.settingsCenterTitle":"Settings Center","dashboard.navProfile":"Profile","dashboard.navPersonalization":"Personalization","dashboard.navSettings":"Settings","dashboard.navSystem":"System Info","dashboard.navBots":"Bot Management","dashboard.navSite":"Site Management","dashboard.systemTitle":"System Info","dashboard.systemLead":"View the current instance version, environment, and available disk capacity.","dashboard.systemRunInfo":"Runtime Info","dashboard.systemRunInfoDesc":"View the current instance version, OS environment, and available disk space.","dashboard.systemCpuArch":"CPU Arch","dashboard.systemDiskCapacity":"Disk Capacity","dashboard.preferencesBadge":"Preferences & Management","dashboard.personalCenter":"Personal Center","dashboard.profileLead":"Manage your avatar, sign-in methods, and recent login activity, keeping your profile and account details together in one place.","dashboard.viewPublicProfile":"View public Profile","dashboard.changeAvatar":"Change avatar","dashboard.zoomLabel":"Zoom","dashboard.saveAvatar":"Save avatar","dashboard.cancelAvatar":"Cancel","dashboard.avatarHint":"Supports upload and basic cropping.","dashboard.securityTitle":"Account security","dashboard.emailVerificationTitle":"Email verification","dashboard.emailVerificationText":"Verify your email address so it can be used for account recovery and future security flows.","dashboard.sendVerificationEmail":"Send verification email","dashboard.sendingVerificationEmail":"Sending verification email...","dashboard.verificationEmailSent":"Verification email sent","dashboard.emailVerificationSendFailed":"Failed to send verification email","dashboard.emailVerifiedState":"Verified","dashboard.emailUnverifiedState":"Not verified","dashboard.emailUnavailable":"No email address available","dashboard.securityText":"Bind Passkey for fingerprint or face login.","dashboard.bindPasskey":"Bind Passkey","dashboard.recentLogins":"Recent logins","dashboard.recentLoginsText":"View recent login devices, IPs, and locations.","dashboard.interfaceStyle":"Interface style","dashboard.interfaceStyleText":"Toggle between default and monochrome styles.","dashboard.themeDefault":"Default","dashboard.themeMonochrome":"Monochrome","dashboard.switchToMonochrome":"Switch to monochrome","dashboard.switchToDefault":"Switch to default style","dashboard.browsingHabits":"Browsing preferences","dashboard.browsingHabitsText":"Currently keeping a clean, lightweight layout.","dashboard.llmConfigNameLabel":"Config name","dashboard.llmConfigNamePlaceholder":"e.g. OpenAI production config","dashboard.llmConfigApiKeyLabel":"API Key","dashboard.llmConfigApiKeyPlaceholder":"Recommended on create; leave empty when editing to keep current value","dashboard.llmConfigSystemPromptLabel":"Test Prompt (optional)","dashboard.llmConfigSystemPromptPlaceholder":"Only for testing config connectivity, not used as Bot runtime prompt","dashboard.llmConfigSharedLabel":"Share this LLM Config with other users","dashboard.llmConfigClear":"Clear","dashboard.llmConfigTest":"Test config","dashboard.llmConfigSave":"Save config","dashboard.botHelp":"Each Bot is a user you can chat with directly. Manage Bot model configs and prompts here.","dashboard.botNameLabel":"Bot name","dashboard.botNamePlaceholder":"e.g. Translation assistant","dashboard.botConfigLabel":"Bind config","dashboard.botDescriptionLabel":"Bot description","dashboard.botDescriptionPlaceholder":"Tell users what this Bot is good at","dashboard.botSystemPromptLabel":"Bot config prompt","dashboard.botSystemPromptPlaceholder":"Define this Bot's persona, tone, boundaries, and behavior","dashboard.botClear":"Clear","dashboard.botSave":"Save Bot","dashboard.siteManagementBadge":"Site Management","dashboard.siteHelp":"Manage site logo, intro, APNs keys, and tags here.","dashboard.siteIconLabel":"Site icon","dashboard.siteIconHint":"Use a square icon. Changes take effect immediately.","dashboard.siteNameLabel":"Site name","dashboard.siteNamePlaceholder":"Enter site name","dashboard.siteDescriptionLabel":"Site description","dashboard.siteDescriptionPlaceholder":"One-line description of your site","dashboard.registrationInviteRequiredLabel":"Registration requires invite code","dashboard.registrationInviteRequiredHint":"When enabled, new users must provide a valid invite code to register.","dashboard.saveSite":"Save site info","dashboard.inviteCodeBadge":"Invite Codes","dashboard.inviteCodeHelp":"Generate one-time invite codes for new user registration.","dashboard.generateInviteCode":"Generate","dashboard.noInviteCodes":"No invite codes yet.","dashboard.inviteCodeAvailable":"Available","dashboard.inviteCodeUsed":"Used","dashboard.inviteCodeLoadFailed":"Failed to load invite codes","dashboard.generatingInviteCode":"Generating invite codes...","dashboard.inviteCodeGenerateFailed":"Failed to generate invite codes","dashboard.inviteCodeGenerated":"Generated {{count}} invite code(s)","dashboard.applePushBadge":"APNs Key / .p8","dashboard.applePushHelp":"Maintain dev and production APNs keys for future push notifications.","dashboard.applePushDevLabel":"Dev APNs key (.p8)","dashboard.applePushProdLabel":"Production APNs key (.p8)","dashboard.notUploaded":"Not uploaded","dashboard.deleteDevCert":"Delete dev key","dashboard.deleteProdCert":"Delete prod key","dashboard.tagManagementBadge":"Tag Management","dashboard.tagManagementHelp":"Create, edit, or delete content tags.","dashboard.siteNewTag":"New Tag","dashboard.drawerClose":"Collapse","dashboard.quickAccess":"Quick access","dashboard.modalClose":"Close","dashboard.personalizationTitle":"Personalization","dashboard.personalizationLead":"Manage the interface style and personal preferences so the workspace feels tailored to how you work.","dashboard.languageTitle":"Language","dashboard.languageText":"Choose the interface language for this browser.","dashboard.languageEnglish":"English","dashboard.languageChinese":"Chinese","dashboard.switchToChinese":"Switch to Chinese","dashboard.switchToEnglish":"Switch to English","dashboard.settingsTitle":"Settings","dashboard.botsManagementTitle":"Bot Management","dashboard.botsLead":"Manage each Bot's default model config, description, and dedicated prompt here.","dashboard.siteManagementTitle":"Site Management","dashboard.siteLead":"Admin-only controls for the site logo, intro, APNs keys, and tag management.","dashboard.unknownLocation":"Unknown location","dashboard.loginMethodRegister":"Register","dashboard.loginMethodPassword":"Password","dashboard.certMeta":"Current file: {{filename}} \xB7 Uploaded: {{time}}","dashboard.noTags":"No tags yet. Create the first one.","dashboard.tagOrder":"Order: {{order}}","dashboard.noDescription":"No description","dashboard.saveConfigBtn":"Save config","dashboard.saveBotBtn":"Save Bot","dashboard.noLLMConfigs":"No LLM configs yet. Create one.","dashboard.keySaved":"Key saved","dashboard.noKey":"No key","dashboard.shared":"Shared","dashboard.private":"Private","dashboard.noSystemPrompt":"No system prompt set","dashboard.createLLMConfigFirst":"Please create an LLM Config first","dashboard.noBots":"No bots yet. Create one to chat with directly.","dashboard.botUserId":"User ID: {{id}}","dashboard.botPromptPreview":"Bot Prompt: {{preview}}...","dashboard.noBotPrompt":"No Bot Prompt configured","dashboard.chat":"Chat","dashboard.loginHistoryLoadFailed":"Failed to load login history","dashboard.noLoginHistory":"No login history","dashboard.unknownIp":"Unknown IP","dashboard.welcome":"Hello, {{username}}","dashboard.currentUser":"Current user","dashboard.adminRoleBadge":"Administrator","dashboard.adminMeta":"Profile, Personalization & Site","dashboard.userMeta":"Profile & Personalization","dashboard.adminProfileMeta":"Manage your profile, device preferences, and site settings","dashboard.userProfileMeta":"Manage your profile, devices and preferences","dashboard.adminOnlyTag":"Only admins can create tags","dashboard.llmConfigLoadFailed":"Failed to load LLM Config","dashboard.availableConfigLoadFailed":"Failed to load available configs","dashboard.botListLoadFailed":"Failed to load Bot list","dashboard.siteInfoLoadFailed":"Failed to load site info","dashboard.tagListLoadFailed":"Failed to load Tag list","dashboard.editTag":"Edit Tag","dashboard.addTag":"Add Tag","dashboard.tagSaving":"Saving...","dashboard.tagCreating":"Creating...","dashboard.tagSaveFailed":"Save failed","dashboard.tagSaved":"Saved","dashboard.tagCreated":"Created","dashboard.tagSaveFailedRetry":"Save failed, please retry","dashboard.confirmDeleteTag":'Delete Tag "{{name}}"?',"dashboard.tagDeleted":"Deleted Tag: {{name}}","dashboard.llmTestMissingFields":"Please fill in Base URL, Model and API Key before testing","dashboard.llmTesting":"Testing model config...","dashboard.llmTestSuccess":"Connection successful, config works","dashboard.llmTestFailed":"Test failed","dashboard.llmConfigSaving":"Saving config...","dashboard.llmConfigCreating":"Creating config...","dashboard.llmConfigMissingFields":"Please fill in name, Base URL and Model","dashboard.llmConfigUpdated":"Config updated","dashboard.llmConfigCreated":"Config created","dashboard.updateConfig":"Update config","dashboard.apiKeySaved":"API Key saved. Leave empty to keep current value.","dashboard.confirmDeleteConfig":'Delete config "{{name}}"? Bound bots must be rebound or deleted first.',"dashboard.configDeleted":"Deleted config: {{name}}","dashboard.botMissingFields":"Please fill in Bot name and select a config","dashboard.botSaving":"Saving Bot...","dashboard.botCreating":"Creating Bot...","dashboard.botUpdated":"Bot updated","dashboard.botCreated":"Bot created","dashboard.updateBot":"Update Bot","dashboard.confirmDeleteBot":'Delete Bot "{{name}}"? This will also remove the bot user.',"dashboard.botDeleted":"Deleted Bot: {{name}}","dashboard.savingSiteInfo":"Saving site info...","dashboard.siteInfoSaved":"Site info saved","dashboard.selectImageFile":"Please select an image file","dashboard.uploadingSiteIcon":"Uploading site icon...","dashboard.siteIconUpdated":"Site icon updated","dashboard.certUnsupportedFormat":"Only .p8, .p12, .pem, .cer, .crt, .key files are supported","dashboard.uploadingCert":"Uploading {{env}} APNs Key / .p8...","dashboard.certUpdated":"{{env}} APNs Key / .p8 updated","dashboard.confirmDeleteCert":"Delete {{env}} APNs Key / .p8?","dashboard.deletingCert":"Deleting {{env}} APNs Key / .p8...","dashboard.certDeleted":"{{env}} APNs Key / .p8 deleted","dashboard.logoutFailed":"Logout failed, please retry","dashboard.logoutNetworkFailed":"Logout failed, please check your network","dashboard.entryLoadFailed":"Failed to load entries","dashboard.noEntries":"No entries","dashboard.entryReadFailed":"Failed to load","dashboard.emptyContent":"Empty content","dashboard.confirmDeleteEntry":"Delete this entry?","dashboard.selectImageFileWithPeriod":"Please select an image file.","dashboard.canceledEdit":"Edit cancelled.","dashboard.generatingImageFailed":"Failed to generate image.","dashboard.avatarUpdated":"Avatar updated.","dashboard.networkErrorPeriod":"Network error, please retry.","dashboard.passkeyNotSupported":"Your browser does not support Passkey.","dashboard.passkeyStarting":"Starting Passkey...","dashboard.passkeyBeginFailed":"Cannot initiate Passkey registration","dashboard.passkeySuccess":"Passkey registered successfully!","dashboard.passkeyFailed":"Passkey registration failed","dashboard.unknownTime":"Unknown time","nav.dashboard":"Dashboard","nav.posts":"Posts","nav.markdowns":"Markdowns","nav.chat":"Chat","nav.editor":"Editor","nav.latch":"Latch","nav.bots":"Bot Management","nav.userAdmin":"User Admin","nav.creation":"Creation","creation.title":"Creation","creation.newEntry":"New story","creation.editEntry":"Editing story","creation.loadFailed":"Failed to load story","creation.save":"Save","creation.saved":"Saved","creation.saveFailed":"Save failed","creation.titleContentRequired":"Title and content are required","creation.titlePlaceholder":"Title your story","creation.makePublic":"Make public","creation.makePrivate":"Make private","creation.backToDashboard":"Dashboard","creation.assistInstructionPlaceholder":"Optional: how should I polish this?","creation.assistNoBot":"No bot available","creation.assistDefaultLLM":"Follow bot default","creation.assistBotRequired":"Please select a bot first","creation.assistRun":"Polish selection","creation.assistClose":"Close","creation.assistApply":"Replace selection","creation.assistDiscard":"Discard","creation.assistRunning":"Polishing selection...","creation.assistFailed":"Failed to polish","creation.assistReady":"Polish ready","creation.presetTighter":"Tighter","creation.presetFormal":"More formal","creation.presetFriendly":"Friendlier","creation.presetExpand":"Expand","bots.title":"Bot Management","bots.topbarTitle":"Bot Management","nav.settings":"Settings","admin.title":"User Management","admin.topbarTitle":"Admin Center","admin.loading":"Loading...","admin.welcome":"Welcome, {{username}}","admin.userQuery":"User Query","admin.userCount":"Total users: {{count}}","admin.userCountDash":"Total users: -","admin.searchPlaceholder":"Search by username / email / user ID","admin.search":"Search","admin.reset":"Reset","admin.prevPage":"Prev","admin.nextPage":"Next","admin.pageInfo":"Page {{current}} / {{total}}","admin.pageInfoDash":"Page -","admin.accountManagement":"Account Management","admin.selectUser":"Select a user on the left","admin.changePassword":"Change Password","admin.newPasswordPlaceholder":"New password (min 6 chars)","admin.confirmPasswordPlaceholder":"Confirm new password","admin.updatePassword":"Update Password","admin.loginHistory":"Login History","admin.noLoginHistory":"No login records","admin.noMatchingUsers":"No matching users","admin.loadUsersFailed":"Failed to load users","admin.loadHistoryFailed":"Failed to load login history","admin.selectUserFirst":"Please select a user first","admin.passwordTooShort":"Password must be at least 6 characters","admin.passwordMismatch":"Passwords do not match","admin.updatingPassword":"Updating password...","admin.passwordUpdated":"Password updated","admin.updateFailed":"Update failed","admin.networkError":"Network error, please retry","admin.logoutFailed":"Logout failed","admin.unknownIp":"Unknown IP","admin.unknownLocation":"Unknown location","admin.loginMethodPasskey":"Passkey","admin.loginMethodRegister":"Register","admin.loginMethodPassword":"Password","admin.online":"online","admin.createdAt":"Created: {{time}}"},vt={"common.loading":"\u52A0\u8F7D\u4E2D...","common.networkError":"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5","common.networkErrorRetry":"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","common.save":"\u4FDD\u5B58","common.saving":"\u6B63\u5728\u4FDD\u5B58...","common.saveFailed":"\u4FDD\u5B58\u5931\u8D25","common.saveFailedRetry":"\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5","common.create":"\u521B\u5EFA","common.creating":"\u6B63\u5728\u521B\u5EFA...","common.createSuccess":"\u521B\u5EFA\u6210\u529F","common.edit":"\u7F16\u8F91","common.delete":"\u5220\u9664","common.deleteFailed":"\u5220\u9664\u5931\u8D25","common.close":"\u5173\u95ED","device.browser":"\u6D4F\u89C8\u5668","common.cancel":"\u53D6\u6D88","common.confirmDelete":"\u786E\u8BA4\u5220\u9664","common.uploading":"\u6B63\u5728\u4E0A\u4F20...","common.send":"\u53D1\u9001","common.submit":"\u63D0\u4EA4","common.submitting":"\u6B63\u5728\u63D0\u4EA4...","common.submitFailed":"\u63D0\u4EA4\u5931\u8D25","brand.loading":"\u6B63\u5728\u52A0\u8F7D\u7AD9\u70B9\u4FE1\u606F...","brand.icon":"\u7AD9\u70B9\u56FE\u6807","login.title":"\u767B\u5F55","login.welcome":"\u6B22\u8FCE\u56DE\u6765","login.subtitle":"\u4F7F\u7528\u90AE\u7BB1\u548C\u5BC6\u7801\u767B\u5F55","login.email":"\u90AE\u7BB1","login.password":"\u5BC6\u7801","login.submit":"\u767B\u5F55","login.passkey":"\u4F7F\u7528 Passkey \u767B\u5F55","login.passkeyHint":"\u9700\u8981\u5148\u5728\u8D26\u6237\u5185\u7ED1\u5B9A Passkey","login.noAccount":"\u6CA1\u6709\u8D26\u6237\uFF1F\u53BB\u6CE8\u518C","login.failed":"\u767B\u5F55\u5931\u8D25","login.success":"\u767B\u5F55\u6210\u529F\uFF0C\u6B63\u5728\u8DF3\u8F6C...","login.passkeyNotSupported":"\u5F53\u524D\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 Passkey\u3002","login.passkeyEnterEmail":"\u8BF7\u5148\u8F93\u5165\u90AE\u7BB1\u5730\u5740\u3002","login.passkeyStarting":"\u6B63\u5728\u542F\u52A8 Passkey...","login.passkeyBeginFailed":"\u65E0\u6CD5\u53D1\u8D77 Passkey \u767B\u5F55","login.passkeySuccess":"Passkey \u767B\u5F55\u6210\u529F\uFF0C\u6B63\u5728\u8DF3\u8F6C...","login.passkeyFailed":"Passkey \u767B\u5F55\u5931\u8D25","register.title":"\u6CE8\u518C","register.heading":"\u521B\u5EFA\u8D26\u6237","register.subtitle":"\u5FEB\u901F\u6CE8\u518C\u5E76\u5F00\u59CB\u4F53\u9A8C","register.username":"\u7528\u6237\u540D","register.email":"\u90AE\u7BB1","register.password":"\u5BC6\u7801","register.passwordPlaceholder":"\u81F3\u5C116\u4F4D","register.submit":"\u6CE8\u518C","register.hasAccount":"\u5DF2\u6709\u8D26\u6237\uFF1F\u53BB\u767B\u5F55","register.failed":"\u6CE8\u518C\u5931\u8D25","register.success":"\u6CE8\u518C\u6210\u529F\uFF0C\u6B63\u5728\u8DF3\u8F6C...","register.inviteCode":"\u9080\u8BF7\u7801","register.inviteCodePlaceholder":"\u8BF7\u8F93\u5165\u9080\u8BF7\u7801","register.inviteCodeHelp":"\u5F53\u524D\u7AD9\u70B9\u6CE8\u518C\u9700\u8981\u6709\u6548\u9080\u8BF7\u7801\u3002","index.status":"\u6B63\u5728\u68C0\u67E5\u767B\u5F55\u72B6\u6001...","index.selectAction":"\u8BF7\u9009\u62E9\u64CD\u4F5C","index.login":"\u767B\u5F55","index.register":"\u6CE8\u518C","index.newMarkdown":"\u65B0\u5EFA Markdown","chat.title":"\u79C1\u804A","chat.loading":"\u6B63\u5728\u52A0\u8F7D...","chat.welcome":"\u4F60\u597D\uFF0C{{username}}\uFF0C\u548C\u597D\u53CB\u804A\u4E24\u53E5\u5427\u3002","chat.noConversations":"\u6682\u65E0\u4F1A\u8BDD","chat.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u4F1A\u8BDD","chat.createFailed":"\u65E0\u6CD5\u521B\u5EFA\u4F1A\u8BDD","chat.online":"\u5728\u7EBF \xB7 {{device}}","chat.offline":"\u79BB\u7EBF \xB7 \u4E0A\u6B21\u5728\u7EBF {{time}}","chat.offlineDevice":"\u79BB\u7EBF \xB7 \u6700\u8FD1\u8BBE\u5907 {{device}}","chat.noMessages":"\u6682\u65E0\u6D88\u606F","chat.noPreview":"\u6682\u65E0\u6D88\u606F","chat.defaultTopic":"\u9ED8\u8BA4\u8BDD\u9898","chat.newTopic":"\u65B0\u8BDD\u9898","chat.systemAssistant":"\u5B98\u65B9 system \u52A9\u7406","chat.noTopicSelected":"\u672A\u9009\u62E9\u8BDD\u9898","chat.selectTopicFirst":"\u8BF7\u5148\u9009\u62E9\u8BDD\u9898","chat.noConfigs":"\u6682\u65E0\u53EF\u7528\u914D\u7F6E","chat.followBotDefault":"\u8DDF\u968F Bot \u9ED8\u8BA4\u914D\u7F6E","chat.topicsLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u8BDD\u9898","chat.modelConfigLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u6A21\u578B\u914D\u7F6E","chat.messageRevoked":"\u6D88\u606F\u5DF2\u64A4\u56DE","chat.loadingContent":"\u6B63\u5728\u52A0\u8F7D\u5B8C\u6574\u5185\u5BB9...","chat.sendFailed":"\u53D1\u9001\u5931\u8D25\uFF0C\u53EF\u91CD\u8BD5","chat.collapse":"\u7F29\u5C0F","chat.expand":"\u653E\u5927","chat.copy":"\u590D\u5236","chat.sharePublicly":"\u516C\u5F00\u5206\u4EAB","chat.favorite":"\u6536\u85CF","chat.revoke":"\u64A4\u56DE","chat.retrying":"\u6B63\u5728\u91CD\u8BD5\u4E0A\u4E00\u6761\u7528\u6237\u6D88\u606F...","chat.retryFailed":"\u91CD\u8BD5\u5931\u8D25","chat.retrySuccess":"\u5DF2\u91CD\u65B0\u63D0\u4EA4\u4E0A\u4E00\u6761\u7528\u6237\u6D88\u606F","chat.copyFailed":"\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u9009\u62E9\u5185\u5BB9\u590D\u5236","chat.copySuccess":"Markdown \u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F","chat.copyPermissionFailed":"\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6D4F\u89C8\u5668\u6743\u9650","chat.markdownLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u5B8C\u6574 Markdown","chat.shareFailed":"\u516C\u5F00\u5206\u4EAB\u5931\u8D25","chat.shareSuccess":"\u5DF2\u516C\u5F00\u5206\u4EAB","chat.favoriteFailed":"\u6536\u85CF\u5931\u8D25","chat.favoriteSuccess":"\u5DF2\u6536\u85CF\u5230\u6211\u7684 Markdown","chat.createTopicFailed":"\u521B\u5EFA\u65B0\u8BDD\u9898\u5931\u8D25","chat.renameTopicPrompt":"\u8F93\u5165\u65B0\u7684\u8BDD\u9898\u6807\u9898","chat.topicTitleEmpty":"\u8BDD\u9898\u6807\u9898\u4E0D\u80FD\u4E3A\u7A7A","chat.renameFailed":"\u91CD\u547D\u540D\u5931\u8D25","chat.renameSuccess":"\u8BDD\u9898\u6807\u9898\u5DF2\u66F4\u65B0","chat.selectModelFirst":"\u8BF7\u9009\u62E9\u8981\u5207\u6362\u7684\u6A21\u578B\u914D\u7F6E","chat.switchModelFailed":"\u5207\u6362\u6A21\u578B\u5931\u8D25","chat.switchModelSuccess":"\u5F53\u524D\u8BDD\u9898\u6A21\u578B\u5DF2\u5207\u6362","chat.cannotChatWithSelf":"\u4E0D\u80FD\u548C\u81EA\u5DF1\u804A\u5929","chat.failed":"\u5931\u8D25","chat.aiMarkdownReply":"AI Markdown \u56DE\u590D","chat.conversationList":"\u4F1A\u8BDD\u5217\u8868","chat.selectConversation":"\u9009\u62E9\u4E00\u4E2A\u4F1A\u8BDD","chat.selectFromLeft":"\u4ECE\u5DE6\u4FA7\u9009\u62E9\u6216\u4ECE\u5E16\u5B50\u7528\u6237\u540D\u8FDB\u5165","chat.newTopicBtn":"\u65B0\u8BDD\u9898","chat.renameTopicBtn":"\u91CD\u547D\u540D","chat.refreshBtn":"\u5237\u65B0","chat.send":"\u53D1\u9001","chat.currentTopic":"\u5F53\u524D\u8BDD\u9898","chat.currentModel":"\u5F53\u524D\u6A21\u578B","chat.followDefaultConfig":"\u8DDF\u968F\u9ED8\u8BA4\u914D\u7F6E","chat.switchModel":"\u5207\u6362\u6A21\u578B","chat.messagePlaceholder":"\u5199\u70B9\u4EC0\u4E48...","chat.backToPosts":"\u8FD4\u56DE\u5E16\u5B50\u5E7F\u573A","chat.backToDashboard":"\u8FD4\u56DE\u63A7\u5236\u53F0","chat.sendAttachment":"\u53D1\u9001\u9644\u4EF6","chat.uploading":"\u6B63\u5728\u4E0A\u4F20...","chat.attachmentFailed":"\u9644\u4EF6\u53D1\u9001\u5931\u8D25","chat.downloadFile":"\u4E0B\u8F7D","chat.fileSizeKB":"{{size}} KB","chat.fileSizeMB":"{{size}} MB","editor.heading":"Markdown \u7F16\u8F91\u5668","editor.newEntry":"\u65B0\u5EFA\u4E00\u6761\u8BB0\u5F55","editor.editEntry":"\u7F16\u8F91\u8BB0\u5F55","editor.publicPreview":"\u516C\u5F00\u6587\u6863\u53EA\u8BFB\u9884\u89C8","editor.backToDashboard":"\u8FD4\u56DE\u63A7\u5236\u53F0","editor.titlePlaceholder":"\u6807\u9898","editor.save":"\u4FDD\u5B58","editor.publicLabel":"\u516C\u5F00\u53EF\u89C1\uFF08\u5176\u4ED6\u7528\u6237\u53EF\u67E5\u770B\uFF0C\u4F46\u4E0D\u80FD\u7F16\u8F91\uFF09","editor.previewBadge":"\u9884\u89C8\uFF08\u539F\u6587\uFF09","editor.noContent":"\u6682\u65E0\u5185\u5BB9","editor.contentPlaceholder":"\u5728\u8FD9\u91CC\u8F93\u5165 Markdown \u5185\u5BB9...","editor.publicByDefault":"\u9ED8\u8BA4\u4EC5\u81EA\u5DF1\u53EF\u89C1\u3002","editor.publicReadOnly":"\u5F53\u524D\u662F\u516C\u5F00\u53EA\u8BFB\u6587\u6863\uFF1A{{url}}","editor.readOnly":"\u5F53\u524D\u6587\u6863\u4E3A\u53EA\u8BFB\uFF0C\u53EA\u6709\u4F5C\u8005\u53EF\u4EE5\u7F16\u8F91\u3002","editor.publicUrl":"\u5176\u4ED6\u7528\u6237\u53EF\u901A\u8FC7 {{url}} \u67E5\u770B\u6B64\u6587\u6863\u3002","editor.publicAfterSave":"\u4FDD\u5B58\u540E\u4F1A\u751F\u6210\u516C\u5F00\u8BBF\u95EE\u94FE\u63A5\uFF0C\u5176\u4ED6\u7528\u6237\u53EF\u67E5\u770B\u4F46\u4E0D\u80FD\u7F16\u8F91\u3002","editor.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u8BB0\u5F55","editor.readingPublic":"\u4F60\u6B63\u5728\u67E5\u770B\u516C\u5F00\u6587\u6863\uFF0C\u53EA\u80FD\u9605\u8BFB\uFF0C\u4E0D\u80FD\u7F16\u8F91\u3002","editor.titleContentRequired":"\u6807\u9898\u548C\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A","editor.updateSuccess":"\u66F4\u65B0\u6210\u529F","editor.saveSuccess":"\u4FDD\u5B58\u6210\u529F\uFF08ID: {{id}}\uFF09","profile.title":"\u7528\u6237 Profile","profile.loading":"\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u8D44\u6599...","profile.backToPosts":"\u5E16\u5B50","profile.backToChat":"\u79C1\u804A","profile.backToDashboard":"\u63A7\u5236\u53F0","profile.myProfile":"\u6211\u7684\u8D44\u6599","profile.userProfile":"\u7528\u6237\u8D44\u6599","profile.email":"\u90AE\u7BB1\uFF1A","profile.userId":"\u7528\u6237 ID\uFF1A{{id}}","profile.joinedAt":"\u52A0\u5165\u65F6\u95F4\uFF1A{{time}}","profile.bio":"\u81EA\u6211\u4ECB\u7ECD","profile.personalBio":"\u4E2A\u4EBA\u4ECB\u7ECD","profile.bioPlaceholder":"\u4ECB\u7ECD\u4E00\u4E0B\u81EA\u5DF1\u64C5\u957F\u4EC0\u4E48\u3001\u505A\u8FC7\u54EA\u4E9B\u4EFB\u52A1\u3001\u53EF\u670D\u52A1\u7684\u65F6\u95F4\u6BB5...","profile.avatar":"\u5934\u50CF","profile.emailVerificationStatus":"\u90AE\u7BB1\u9A8C\u8BC1\u72B6\u6001","profile.emailVerified":"\u5DF2\u9A8C\u8BC1","profile.emailUnverified":"\u672A\u9A8C\u8BC1","profile.sendVerificationEmail":"\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6","profile.sendingVerificationEmail":"\u6B63\u5728\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6...","profile.verificationEmailSent":"\u9A8C\u8BC1\u90AE\u4EF6\u5DF2\u53D1\u9001","profile.emailVerificationSendFailed":"\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6\u5931\u8D25","profile.emailUnavailable":"\u6682\u65E0\u90AE\u7BB1\u5730\u5740","profile.saveProfile":"\u4FDD\u5B58\u8D44\u6599","profile.saving":"\u6B63\u5728\u4FDD\u5B58...","profile.saveFailed":"\u4FDD\u5B58\u5931\u8D25","profile.avatarUploadFailed":"\u5934\u50CF\u4E0A\u4F20\u5931\u8D25","profile.profileUpdated":"\u8D44\u6599\u5DF2\u66F4\u65B0","profile.noBio":"\u8FD9\u4E2A\u7528\u6237\u6682\u65F6\u8FD8\u6CA1\u6709\u586B\u5199\u81EA\u6211\u4ECB\u7ECD\u3002","profile.writeRecommendation":"\u5199 Recommendation","profile.recommendationPlaceholder":"\u5199\u4E0B\u4F60\u548C TA \u5408\u4F5C\u8FC7\u7684\u611F\u53D7\u3001\u53EF\u9760\u6027\u3001\u6267\u884C\u529B\u7B49...","profile.submitRecommendation":"\u63D0\u4EA4 Recommendation","profile.recommendationRequired":"\u8BF7\u8F93\u5165 Recommendation \u5185\u5BB9","profile.submitting":"\u6B63\u5728\u63D0\u4EA4...","profile.submitFailed":"\u63D0\u4EA4\u5931\u8D25","profile.recommendationSaved":"Recommendation \u5DF2\u4FDD\u5B58","profile.noRecommendations":"\u8FD8\u6CA1\u6709 Recommendation","profile.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u7528\u6237\u8D44\u6599","profile.completeProfile":"\u5B8C\u5584\u4F60\u7684\u5934\u50CF\u548C\u81EA\u6211\u4ECB\u7ECD\uFF0C\u8BA9\u4EFB\u52A1\u53D1\u5E03\u8005\u66F4\u5BB9\u6613\u9009\u62E9\u4F60\u3002","profile.viewingProfile":"\u67E5\u770B {{username}} \u7684\u8D44\u6599\u4E0E Recommendation\u3002","profile.recommendation":"Recommendation","profile.sendMessage":"\u53D1\u79C1\u4FE1","profile.blockUser":"\u62C9\u9ED1","profile.unblockUser":"\u53D6\u6D88\u62C9\u9ED1","profile.youBlockedUser":"\u4F60\u5DF2\u62C9\u9ED1\u8BE5\u7528\u6237\u3002\u5386\u53F2\u6D88\u606F\u4ECD\u53EF\u67E5\u770B\uFF0C\u4F46\u4E0D\u80FD\u7EE7\u7EED\u53D1\u79C1\u4FE1\u3002","profile.userBlockedYou":"\u5BF9\u65B9\u5DF2\u62C9\u9ED1\u4F60\u3002\u5386\u53F2\u6D88\u606F\u4ECD\u53EF\u67E5\u770B\uFF0C\u4F46\u4E0D\u80FD\u7EE7\u7EED\u53D1\u79C1\u4FE1\u3002","profile.blockActionFailed":"\u62C9\u9ED1\u64CD\u4F5C\u5931\u8D25","profile.recommendationBlockedByYou":"\u4F60\u5DF2\u62C9\u9ED1\u8BE5\u7528\u6237\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u63D0\u4EA4 Recommendation\u3002","profile.recommendationBlockedByOther":"\u5BF9\u65B9\u5DF2\u62C9\u9ED1\u4F60\uFF0C\u4E0D\u80FD\u7EE7\u7EED\u63D0\u4EA4 Recommendation\u3002","profile.followUser":"\u5173\u6CE8","profile.unfollowUser":"\u53D6\u6D88\u5173\u6CE8","profile.followActionFailed":"\u5173\u6CE8\u64CD\u4F5C\u5931\u8D25","profile.followersLabel":"\u7C89\u4E1D","profile.followingLabel":"\u5173\u6CE8\u4E2D","profile.followsYou":"Ta \u6B63\u5728\u5173\u6CE8\u4F60","profile.followSection":"\u5173\u6CE8\u4E0E\u7C89\u4E1D","profile.tabFollowers":"\u7C89\u4E1D\uFF08{{count}}\uFF09","profile.tabFollowing":"\u5173\u6CE8\uFF08{{count}}\uFF09","profile.noFollowers":"\u8FD8\u6CA1\u6709\u7C89\u4E1D\u3002","profile.noFollowing":"\u8FD8\u6CA1\u6709\u5173\u6CE8\u4EFB\u4F55\u4EBA\u3002","profile.loadingFollowList":"\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u5217\u8868...","profile.followListLoadFailed":"\u5217\u8868\u52A0\u8F7D\u5931\u8D25","posts.title":"\u5E16\u5B50\u5E7F\u573A","posts.loading":"\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u4FE1\u606F...","posts.backToDashboard":"\u8FD4\u56DE\u63A7\u5236\u53F0","posts.publicMarkdowns":"\u516C\u5F00 Markdown","posts.newPost":"\u53D1\u5E16","posts.filterBadge":"\u5E16\u5B50\u7B5B\u9009","posts.sectionPosts":"\u677F\u5757\u5E16\u5B50","posts.gigTasks":"\u96F6\u5DE5\u4EFB\u52A1","posts.regularPosts":"\u666E\u901A\u5E16\u5B50","posts.latestPosts":"\u6700\u65B0\u5E16\u5B50","posts.filterLatest":"\u6700\u65B0\u5E16\u5B50","posts.filterRegular":"\u666E\u901A\u5E16\u5B50","posts.filterGigs":"\u96F6\u5DE5","posts.filterFollowing":"\u5173\u6CE8","posts.followingPosts":"\u5173\u6CE8\u7684\u7528\u6237\u52A8\u6001","posts.noFollowingPosts":"\u4F60\u5173\u6CE8\u7684\u7528\u6237\u6682\u65F6\u8FD8\u6CA1\u6709\u53D1\u5E16\u3002","posts.welcome":"\u4F60\u597D\uFF0C{{username}}\uFF0C\u53D1\u5E03\u4F60\u7684\u7B2C\u4E00\u7BC7\u5E16\u5B50\u5427\u3002","posts.videoNotSupported":"\u4F60\u7684\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 video \u6807\u7B7E","posts.gigTaskBadge":"\u96F6\u5DE5\u4EFB\u52A1","posts.taskTime":"\u65F6\u95F4\uFF1A{{start}} - {{end}}","posts.workingHours":"Working hours\uFF1A{{hours}}","posts.applyDeadline":"\u7533\u8BF7\u622A\u6B62\uFF1A{{deadline}}","posts.applicantCount":"\u7533\u8BF7\u6570\uFF1A{{count}}","posts.liked":"\u5DF2\u70B9\u8D5E","posts.like":"\u70B9\u8D5E","posts.viewDetails":"\u67E5\u770B\u8BE6\u60C5","posts.deletePost":"\u5220\u9664\u5E16\u5B50","posts.confirmDelete":"\u786E\u8BA4\u5220\u9664\u8FD9\u6761\u5E16\u5B50\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002","posts.noPosts":"\u6682\u65E0\u5E16\u5B50","posts.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u5E16\u5B50","posts.loadMore":"\u52A0\u8F7D\u66F4\u591A","post.title":"\u5E16\u5B50\u8BE6\u60C5","post.welcome":"\u4F60\u597D\uFF0C{{username}}","post.loading":"\u6B63\u5728\u52A0\u8F7D...","post.backToPosts":"\u8FD4\u56DE\u5E16\u5B50\u5E7F\u573A","post.postTypeStan":"\u666E\u901A\u5E16\u5B50","post.postTypeTask":"\u96F6\u5DE5\u4EFB\u52A1","post.tagSection":"\u677F\u5757 / Tag","post.noSection":"\u4E0D\u9009\u62E9\u677F\u5757","post.contentLabel":"\u5185\u5BB9","post.contentPlaceholder":"\u5206\u4EAB\u4F60\u7684\u60F3\u6CD5...","post.taskLocationLabel":"\u5730\u7406\u4F4D\u7F6E\uFF08\u53EF\u9009\uFF09","post.taskLocationPlaceholder":"\u5982\uFF1A\u4E0A\u6D77\u5F90\u6C47 / \u8FDC\u7A0B","post.taskStartLabel":"\u5F00\u59CB\u65F6\u95F4","post.taskEndLabel":"\u7ED3\u675F\u65F6\u95F4","post.workingHoursLabel":"Working hours","post.workingHoursPlaceholder":"\u5982\uFF1A4h / 9:00-13:00 / \u5468\u672B\u4E24\u5929","post.applyDeadlineLabel":"\u7533\u8BF7\u622A\u6B62\u65F6\u95F4","post.imagesLabel":"\u56FE\u7247\uFF08\u53EF\u9009\uFF0C\u652F\u6301\u591A\u9009\uFF09","post.videosLabel":"\u89C6\u9891\uFF08\u53EF\u9009\uFF0C\u652F\u6301\u591A\u9009\uFF09","post.publish":"\u53D1\u5E03","post.newPostBadge":"\u53D1\u5E03\u65B0\u5E16","post.loadingReplies":"\u52A0\u8F7D\u4E2D...","post.repliesLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u56DE\u590D","post.noReplies":"\u6682\u65E0\u56DE\u590D","post.timeRange":"\u65F6\u95F4\u8303\u56F4\uFF1A","post.applyDeadline":"\u7533\u8BF7\u622A\u6B62\uFF1A","post.location":"\u5730\u7406\u4F4D\u7F6E\uFF1A","post.noLocation":"\u672A\u9650\u5236","post.status":"\u7533\u8BF7\u72B6\u6001\uFF1A","post.statusOpen":"\u5F00\u653E\u4E2D","post.statusClosed":"\u5DF2\u5173\u95ED","post.applicantCount":"\u5F53\u524D\u7533\u8BF7\u6570\uFF1A","post.selectedApplicant":"\u5DF2\u9009\u5019\u9009\u4EBA\uFF1A","post.withdrawApplication":"\u64A4\u9500\u7533\u8BF7","post.applyTask":"\u7533\u8BF7\u4EFB\u52A1","post.closeApplications":"\u5173\u95ED\u7533\u8BF7","post.viewApplicants":"\u67E5\u770B\u7533\u8BF7\u8005","post.taskResults":"\u4EFB\u52A1\u6210\u679C","post.resultDescription":"\u6210\u679C\u8BF4\u660E","post.resultDescriptionPlaceholder":"\u8865\u5145\u8BF4\u660E\u672C\u6B21\u5B8C\u6210\u5185\u5BB9...","post.resultImages":"\u6210\u679C\u56FE\u7247","post.resultVideos":"\u6210\u679C\u89C6\u9891","post.submitResult":"\u63D0\u4EA4\u4EFB\u52A1\u6210\u679C","post.replyPlaceholder":"\u5199\u4E0B\u4F60\u7684\u56DE\u590D...","post.prevImage":"\u4E0A\u4E00\u5F20","post.nextImage":"\u4E0B\u4E00\u5F20","post.loadingApplicants":"\u52A0\u8F7D\u7533\u8BF7\u8005\u4E2D...","post.applicantsLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u7533\u8BF7\u8005","post.noApplicants":"\u6682\u65E0\u7533\u8BF7\u8005","post.invitationDefault":`\u4F60\u597D\uFF0C\u4F60\u5DF2\u88AB\u9009\u4E3A\u8BE5\u96F6\u5DE5\u4EFB\u52A1\u7684\u5019\u9009\u4EBA\u3002
+
+\u4EFB\u52A1\u5185\u5BB9\uFF1A{{content}}
+\u5982\u679C\u4F60\u786E\u8BA4\u53C2\u4E0E\uFF0C\u8BF7\u76F4\u63A5\u56DE\u590D\u3002`,"post.confirmAndMessage":"\u786E\u8BA4\u5E76\u53D1\u9001\u79C1\u4FE1","post.submittingResult":"\u6B63\u5728\u63D0\u4EA4\u4EFB\u52A1\u6210\u679C...","post.resultSubmitted":"\u4EFB\u52A1\u6210\u679C\u5DF2\u63D0\u4EA4","post.loadingResults":"\u52A0\u8F7D\u4EFB\u52A1\u6210\u679C\u4E2D...","post.resultsLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u4EFB\u52A1\u6210\u679C","post.noResults":"\u6682\u672A\u63D0\u4EA4\u4EFB\u52A1\u6210\u679C","post.invalidPost":"\u65E0\u6548\u7684\u5E16\u5B50","post.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u5E16\u5B50","post.notFound":"\u672A\u627E\u5230\u5E16\u5B50","post.contentRequired":"\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A","post.taskInfoRequired":"\u8BF7\u586B\u5199\u5B8C\u6574\u7684\u4EFB\u52A1\u4FE1\u606F","post.publishing":"\u6B63\u5728\u53D1\u5E03...","post.publishFailed":"\u53D1\u5E03\u5931\u8D25","post.publishSuccess":"\u53D1\u5E03\u6210\u529F","post.publishFailedRetry":"\u53D1\u5E03\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5","post.liked":"\u5DF2\u70B9\u8D5E","post.like":"\u70B9\u8D5E","post.deletePost":"\u5220\u9664\u5E16\u5B50","post.confirmDelete":"\u786E\u8BA4\u5220\u9664\u8FD9\u6761\u5E16\u5B50\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002","post.videoNotSupported":"\u4F60\u7684\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 video \u6807\u7B7E","post.gigTaskBadge":"\u96F6\u5DE5\u4EFB\u52A1","post.workingHours":"Working hours\uFF1A{{hours}}","post.sendReply":"\u53D1\u9001","post.assistToggle":"AI \u8F85\u52A9","post.assistBot":"Bot","post.assistLLM":"\u6A21\u578B\uFF08\u53EF\u9009\uFF09","post.assistDefaultLLM":"\u8DDF\u968F Bot \u9ED8\u8BA4\u914D\u7F6E","post.assistNoBot":"\u6682\u65E0\u53EF\u7528 Bot","post.assistTopic":"\u9009\u9898 / \u8981\u70B9","post.assistTopicPlaceholder":"\u53EF\u9009\u7684\u9009\u9898\uFF0C\u5E2E\u52A9 Bot \u8D77\u8349","post.assistInstruction":"\u98CE\u683C\u8981\u6C42\uFF08\u53EF\u9009\uFF09","post.assistInstructionPlaceholder":"\u4F8B\u5982\uFF1A\u53E3\u543B\u8F7B\u677E\uFF0C\u63A7\u5236\u5728 200 \u5B57\u4EE5\u5185","post.assistRun":"\u751F\u6210\u8349\u7A3F","post.assistApply":"\u5E94\u7528\u5230\u6B63\u6587","post.assistBotRequired":"\u8BF7\u5148\u9009\u62E9\u4E00\u4E2A Bot","post.assistTopicOrDraftRequired":"\u8BF7\u5148\u586B\u5199\u9009\u9898\u6216\u8349\u7A3F","post.assistRunning":"\u6B63\u5728\u751F\u6210\u8349\u7A3F\uFF0C\u8BF7\u7A0D\u5019...","post.assistFailed":"\u8349\u7A3F\u751F\u6210\u5931\u8D25","post.assistDone":"\u8349\u7A3F\u5DF2\u751F\u6210","post.assistApplied":"\u5DF2\u5E94\u7528\u5230\u6B63\u6587","post.replyAssistToggle":"AI \u8F85\u52A9\u56DE\u590D","post.replyAssistRun":"\u751F\u6210\u8BC4\u8BBA","post.replyAssistApply":"\u5E94\u7528\u5230\u56DE\u590D","markdowns.title":"\u516C\u5F00 Markdown","markdowns.browse":"\u6D4F\u89C8\u6240\u6709\u516C\u5F00\u53D1\u5E03\u7684\u6587\u6863","markdowns.backToDashboard":"\u8FD4\u56DE\u63A7\u5236\u53F0","markdowns.latestBadge":"\u6700\u65B0\u516C\u5F00\u6587\u6863","markdowns.loadMore":"\u52A0\u8F7D\u66F4\u591A","markdowns.clickToView":"\u70B9\u51FB\u8FDB\u5165\u53EA\u8BFB\u9875\u9762\u67E5\u770B\u5B8C\u6574 Markdown","markdowns.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u516C\u5F00 Markdown","markdowns.noPosts":"\u6682\u65E0\u516C\u5F00 Markdown","markdown.title":"\u516C\u5F00 Markdown","markdown.loginToEdit":"\u767B\u5F55\u540E\u7F16\u8F91\u81EA\u5DF1\u7684\u6587\u6863","markdown.loading":"\u6B63\u5728\u52A0\u8F7D\u5185\u5BB9...","markdown.publicReadOnly":"\u516C\u5F00\u53EA\u8BFB\u6587\u6863","markdown.readOnlyPreview":"\u53EA\u8BFB\u9884\u89C8","markdown.authReadOnlyPreview":"\u767B\u5F55\u6001\u53EA\u8BFB\u9884\u89C8","markdown.missingId":"\u7F3A\u5C11\u6587\u6863 ID","markdown.loadContentFailed":"\u65E0\u6CD5\u52A0\u8F7D\u5185\u5BB9","markdown.loadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u6587\u6863","markdown.notFound":"\u672A\u627E\u5230\u516C\u5F00\u6587\u6863","markdown.loadError":"\u52A0\u8F7D\u5931\u8D25","markdown.showRaw":"\u663E\u793A\u6E90\u6587","markdown.copyMarkdown":"\u590D\u5236 Markdown","markdown.copyHtml":"\u590D\u5236 HTML","markdown.copied":"\u5DF2\u590D\u5236\uFF01","markdown.copyFailed":"\u590D\u5236\u5931\u8D25","dashboard.title":"\u63A7\u5236\u53F0","dashboard.loading":"\u6B63\u5728\u52A0\u8F7D\u7528\u6237\u4FE1\u606F...","dashboard.drawerToggle":"\u8BB0\u5F55\u5217\u8868","dashboard.profileSettings":"Profile / \u8BBE\u7F6E","dashboard.newMarkdown":"\u65B0\u5EFA Markdown","dashboard.publicMarkdowns":"\u516C\u5F00 Markdown","dashboard.posts":"\u5E16\u5B50","dashboard.markdownEntries":"Markdown \u8BB0\u5F55","dashboard.drawerHelp":"\u5FEB\u901F\u8FDB\u5165\u79C1\u804A\u4F1A\u8BDD\u5217\u8868\u6216\u8054\u7CFB AI \u52A9\u7406\u3002","dashboard.privateChat":"\u79C1\u804A","dashboard.aiAssistant":"AI \u52A9\u7406","dashboard.newTag":"\u65B0\u5EFA Tag","dashboard.loadMore":"\u52A0\u8F7D\u66F4\u591A","dashboard.userAvatar":"\u7528\u6237\u5934\u50CF","dashboard.loadingUser":"\u52A0\u8F7D\u4E2D...","dashboard.profile":"Profile","dashboard.settingsCenter":"\u8BBE\u7F6E\u4E2D\u5FC3","dashboard.logout":"\u9000\u51FA\u767B\u5F55","dashboard.contentPreview":"\u5185\u5BB9\u9884\u89C8","dashboard.selectEntry":"\u8BF7\u9009\u62E9\u4FA7\u8FB9\u680F\u4E2D\u7684\u8BB0\u5F55","dashboard.editEntry":"\u7F16\u8F91","dashboard.deleteEntry":"\u5220\u9664","dashboard.tagModalAdd":"\u6DFB\u52A0 Tag","dashboard.tagNameLabel":"\u540D\u79F0","dashboard.tagNamePlaceholder":"\u4F8B\u5982\uFF1AGo\u8BED\u8A00","dashboard.tagSlugLabel":"\u6807\u8BC6\uFF08\u53EF\u9009\uFF09","dashboard.tagSlugPlaceholder":"\u4F8B\u5982\uFF1Agolang","dashboard.tagDescLabel":"\u63CF\u8FF0\uFF08\u53EF\u9009\uFF09","dashboard.tagDescPlaceholder":"\u7B80\u77ED\u63CF\u8FF0","dashboard.tagOrderLabel":"\u6392\u5E8F\uFF08\u53EF\u9009\uFF09","dashboard.tagCreateBtn":"\u521B\u5EFA","dashboard.settingsCenterTitle":"\u8BBE\u7F6E\u4E2D\u5FC3","dashboard.navProfile":"Profile","dashboard.navPersonalization":"\u4E2A\u6027\u5316","dashboard.navSettings":"\u8BBE\u7F6E","dashboard.navSystem":"\u7CFB\u7EDF\u4FE1\u606F","dashboard.navBots":"Bot \u7BA1\u7406","dashboard.navSite":"\u7AD9\u70B9\u7BA1\u7406","dashboard.systemTitle":"\u7CFB\u7EDF\u4FE1\u606F","dashboard.systemLead":"\u67E5\u770B\u5F53\u524D\u5B9E\u4F8B\u7684\u7248\u672C\u3001\u7CFB\u7EDF\u73AF\u5883\u4E0E\u7A0B\u5E8F\u6240\u5728\u5206\u533A\u7684\u5269\u4F59\u5BB9\u91CF\u3002","dashboard.systemRunInfo":"\u8FD0\u884C\u4FE1\u606F","dashboard.systemRunInfoDesc":"\u67E5\u770B\u5F53\u524D\u5B9E\u4F8B\u7684\u7248\u672C\u3001\u7CFB\u7EDF\u73AF\u5883\u548C\u7A0B\u5E8F\u6240\u5728\u5206\u533A\u5269\u4F59\u5BB9\u91CF\u3002","dashboard.systemCpuArch":"CPU \u67B6\u6784","dashboard.systemDiskCapacity":"\u8FD0\u884C\u5206\u533A\u5269\u4F59\u5BB9\u91CF","dashboard.preferencesBadge":"\u504F\u597D\u4E0E\u7BA1\u7406","dashboard.personalCenter":"\u4E2A\u4EBA\u4E2D\u5FC3","dashboard.profileLead":"\u7EF4\u62A4\u5934\u50CF\u3001\u767B\u5F55\u65B9\u5F0F\u548C\u6700\u8FD1\u767B\u5F55\u8BB0\u5F55\uFF0C\u628A Profile \u4E0E\u8D26\u6237\u76F8\u5173\u4FE1\u606F\u96C6\u4E2D\u6536\u597D\u3002","dashboard.viewPublicProfile":"\u67E5\u770B\u516C\u5F00 Profile","dashboard.changeAvatar":"\u66F4\u6362\u5934\u50CF","dashboard.zoomLabel":"\u7F29\u653E","dashboard.saveAvatar":"\u4FDD\u5B58\u5934\u50CF","dashboard.cancelAvatar":"\u53D6\u6D88","dashboard.avatarHint":"\u652F\u6301\u4E0A\u4F20\u4E0E\u7B80\u5355\u88C1\u5207\u3002","dashboard.securityTitle":"\u8D26\u6237\u5B89\u5168","dashboard.emailVerificationTitle":"\u90AE\u7BB1\u9A8C\u8BC1","dashboard.emailVerificationText":"\u9A8C\u8BC1\u4F60\u7684\u90AE\u7BB1\u5730\u5740\uFF0C\u4FBF\u4E8E\u540E\u7EED\u8D26\u53F7\u627E\u56DE\u548C\u5B89\u5168\u6D41\u7A0B\u63A5\u5165\u3002","dashboard.sendVerificationEmail":"\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6","dashboard.sendingVerificationEmail":"\u6B63\u5728\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6...","dashboard.verificationEmailSent":"\u9A8C\u8BC1\u90AE\u4EF6\u5DF2\u53D1\u9001","dashboard.emailVerificationSendFailed":"\u53D1\u9001\u9A8C\u8BC1\u90AE\u4EF6\u5931\u8D25","dashboard.emailVerifiedState":"\u5DF2\u9A8C\u8BC1","dashboard.emailUnverifiedState":"\u672A\u9A8C\u8BC1","dashboard.emailUnavailable":"\u6682\u65E0\u90AE\u7BB1\u5730\u5740","dashboard.securityText":"\u7ED1\u5B9A Passkey \u540E\u53EF\u4F7F\u7528\u6307\u7EB9\u6216\u4EBA\u8138\u5FEB\u901F\u767B\u5F55\u3002","dashboard.bindPasskey":"\u7ED1\u5B9A Passkey","dashboard.recentLogins":"\u6700\u8FD1\u767B\u5F55","dashboard.recentLoginsText":"\u67E5\u770B\u6700\u8FD1\u767B\u5F55\u8BBE\u5907\u3001IP \u548C\u4F4D\u7F6E\u8BB0\u5F55\u3002","dashboard.interfaceStyle":"\u754C\u9762\u6837\u5F0F","dashboard.interfaceStyleText":"\u5728\u9ED8\u8BA4\u98CE\u683C\u548C\u9ED1\u767D\u98CE\u683C\u4E4B\u95F4\u5207\u6362\uFF0C\u7ACB\u5373\u9884\u89C8\u9875\u9762\u53D8\u5316\u3002","dashboard.themeDefault":"\u9ED8\u8BA4","dashboard.themeMonochrome":"\u9ED1\u767D","dashboard.switchToMonochrome":"\u5207\u6362\u5230\u9ED1\u767D\u6837\u5F0F","dashboard.switchToDefault":"\u5207\u6362\u5230\u9ED8\u8BA4\u6837\u5F0F","dashboard.browsingHabits":"\u5185\u5BB9\u6D4F\u89C8\u4E60\u60EF","dashboard.browsingHabitsText":"\u5F53\u524D\u4FDD\u6301\u6E05\u723D\u3001\u8F7B\u91CF\u7684\u5DE5\u4F5C\u53F0\u5E03\u5C40\uFF0C\u540E\u7EED\u53EF\u7EE7\u7EED\u6269\u5C55\u66F4\u591A\u4E2A\u6027\u5316\u9009\u9879\u3002","dashboard.llmConfigNameLabel":"\u914D\u7F6E\u540D\u79F0","dashboard.llmConfigNamePlaceholder":"\u4F8B\u5982\uFF1AOpenAI \u751F\u4EA7\u914D\u7F6E","dashboard.llmConfigApiKeyLabel":"API Key","dashboard.llmConfigApiKeyPlaceholder":"\u65B0\u589E\u65F6\u5EFA\u8BAE\u586B\u5199\uFF0C\u7F16\u8F91\u65F6\u7559\u7A7A\u8868\u793A\u4FDD\u6301\u539F\u503C","dashboard.llmConfigSystemPromptLabel":"\u6D4B\u8BD5 Prompt\uFF08\u53EF\u9009\uFF09","dashboard.llmConfigSystemPromptPlaceholder":"\u4EC5\u7528\u4E8E\u6D4B\u8BD5\u914D\u7F6E\u8FDE\u901A\u6027\uFF0C\u4E0D\u4F5C\u4E3A Bot \u8FD0\u884C\u65F6 Prompt","dashboard.llmConfigSharedLabel":"\u5171\u4EAB\u7ED9\u5176\u4ED6\u7528\u6237\u4F7F\u7528\u8FD9\u4E2A LLM Config","dashboard.llmConfigClear":"\u6E05\u7A7A","dashboard.llmConfigTest":"\u6D4B\u8BD5\u914D\u7F6E","dashboard.llmConfigSave":"\u4FDD\u5B58\u914D\u7F6E","dashboard.botHelp":"\u6BCF\u4E2A Bot \u90FD\u662F\u4E00\u4E2A\u53EF\u79C1\u804A\u7684\u7528\u6237\u3002\u8FD9\u91CC\u7EF4\u62A4 Bot \u9ED8\u8BA4\u6A21\u578B\u914D\u7F6E\u548C Bot Prompt\u3002","dashboard.botNameLabel":"Bot \u540D\u79F0","dashboard.botNamePlaceholder":"\u4F8B\u5982\uFF1A\u7FFB\u8BD1\u52A9\u624B","dashboard.botConfigLabel":"\u7ED1\u5B9A\u914D\u7F6E","dashboard.botDescriptionLabel":"Bot \u7B80\u4ECB","dashboard.botDescriptionPlaceholder":"\u544A\u8BC9\u7528\u6237\u8FD9\u4E2A Bot \u64C5\u957F\u505A\u4EC0\u4E48","dashboard.botSystemPromptLabel":"Bot \u914D\u7F6E Prompt","dashboard.botSystemPromptPlaceholder":"\u5B9A\u4E49\u8FD9\u4E2A Bot \u7684\u4EBA\u8BBE\u3001\u56DE\u7B54\u98CE\u683C\u3001\u8FB9\u754C\u548C\u884C\u4E3A\u89C4\u5219","dashboard.botClear":"\u6E05\u7A7A","dashboard.botSave":"\u4FDD\u5B58 Bot","dashboard.siteManagementBadge":"\u7AD9\u70B9\u7BA1\u7406","dashboard.siteHelp":"\u5728\u8FD9\u91CC\u7EF4\u62A4\u7AD9\u70B9 logo\u3001intro\u3001APNs Key / .p8\uFF0C\u4EE5\u53CA Tag \u7BA1\u7406\u3002","dashboard.siteIconLabel":"\u7AD9\u70B9\u56FE\u6807","dashboard.siteIconHint":"\u5EFA\u8BAE\u4F7F\u7528\u65B9\u5F62\u56FE\u6807\uFF0C\u4E0A\u4F20\u540E\u4F1A\u7ACB\u5373\u751F\u6548\u3002","dashboard.siteNameLabel":"\u7AD9\u70B9\u540D\u79F0","dashboard.siteNamePlaceholder":"\u8F93\u5165\u7AD9\u70B9\u540D\u79F0","dashboard.siteDescriptionLabel":"\u7AD9\u70B9\u4ECB\u7ECD","dashboard.siteDescriptionPlaceholder":"\u4E00\u53E5\u8BDD\u4ECB\u7ECD\u4F60\u7684\u7AD9\u70B9","dashboard.registrationInviteRequiredLabel":"\u6CE8\u518C\u9700\u8981\u9080\u8BF7\u7801","dashboard.registrationInviteRequiredHint":"\u5F00\u542F\u540E\uFF0C\u65B0\u7528\u6237\u6CE8\u518C\u5FC5\u987B\u586B\u5199\u6709\u6548\u9080\u8BF7\u7801\u3002","dashboard.saveSite":"\u4FDD\u5B58\u7AD9\u70B9\u4FE1\u606F","dashboard.inviteCodeBadge":"\u9080\u8BF7\u7801","dashboard.inviteCodeHelp":"\u4E3A\u65B0\u7528\u6237\u6CE8\u518C\u751F\u6210\u4E00\u6B21\u6027\u9080\u8BF7\u7801\u3002","dashboard.generateInviteCode":"\u751F\u6210","dashboard.noInviteCodes":"\u8FD8\u6CA1\u6709\u9080\u8BF7\u7801\u3002","dashboard.inviteCodeAvailable":"\u53EF\u7528","dashboard.inviteCodeUsed":"\u5DF2\u4F7F\u7528","dashboard.inviteCodeLoadFailed":"\u9080\u8BF7\u7801\u52A0\u8F7D\u5931\u8D25","dashboard.generatingInviteCode":"\u6B63\u5728\u751F\u6210\u9080\u8BF7\u7801...","dashboard.inviteCodeGenerateFailed":"\u9080\u8BF7\u7801\u751F\u6210\u5931\u8D25","dashboard.inviteCodeGenerated":"\u5DF2\u751F\u6210 {{count}} \u4E2A\u9080\u8BF7\u7801","dashboard.applePushBadge":"APNs Key / .p8","dashboard.applePushHelp":"\u4E3A\u540E\u7EED APNs \u63A8\u9001\u9884\u5148\u7EF4\u62A4\u5F00\u53D1\u73AF\u5883\u4E0E\u751F\u4EA7\u73AF\u5883 Key\u3002","dashboard.applePushDevLabel":"\u5F00\u53D1\u73AF\u5883 APNs Key\uFF08.p8\uFF09","dashboard.applePushProdLabel":"\u751F\u4EA7\u73AF\u5883 APNs Key\uFF08.p8\uFF09","dashboard.notUploaded":"\u672A\u4E0A\u4F20","dashboard.deleteDevCert":"\u5220\u9664 dev Key","dashboard.deleteProdCert":"\u5220\u9664 prod Key","dashboard.tagManagementBadge":"Tag \u7BA1\u7406","dashboard.tagManagementHelp":"\u53EF\u65B0\u589E\u3001\u7F16\u8F91\u6216\u5220\u9664\u7AD9\u70B9\u5185\u7684\u5185\u5BB9\u6807\u7B7E\u3002","dashboard.siteNewTag":"\u65B0\u5EFA Tag","dashboard.drawerClose":"\u6536\u8D77","dashboard.quickAccess":"\u5FEB\u6377\u5165\u53E3","dashboard.modalClose":"\u5173\u95ED","dashboard.personalizationTitle":"\u4E2A\u6027\u5316","dashboard.personalizationLead":"\u7BA1\u7406\u754C\u9762\u98CE\u683C\u548C\u4E2A\u4EBA\u504F\u597D\uFF0C\u8BA9\u5DE5\u4F5C\u53F0\u66F4\u8D34\u8FD1\u4F60\u7684\u4F7F\u7528\u4E60\u60EF\u3002","dashboard.languageTitle":"\u8BED\u8A00","dashboard.languageText":"\u9009\u62E9\u8FD9\u4E2A\u6D4F\u89C8\u5668\u91CC\u7684\u754C\u9762\u8BED\u8A00\u3002","dashboard.languageEnglish":"\u82F1\u6587","dashboard.languageChinese":"\u4E2D\u6587","dashboard.switchToChinese":"\u5207\u6362\u5230\u4E2D\u6587","dashboard.switchToEnglish":"\u5207\u6362\u5230\u82F1\u6587","dashboard.settingsTitle":"\u8BBE\u7F6E","dashboard.botsManagementTitle":"Bot \u7BA1\u7406","dashboard.botsLead":"\u5728\u8FD9\u91CC\u7EF4\u62A4 Bot \u7684\u9ED8\u8BA4\u6A21\u578B\u914D\u7F6E\u3001\u7B80\u4ECB\u548C\u4E13\u5C5E Prompt\u3002","dashboard.siteManagementTitle":"\u7AD9\u70B9\u7BA1\u7406","dashboard.siteLead":"\u7BA1\u7406\u5458\u53EF\u89C1\u7684\u7AD9\u70B9 logo\u3001intro\u3001APNs Key / .p8 \u548C Tag \u7BA1\u7406\u9879\u3002","dashboard.unknownLocation":"\u4F4D\u7F6E\u672A\u77E5","dashboard.loginMethodRegister":"\u6CE8\u518C","dashboard.loginMethodPassword":"\u5BC6\u7801","dashboard.certMeta":"\u5F53\u524D\u6587\u4EF6\uFF1A{{filename}} \xB7 \u4E0A\u4F20\u65F6\u95F4\uFF1A{{time}}","dashboard.noTags":"\u8FD8\u6CA1\u6709 Tag\uFF0C\u5148\u521B\u5EFA\u7B2C\u4E00\u4E2A\u5427\u3002","dashboard.tagOrder":"\u6392\u5E8F {{order}}","dashboard.noDescription":"\u6682\u65E0\u63CF\u8FF0","dashboard.saveConfigBtn":"\u4FDD\u5B58\u914D\u7F6E","dashboard.saveBotBtn":"\u4FDD\u5B58 Bot","dashboard.noLLMConfigs":"\u8FD8\u6CA1\u6709 LLM Config\uFF0C\u5148\u521B\u5EFA\u4E00\u4E2A\u5427\u3002","dashboard.keySaved":"Key \u5DF2\u4FDD\u5B58","dashboard.noKey":"\u65E0 Key","dashboard.shared":"\u5171\u4EAB","dashboard.private":"\u79C1\u6709","dashboard.noSystemPrompt":"\u672A\u8BBE\u7F6E System Prompt","dashboard.createLLMConfigFirst":"\u8BF7\u5148\u521B\u5EFA LLM Config","dashboard.noBots":"\u8FD8\u6CA1\u6709 Bot\uFF0C\u521B\u5EFA\u540E\u5C31\u80FD\u76F4\u63A5\u79C1\u804A\u4F7F\u7528\u3002","dashboard.botUserId":"\u7528\u6237 ID\uFF1A{{id}}","dashboard.botPromptPreview":"Bot Prompt\uFF1A{{preview}}...","dashboard.noBotPrompt":"\u672A\u914D\u7F6E Bot Prompt","dashboard.chat":"\u5BF9\u8BDD","dashboard.loginHistoryLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u767B\u5F55\u8BB0\u5F55","dashboard.noLoginHistory":"\u6682\u65E0\u767B\u5F55\u8BB0\u5F55","dashboard.unknownIp":"\u672A\u77E5 IP","dashboard.welcome":"\u4F60\u597D\uFF0C{{username}}","dashboard.currentUser":"\u5F53\u524D\u7528\u6237","dashboard.adminRoleBadge":"\u7BA1\u7406\u5458","dashboard.adminMeta":"Profile\u3001\u4E2A\u6027\u5316\u4E0E\u7AD9\u70B9\u7BA1\u7406","dashboard.userMeta":"Profile \u4E0E\u4E2A\u6027\u5316","dashboard.adminProfileMeta":"\u7EF4\u62A4\u4F60\u7684\u4E2A\u4EBA\u8D44\u6599\u3001\u8BBE\u5907\u504F\u597D\u4E0E\u7AD9\u70B9\u914D\u7F6E","dashboard.userProfileMeta":"\u7EF4\u62A4\u4F60\u7684\u4E2A\u4EBA\u8D44\u6599\u3001\u8BBE\u5907\u4E0E\u504F\u597D","dashboard.adminOnlyTag":"\u4EC5\u7BA1\u7406\u5458\u53EF\u65B0\u5EFA Tag","dashboard.llmConfigLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D LLM Config","dashboard.availableConfigLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u53EF\u7528\u914D\u7F6E","dashboard.botListLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D Bot \u5217\u8868","dashboard.siteInfoLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u7AD9\u70B9\u4FE1\u606F","dashboard.tagListLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D Tag \u5217\u8868","dashboard.editTag":"\u7F16\u8F91 Tag","dashboard.addTag":"\u6DFB\u52A0 Tag","dashboard.tagSaving":"\u6B63\u5728\u4FDD\u5B58...","dashboard.tagCreating":"\u6B63\u5728\u521B\u5EFA...","dashboard.tagSaveFailed":"\u4FDD\u5B58\u5931\u8D25","dashboard.tagSaved":"\u4FDD\u5B58\u6210\u529F","dashboard.tagCreated":"\u521B\u5EFA\u6210\u529F","dashboard.tagSaveFailedRetry":"\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5","dashboard.confirmDeleteTag":'\u786E\u5B9A\u5220\u9664 Tag "{{name}}" \u5417\uFF1F',"dashboard.tagDeleted":"\u5DF2\u5220\u9664 Tag\uFF1A{{name}}","dashboard.llmTestMissingFields":"\u6D4B\u8BD5\u524D\u8BF7\u5148\u586B\u5199 Base URL\u3001Model \u548C API Key","dashboard.llmTesting":"\u6B63\u5728\u6D4B\u8BD5\u6A21\u578B\u914D\u7F6E...","dashboard.llmTestSuccess":"\u8FDE\u63A5\u6210\u529F\uFF0C\u6A21\u578B\u914D\u7F6E\u53EF\u7528","dashboard.llmTestFailed":"\u6D4B\u8BD5\u5931\u8D25","dashboard.llmConfigSaving":"\u6B63\u5728\u4FDD\u5B58\u914D\u7F6E...","dashboard.llmConfigCreating":"\u6B63\u5728\u521B\u5EFA\u914D\u7F6E...","dashboard.llmConfigMissingFields":"\u8BF7\u5148\u586B\u5199\u540D\u79F0\u3001Base URL \u548C Model","dashboard.llmConfigUpdated":"\u914D\u7F6E\u5DF2\u66F4\u65B0","dashboard.llmConfigCreated":"\u914D\u7F6E\u5DF2\u521B\u5EFA","dashboard.updateConfig":"\u66F4\u65B0\u914D\u7F6E","dashboard.apiKeySaved":"\u5DF2\u4FDD\u5B58 API Key\uFF0C\u7559\u7A7A\u8868\u793A\u4FDD\u6301\u539F\u503C","dashboard.confirmDeleteConfig":'\u786E\u5B9A\u5220\u9664\u914D\u7F6E"{{name}}"\u5417\uFF1F\u5DF2\u7ED1\u5B9A\u7684 Bot \u9700\u8981\u5148\u6539\u7ED1\u6216\u5220\u9664\u3002',"dashboard.configDeleted":"\u5DF2\u5220\u9664\u914D\u7F6E\uFF1A{{name}}","dashboard.botMissingFields":"\u8BF7\u5148\u586B\u5199 Bot \u540D\u79F0\u5E76\u9009\u62E9\u4E00\u4E2A\u914D\u7F6E","dashboard.botSaving":"\u6B63\u5728\u4FDD\u5B58 Bot...","dashboard.botCreating":"\u6B63\u5728\u521B\u5EFA Bot...","dashboard.botUpdated":"Bot \u5DF2\u66F4\u65B0","dashboard.botCreated":"Bot \u5DF2\u521B\u5EFA","dashboard.updateBot":"\u66F4\u65B0 Bot","dashboard.confirmDeleteBot":'\u786E\u5B9A\u5220\u9664 Bot "{{name}}"\u5417\uFF1F\u8FD9\u4F1A\u540C\u65F6\u79FB\u9664\u8FD9\u4E2A Bot \u7528\u6237\u3002',"dashboard.botDeleted":"\u5DF2\u5220\u9664 Bot\uFF1A{{name}}","dashboard.savingSiteInfo":"\u6B63\u5728\u4FDD\u5B58\u7AD9\u70B9\u4FE1\u606F...","dashboard.siteInfoSaved":"\u7AD9\u70B9\u4FE1\u606F\u5DF2\u4FDD\u5B58","dashboard.selectImageFile":"\u8BF7\u9009\u62E9\u56FE\u7247\u6587\u4EF6","dashboard.uploadingSiteIcon":"\u6B63\u5728\u4E0A\u4F20\u7AD9\u70B9\u56FE\u6807...","dashboard.siteIconUpdated":"\u7AD9\u70B9\u56FE\u6807\u5DF2\u66F4\u65B0","dashboard.certUnsupportedFormat":"\u4EC5\u652F\u6301 .p8\u3001.p12\u3001.pem\u3001.cer\u3001.crt\u3001.key \u6587\u4EF6","dashboard.uploadingCert":"\u6B63\u5728\u4E0A\u4F20 {{env}} APNs Key / .p8...","dashboard.certUpdated":"{{env}} APNs Key / .p8 \u5DF2\u66F4\u65B0","dashboard.confirmDeleteCert":"\u786E\u5B9A\u5220\u9664 {{env}} APNs Key / .p8 \u5417\uFF1F","dashboard.deletingCert":"\u6B63\u5728\u5220\u9664 {{env}} APNs Key / .p8...","dashboard.certDeleted":"{{env}} APNs Key / .p8 \u5DF2\u5220\u9664","dashboard.logoutFailed":"\u9000\u51FA\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5","dashboard.logoutNetworkFailed":"\u9000\u51FA\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u540E\u91CD\u8BD5","dashboard.entryLoadFailed":"\u65E0\u6CD5\u52A0\u8F7D\u8BB0\u5F55","dashboard.noEntries":"\u6682\u65E0\u8BB0\u5F55","dashboard.entryReadFailed":"\u8BFB\u53D6\u5931\u8D25","dashboard.emptyContent":"\u7A7A\u5185\u5BB9","dashboard.confirmDeleteEntry":"\u786E\u5B9A\u8981\u5220\u9664\u8BE5\u8BB0\u5F55\u5417\uFF1F","dashboard.selectImageFileWithPeriod":"\u8BF7\u9009\u62E9\u56FE\u7247\u6587\u4EF6\u3002","dashboard.canceledEdit":"\u5DF2\u53D6\u6D88\u7F16\u8F91\u3002","dashboard.generatingImageFailed":"\u751F\u6210\u56FE\u7247\u5931\u8D25\u3002","dashboard.avatarUpdated":"\u5934\u50CF\u5DF2\u66F4\u65B0\u3002","dashboard.networkErrorPeriod":"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5\u3002","dashboard.passkeyNotSupported":"\u5F53\u524D\u6D4F\u89C8\u5668\u4E0D\u652F\u6301 Passkey\u3002","dashboard.passkeyStarting":"\u6B63\u5728\u542F\u52A8 Passkey...","dashboard.passkeyBeginFailed":"\u65E0\u6CD5\u53D1\u8D77 Passkey \u7ED1\u5B9A","dashboard.passkeySuccess":"Passkey \u7ED1\u5B9A\u6210\u529F\uFF01","dashboard.passkeyFailed":"Passkey \u7ED1\u5B9A\u5931\u8D25","dashboard.unknownTime":"\u672A\u77E5\u65F6\u95F4","nav.dashboard":"Dashboard","nav.posts":"Posts","nav.markdowns":"Markdowns","nav.chat":"Chat","nav.editor":"Editor","nav.latch":"Latch","nav.bots":"Bot \u7BA1\u7406","nav.userAdmin":"\u7528\u6237\u7BA1\u7406","nav.creation":"\u521B\u4F5C","creation.title":"\u521B\u4F5C","creation.newEntry":"\u65B0\u5EFA\u6587\u7AE0","creation.editEntry":"\u6B63\u5728\u7F16\u8F91","creation.loadFailed":"\u52A0\u8F7D\u6587\u7AE0\u5931\u8D25","creation.save":"\u4FDD\u5B58","creation.saved":"\u5DF2\u4FDD\u5B58","creation.saveFailed":"\u4FDD\u5B58\u5931\u8D25","creation.titleContentRequired":"\u6807\u9898\u548C\u6B63\u6587\u90FD\u9700\u8981\u586B\u5199","creation.titlePlaceholder":"\u7ED9\u8FD9\u7BC7\u6587\u7AE0\u8D77\u4E2A\u6807\u9898","creation.makePublic":"\u8BBE\u4E3A\u516C\u5F00","creation.makePrivate":"\u8BBE\u4E3A\u79C1\u5BC6","creation.backToDashboard":"\u8FD4\u56DE Dashboard","creation.assistInstructionPlaceholder":"\u53EF\u9009\uFF1A\u5199\u4E00\u53E5\u6DA6\u8272\u8981\u6C42","creation.assistNoBot":"\u6682\u65E0\u53EF\u7528 Bot","creation.assistDefaultLLM":"\u8DDF\u968F Bot \u9ED8\u8BA4\u914D\u7F6E","creation.assistBotRequired":"\u8BF7\u5148\u9009\u62E9\u4E00\u4E2A Bot","creation.assistRun":"\u6DA6\u8272\u9009\u4E2D\u6BB5","creation.assistClose":"\u5173\u95ED","creation.assistApply":"\u66FF\u6362\u9009\u4E2D\u6BB5","creation.assistDiscard":"\u653E\u5F03\u7ED3\u679C","creation.assistRunning":"\u6B63\u5728\u6DA6\u8272\u9009\u4E2D\u6BB5...","creation.assistFailed":"\u6DA6\u8272\u5931\u8D25","creation.assistReady":"\u6DA6\u8272\u5B8C\u6210","creation.presetTighter":"\u66F4\u7CBE\u7B80","creation.presetFormal":"\u66F4\u6B63\u5F0F","creation.presetFriendly":"\u66F4\u4EB2\u5207","creation.presetExpand":"\u5C55\u5F00\u8865\u5145","bots.title":"Bot \u7BA1\u7406","bots.topbarTitle":"Bot \u7BA1\u7406","nav.settings":"\u8BBE\u7F6E","admin.title":"\u7528\u6237\u7BA1\u7406","admin.topbarTitle":"\u7BA1\u7406\u5458\u4E2D\u5FC3","admin.loading":"\u52A0\u8F7D\u4E2D...","admin.welcome":"\u6B22\u8FCE\u4F60\uFF0C{{username}}","admin.userQuery":"\u7528\u6237\u67E5\u8BE2","admin.userCount":"\u7528\u6237\u603B\u6570: {{count}}","admin.userCountDash":"\u7528\u6237\u603B\u6570: -","admin.searchPlaceholder":"\u6309\u7528\u6237\u540D / \u90AE\u7BB1 / \u7528\u6237ID \u641C\u7D22","admin.search":"\u641C\u7D22","admin.reset":"\u91CD\u7F6E","admin.prevPage":"\u4E0A\u4E00\u9875","admin.nextPage":"\u4E0B\u4E00\u9875","admin.pageInfo":"\u7B2C {{current}} / {{total}} \u9875","admin.pageInfoDash":"\u7B2C - \u9875","admin.accountManagement":"\u8D26\u53F7\u7BA1\u7406","admin.selectUser":"\u8BF7\u9009\u62E9\u5DE6\u4FA7\u7528\u6237","admin.changePassword":"\u4FEE\u6539\u5BC6\u7801","admin.newPasswordPlaceholder":"\u65B0\u5BC6\u7801\uFF08\u81F3\u5C116\u4F4D\uFF09","admin.confirmPasswordPlaceholder":"\u786E\u8BA4\u65B0\u5BC6\u7801","admin.updatePassword":"\u66F4\u65B0\u5BC6\u7801","admin.loginHistory":"\u767B\u5F55\u4FE1\u606F\u67E5\u770B","admin.noLoginHistory":"\u6682\u65E0\u767B\u5F55\u8BB0\u5F55","admin.noMatchingUsers":"\u6CA1\u6709\u5339\u914D\u7528\u6237","admin.loadUsersFailed":"\u52A0\u8F7D\u7528\u6237\u5931\u8D25","admin.loadHistoryFailed":"\u52A0\u8F7D\u767B\u5F55\u8BB0\u5F55\u5931\u8D25","admin.selectUserFirst":"\u8BF7\u5148\u9009\u62E9\u7528\u6237","admin.passwordTooShort":"\u65B0\u5BC6\u7801\u81F3\u5C11 6 \u4F4D","admin.passwordMismatch":"\u4E24\u6B21\u8F93\u5165\u5BC6\u7801\u4E0D\u4E00\u81F4","admin.updatingPassword":"\u6B63\u5728\u66F4\u65B0\u5BC6\u7801...","admin.passwordUpdated":"\u5BC6\u7801\u5DF2\u66F4\u65B0","admin.updateFailed":"\u66F4\u65B0\u5931\u8D25","admin.networkError":"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","admin.logoutFailed":"\u9000\u51FA\u5931\u8D25","admin.unknownIp":"\u672A\u77E5 IP","admin.unknownLocation":"\u672A\u77E5\u4F4D\u7F6E","admin.loginMethodPasskey":"Passkey","admin.loginMethodRegister":"\u6CE8\u518C","admin.loginMethodPassword":"\u5BC6\u7801","admin.online":"online","admin.createdAt":"\u521B\u5EFA\u65F6\u95F4: {{time}}"},Lt={en:Q,"zh-CN":vt}});function wt(e){return{name:e?.name?.trim()||Ke.name,description:e?.description?.trim()||Ke.description,icon_url:e?.icon_url||""}}function X(e){let t=wt(e),a=t.icon_url||$e(t.name,160);document.querySelectorAll("[data-site-brand]").forEach(o=>{let n=o.querySelector("[data-site-name]"),r=o.querySelector("[data-site-description]"),d=o.querySelector("[data-site-icon]");n&&(n.textContent=t.name),r&&(r.textContent=t.description),d&&(d.src=a,d.alt=`${t.name} ${w("brand.icon")}`)})}function kt(){window.location.pathname.endsWith("/dashboard.html")||window.location.pathname==="/"||document.querySelectorAll("[data-open-settings-center]").forEach(t=>{t.addEventListener("click",()=>{let a=t.dataset.settingsTarget||"personalization";window.location.href=`/dashboard.html?settings=${encodeURIComponent(a)}`})})}function Tt(){let e=document.querySelector(".lp-topbar"),t=document.querySelector(".lp-app");if(!e||!t)return;localStorage.getItem(ze)==="1"&&t.classList.add("sidebar-collapsed");let a=document.createElement("button");a.className="lp-sidebar-toggle",a.title="Toggle sidebar",a.setAttribute("aria-label","Toggle sidebar"),a.textContent="\u2630",a.addEventListener("click",()=>{let o=t.classList.toggle("sidebar-collapsed");localStorage.setItem(ze,o?"1":"0")}),e.insertBefore(a,e.firstChild)}async function Ge(){if(Oe(),Tt(),kt(),await St(),!!document.querySelector("[data-site-brand]"))try{let e=await fetch("/api/site-settings",{credentials:"include"});if(!e.ok){X();return}let t=await e.json();X(t.site)}catch{X()}}function Z(e){let t=document.getElementById("lpFootName"),a=document.getElementById("lpFootRole"),o=document.getElementById("lpFootAvatar");if(!t&&!a&&!o)return;let n=(e?.username||"").trim();if(t&&(t.textContent=n||"\u2014"),a&&(a.textContent=e?.role==="admin"?"Administrator":"Member"),o){let d=n?n.slice(0,1).toUpperCase():"U";e?.icon_url?(o.style.backgroundImage=`url(${e.icon_url})`,o.style.backgroundSize="cover",o.style.backgroundPosition="center",o.textContent=""):(o.style.backgroundImage="",o.style.backgroundSize="",o.style.backgroundPosition="",o.textContent=d)}let r=e?.role==="admin";document.querySelectorAll("[data-admin-nav]").forEach(d=>{d.hidden=!r})}async function St(){if(document.getElementById("lpFootName")||document.getElementById("lpFootRole")||document.getElementById("lpFootAvatar"))try{let t=await fetch("/api/me",{credentials:"include"});if(!t.ok)return;let a=await t.json();Z(a)}catch{}}var Ke,ze,We=f(()=>{qe();Ve();Ke={name:"Polar-",description:"AI-assisted product prototyping workspace",icon_url:""};ze="lp_sidebar_collapsed"});function je(e,t=!1){let a=e==="mono"?"mono":"default";return document.documentElement.dataset.theme=a,t&&localStorage.setItem(ee,a),a}function Ye(e=!1){return je(localStorage.getItem(ee)||"default",e)}function Je(e){window.addEventListener("storage",t=>{if(t.key!==ee)return;let a=je(t.newValue||"default");e?.(a)})}var ee,Qe=f(()=>{ee="app-theme"});function s(e){let t=document.getElementById(e);if(!t)throw new Error(`Missing required element: #${e}`);return t}var Xe=f(()=>{});async function Ze(){return N("/api/logout",{method:"POST"})}var et=f(()=>{J()});var Xt=mt(()=>{Ne();We();Qe();Xe();et();var ne=s("lpOverlay"),Rt=s("latchWelcome"),tt=s("latchTabProxies"),at=s("latchTabRules"),dt=document.querySelectorAll("[data-latch-tab]"),Ct=document.querySelectorAll("[data-latch-panel]"),lt=document.querySelectorAll("[data-lp-nav]"),h=s("latchProxyStatus"),_=s("latchProxyList"),Et=s("lpAddProxyBtn"),ot=s("lpProxySearch"),c=s("latchRuleStatus"),O=s("latchRuleList"),Mt=s("lpAddRuleBtn"),st=s("lpRuleSearch"),nt=s("latchProfileAdminGrid"),g=s("latchProfileStatus"),oe=s("latchProfileList"),Ft=s("lpAddProfileBtn"),it=s("latchProfileUserView"),rt=s("latchProfileUserList"),Bt=s("lpGoRules"),xt=s("lpGoRulesAlt"),At=s("lpGoProfiles"),ie=s("lpProxyPanel"),It=s("lpProxyClose"),ct=s("latchProxyFormTitle"),V=s("latchProxyNameInput"),re=s("latchProxyTypeSelect"),de=s("latchProxyConfigInput"),Dt=s("latchProxyResetBtn"),x=s("latchProxySubmitBtn"),le=s("lpRulePanel"),Ht=s("lpRuleClose"),pt=s("latchRuleFormTitle"),A=s("latchRuleNameInput"),I=s("latchRuleSourceInlineBtn"),D=s("latchRuleSourceFileBtn"),K=s("latchRuleInlineSection"),z=s("latchRuleFileSection"),ce=s("latchRuleContentInput"),ht=s("latchRuleFileInput"),te=s("latchRuleUploadBtn"),Ut=s("latchRuleResetBtn"),H=s("latchRuleSubmitBtn"),pe=s("lpProfilePanel"),Nt=s("lpProfileClose"),ut=s("latchProfileFormTitle"),G=s("latchProfileNameInput"),he=s("latchProfileDescInput"),ue=s("latchProfileEnabledInput"),me=s("latchProfileShareableInput"),W=s("latchProfileProxyCheckboxes"),j=s("latchProfileRuleRadios"),$t=s("latchProfileResetBtn"),U=s("latchProfileSubmitBtn"),ae=!1,k=null,y=null,T=null,F=[],B=[],se=[];function i(e,t,a="default"){e.textContent=t,e.className="status-text"+(a==="success"?" status-success":a==="error"?" status-error":"")}function qt(e){return e==="ss"?'<div class="lp-type-icon ss">SS</div>':e==="ss3"?'<div class="lp-type-icon ss3">S3</div>':e.startsWith("kcp")?'<div class="lp-type-icon kcp">KCP</div>':'<div class="lp-type-icon def">PX</div>'}function S(e){e.classList.add("open"),ne.classList.add("open")}function u(){[ie,le,pe].forEach(e=>e.classList.remove("open")),ne.classList.remove("open")}function b(e){dt.forEach(t=>t.classList.toggle("active",t.dataset.latchTab===e)),Ct.forEach(t=>{t.hidden=t.dataset.latchPanel!==e}),lt.forEach(t=>{let a=t.dataset.lpNav||"";t.classList.toggle("active",a===e||a==="dashboard"&&e==="proxies")})}function $(){k=null,V.value="",re.value="ss",de.value="",ct.textContent="Add Proxy",x.textContent="\u4FDD\u5B58\u4EE3\u7406",i(h,"")}function _t(e){if(!e.length){_.innerHTML='<tr><td colspan="4"><div class="lp-empty">\u6682\u65E0\u4EE3\u7406\u3002\u70B9\u51FB\u300CAdd Proxy\u300D\u5F00\u59CB\u6DFB\u52A0\u3002</div></td></tr>';return}_.innerHTML=e.map(t=>`
+    <tr data-latch-proxy-gid="${t.group_id}">
       <td>
         <div class="lp-type-cell">
-          ${proxyTypeIcon(p.type)}
+          ${qt(t.type)}
           <div>
-            <div class="lp-row-name">${p.name}</div>
-            <div class="lp-row-meta">${p.type}</div>
+            <div class="lp-row-name">${t.name}</div>
+            <div class="lp-row-meta">${t.type}</div>
           </div>
         </div>
       </td>
       <td><span class="lp-status lp-status-active">Active</span></td>
       <td>
-        <span class="lp-ver">v${p.version}</span>
-        <div class="lp-row-meta" style="margin-top:3px;">${p.sha1.slice(0, 12)}…</div>
+        <span class="lp-ver">v${t.version}</span>
+        <div class="lp-row-meta" style="margin-top:3px;">${t.sha1.slice(0,12)}\u2026</div>
       </td>
       <td>
         <div class="lp-actions">
-          <button class="lp-act" type="button" title="版本历史" data-action="versions">⏱</button>
-          <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
-          <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
+          <button class="lp-act" type="button" title="\u7248\u672C\u5386\u53F2" data-action="versions">\u23F1</button>
+          <button class="lp-act" type="button" title="\u7F16\u8F91" data-action="edit">\u270E</button>
+          <button class="lp-act del" type="button" title="\u5220\u9664" data-action="delete">\u2715</button>
         </div>
       </td>
-    </tr>`).join("");
-}
-function fillProxyForm(proxy) {
-    editingProxyGroupId = proxy.group_id;
-    latchProxyNameInput.value = proxy.name;
-    latchProxyTypeSelect.value = proxy.type;
-    latchProxyConfigInput.value = JSON.stringify(proxy.config ?? {}, null, 2);
-    latchProxyFormTitle.textContent = "Edit Proxy";
-    latchProxySubmitBtn.textContent = "更新代理";
-    setStatus(latchProxyStatus, "");
-    openPanel(lpProxyPanel);
-}
-// ---------------------------------------------------------------------------
-// Rule helpers
-// ---------------------------------------------------------------------------
-function resetRuleForm() {
-    editingRuleGroupId = null;
-    latchRuleNameInput.value = "";
-    latchRuleContentInput.value = "";
-    latchRuleFileInput.value = "";
-    latchRuleFormTitle.textContent = "Add Rule";
-    latchRuleSubmitBtn.textContent = "保存规则";
-    // reset to inline tab
-    latchRuleInlineSection.hidden = false;
-    latchRuleFileSection.hidden = true;
-    latchRuleSourceInlineBtn.classList.add("active");
-    latchRuleSourceFileBtn.classList.remove("active");
-    setStatus(latchRuleStatus, "");
-}
-function renderRules(rules) {
-    if (!rules.length) {
-        latchRuleList.innerHTML = `<tr><td colspan="5"><div class="lp-empty">暂无规则。</div></td></tr>`;
-        return;
-    }
-    latchRuleList.innerHTML = rules.map((r) => `
-    <tr data-latch-rule-gid="${r.group_id}">
+    </tr>`).join("")}function Ot(e){k=e.group_id,V.value=e.name,re.value=e.type,de.value=JSON.stringify(e.config??{},null,2),ct.textContent="Edit Proxy",x.textContent="\u66F4\u65B0\u4EE3\u7406",i(h,""),S(ie)}function M(){y=null,A.value="",ce.value="",ht.value="",pt.textContent="Add Rule",H.textContent="\u4FDD\u5B58\u89C4\u5219",K.hidden=!1,z.hidden=!0,I.classList.add("active"),D.classList.remove("active"),i(c,"")}function Vt(e){if(!e.length){O.innerHTML='<tr><td colspan="5"><div class="lp-empty">\u6682\u65E0\u89C4\u5219\u3002</div></td></tr>';return}O.innerHTML=e.map(t=>`
+    <tr data-latch-rule-gid="${t.group_id}">
       <td>
-        <div class="lp-row-name">${r.name}</div>
-        <div class="lp-row-meta" style="font-family:inherit;">${r.sha1.slice(0, 12)}…</div>
+        <div class="lp-row-name">${t.name}</div>
+        <div class="lp-row-meta" style="font-family:inherit;">${t.sha1.slice(0,12)}\u2026</div>
       </td>
-      <td>${r.content.split("\n").filter((l) => l.trim()).length} 行</td>
-      <td><span class="lp-ver">v${r.version}</span></td>
-      <td style="font-size:12px;color:#aaa;">${new Date(r.created_at).toLocaleDateString()}</td>
+      <td>${t.content.split(`
+`).filter(a=>a.trim()).length} \u884C</td>
+      <td><span class="lp-ver">v${t.version}</span></td>
+      <td style="font-size:12px;color:#aaa;">${new Date(t.created_at).toLocaleDateString()}</td>
       <td>
         <div class="lp-actions">
-          <button class="lp-act" type="button" title="版本历史" data-action="versions">⏱</button>
-          <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
-          <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
+          <button class="lp-act" type="button" title="\u7248\u672C\u5386\u53F2" data-action="versions">\u23F1</button>
+          <button class="lp-act" type="button" title="\u7F16\u8F91" data-action="edit">\u270E</button>
+          <button class="lp-act del" type="button" title="\u5220\u9664" data-action="delete">\u2715</button>
         </div>
       </td>
-    </tr>`).join("");
-}
-function fillRuleForm(rule) {
-    editingRuleGroupId = rule.group_id;
-    latchRuleNameInput.value = rule.name;
-    latchRuleContentInput.value = rule.content;
-    latchRuleFormTitle.textContent = "Edit Rule";
-    latchRuleSubmitBtn.textContent = "更新规则";
-    latchRuleInlineSection.hidden = false;
-    latchRuleFileSection.hidden = true;
-    latchRuleSourceInlineBtn.classList.add("active");
-    latchRuleSourceFileBtn.classList.remove("active");
-    setStatus(latchRuleStatus, "");
-    openPanel(lpRulePanel);
-}
-// ---------------------------------------------------------------------------
-// Profile helpers — admin
-// ---------------------------------------------------------------------------
-function syncProfileSelectors(proxies, rules) {
-    latchProfileProxyCheckboxes.innerHTML = proxies.length
-        ? proxies.map((p) => `
+    </tr>`).join("")}function Kt(e){y=e.group_id,A.value=e.name,ce.value=e.content,pt.textContent="Edit Rule",H.textContent="\u66F4\u65B0\u89C4\u5219",K.hidden=!1,z.hidden=!0,I.classList.add("active"),D.classList.remove("active"),i(c,""),S(le)}function zt(e,t){W.innerHTML=e.length?e.map(a=>`
         <label class="lp-check-label" style="padding:4px 0;">
-          <input type="checkbox" value="${p.group_id}" />
-          <span>${p.name} <span class="lp-proxy-chip">${p.type}</span></span>
-        </label>`).join("")
-        : '<span style="color:var(--muted,#aaa);font-size:13px;padding:4px;">暂无代理</span>';
-    latchProfileRuleRadios.innerHTML = `
+          <input type="checkbox" value="${a.group_id}" />
+          <span>${a.name} <span class="lp-proxy-chip">${a.type}</span></span>
+        </label>`).join(""):'<span style="color:var(--muted,#aaa);font-size:13px;padding:4px;">\u6682\u65E0\u4EE3\u7406</span>',j.innerHTML=`
     <label class="lp-check-label" style="padding:4px 0;">
       <input type="radio" name="latch_rule" value="" checked />
-      <span style="color:#aaa;">不使用规则</span>
-    </label>` + rules.map((r) => `
+      <span style="color:#aaa;">\u4E0D\u4F7F\u7528\u89C4\u5219</span>
+    </label>`+t.map(a=>`
     <label class="lp-check-label" style="padding:4px 0;">
-      <input type="radio" name="latch_rule" value="${r.group_id}" />
-      <span>${r.name} <span class="lp-ver">v${r.version}</span></span>
-    </label>`).join("");
-}
-function resetProfileForm() {
-    editingProfileId = null;
-    latchProfileNameInput.value = "";
-    latchProfileDescInput.value = "";
-    latchProfileEnabledInput.checked = true;
-    latchProfileShareableInput.checked = false;
-    latchProfileFormTitle.textContent = "Add Profile";
-    latchProfileSubmitBtn.textContent = "保存配置";
-    setStatus(latchProfileStatus, "");
-    latchProfileProxyCheckboxes.querySelectorAll("input[type=checkbox]").forEach((cb) => { cb.checked = false; });
-    const noRule = latchProfileRuleRadios.querySelector("input[value='']");
-    if (noRule)
-        noRule.checked = true;
-}
-function renderAdminProfiles(profiles, proxies, rules) {
-    if (!profiles.length) {
-        latchProfileList.innerHTML = `<tr><td colspan="5"><div class="lp-empty">暂无配置。</div></td></tr>`;
-        return;
-    }
-    const proxyMap = new Map(proxies.map((p) => [p.group_id, p]));
-    const ruleMap = new Map(rules.map((r) => [r.group_id, r]));
-    latchProfileList.innerHTML = profiles.map((prof) => {
-        const chips = prof.proxy_group_ids
-            .map((gid) => proxyMap.get(gid))
-            .filter(Boolean)
-            .map((p) => `<span class="lp-proxy-chip">${p.name}</span>`)
-            .join("") || `<span style="color:#bbb;font-size:12px;">—</span>`;
-        const ruleLabel = prof.rule_group_id && ruleMap.get(prof.rule_group_id)
-            ? `<span class="lp-ver">${ruleMap.get(prof.rule_group_id).name}</span>`
-            : `<span style="color:#bbb;font-size:12px;">—</span>`;
-        return `
-      <tr data-latch-profile-id="${prof.id}">
+      <input type="radio" name="latch_rule" value="${a.group_id}" />
+      <span>${a.name} <span class="lp-ver">v${a.version}</span></span>
+    </label>`).join("")}function q(){T=null,G.value="",he.value="",ue.checked=!0,me.checked=!1,ut.textContent="Add Profile",U.textContent="\u4FDD\u5B58\u914D\u7F6E",i(g,""),W.querySelectorAll("input[type=checkbox]").forEach(t=>{t.checked=!1});let e=j.querySelector("input[value='']");e&&(e.checked=!0)}function Gt(e,t,a){if(!e.length){oe.innerHTML='<tr><td colspan="5"><div class="lp-empty">\u6682\u65E0\u914D\u7F6E\u3002</div></td></tr>';return}let o=new Map(t.map(r=>[r.group_id,r])),n=new Map(a.map(r=>[r.group_id,r]));oe.innerHTML=e.map(r=>{let d=r.proxy_group_ids.map(P=>o.get(P)).filter(Boolean).map(P=>`<span class="lp-proxy-chip">${P.name}</span>`).join("")||'<span style="color:#bbb;font-size:12px;">\u2014</span>',p=r.rule_group_id&&n.get(r.rule_group_id)?`<span class="lp-ver">${n.get(r.rule_group_id).name}</span>`:'<span style="color:#bbb;font-size:12px;">\u2014</span>';return`
+      <tr data-latch-profile-id="${r.id}">
         <td>
-          <div class="lp-row-name">${prof.name}</div>
-          ${prof.description ? `<div class="lp-row-meta" style="font-family:inherit;">${prof.description}</div>` : ""}
+          <div class="lp-row-name">${r.name}</div>
+          ${r.description?`<div class="lp-row-meta" style="font-family:inherit;">${r.description}</div>`:""}
         </td>
-        <td>${chips}</td>
-        <td>${ruleLabel}</td>
+        <td>${d}</td>
+        <td>${p}</td>
         <td>
-          ${prof.enabled ? '<span class="lp-flag on">enabled</span>' : '<span class="lp-flag">disabled</span>'}
-          ${prof.shareable ? '<span class="lp-flag on">shared</span>' : '<span class="lp-flag">private</span>'}
+          ${r.enabled?'<span class="lp-flag on">enabled</span>':'<span class="lp-flag">disabled</span>'}
+          ${r.shareable?'<span class="lp-flag on">shared</span>':'<span class="lp-flag">private</span>'}
         </td>
         <td>
           <div class="lp-actions">
-            <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
-            <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
+            <button class="lp-act" type="button" title="\u7F16\u8F91" data-action="edit">\u270E</button>
+            <button class="lp-act del" type="button" title="\u5220\u9664" data-action="delete">\u2715</button>
           </div>
         </td>
-      </tr>`;
-    }).join("");
-}
-function fillProfileForm(prof) {
-    editingProfileId = prof.id;
-    latchProfileNameInput.value = prof.name;
-    latchProfileDescInput.value = prof.description || "";
-    latchProfileEnabledInput.checked = prof.enabled;
-    latchProfileShareableInput.checked = prof.shareable;
-    latchProfileProxyCheckboxes.querySelectorAll("input[type=checkbox]").forEach((cb) => {
-        cb.checked = prof.proxy_group_ids.includes(cb.value);
-    });
-    latchProfileRuleRadios.querySelectorAll("input[type=radio]").forEach((r) => {
-        r.checked = r.value === (prof.rule_group_id || "");
-    });
-    latchProfileFormTitle.textContent = "Edit Profile";
-    latchProfileSubmitBtn.textContent = "更新配置";
-    setStatus(latchProfileStatus, "");
-    openPanel(lpProfilePanel);
-}
-// ---------------------------------------------------------------------------
-// Profile helpers — user read-only
-// ---------------------------------------------------------------------------
-function renderUserProfiles(profiles) {
-    if (!profiles.length) {
-        latchProfileUserList.innerHTML = `<div class="lp-empty">暂无可用配置。</div>`;
-        return;
-    }
-    latchProfileUserList.innerHTML = profiles.map((prof) => {
-        const chips = (prof.proxies || [])
-            .map((p) => `<span class="lp-proxy-chip">${p.name} <span style="opacity:.6;">${p.type}</span></span>`)
-            .join("") || `<span style="color:#bbb;font-size:12px;">无代理</span>`;
-        const ruleLabel = prof.rule
-            ? `<span class="lp-ver">${prof.rule.name} v${prof.rule.version}</span>`
-            : `<span style="color:#bbb;font-size:12px;">无规则</span>`;
-        return `
+      </tr>`}).join("")}function Wt(e){T=e.id,G.value=e.name,he.value=e.description||"",ue.checked=e.enabled,me.checked=e.shareable,W.querySelectorAll("input[type=checkbox]").forEach(t=>{t.checked=e.proxy_group_ids.includes(t.value)}),j.querySelectorAll("input[type=radio]").forEach(t=>{t.checked=t.value===(e.rule_group_id||"")}),ut.textContent="Edit Profile",U.textContent="\u66F4\u65B0\u914D\u7F6E",i(g,""),S(pe)}function jt(e){if(!e.length){rt.innerHTML='<div class="lp-empty">\u6682\u65E0\u53EF\u7528\u914D\u7F6E\u3002</div>';return}rt.innerHTML=e.map(t=>{let a=(t.proxies||[]).map(n=>`<span class="lp-proxy-chip">${n.name} <span style="opacity:.6;">${n.type}</span></span>`).join("")||'<span style="color:#bbb;font-size:12px;">\u65E0\u4EE3\u7406</span>',o=t.rule?`<span class="lp-ver">${t.rule.name} v${t.rule.version}</span>`:'<span style="color:#bbb;font-size:12px;">\u65E0\u89C4\u5219</span>';return`
       <div class="lp-user-card">
-        <div class="lp-user-card-name">${prof.name}</div>
-        ${prof.description ? `<div class="lp-user-card-desc">${prof.description}</div>` : ""}
+        <div class="lp-user-card-name">${t.name}</div>
+        ${t.description?`<div class="lp-user-card-desc">${t.description}</div>`:""}
         <div class="lp-user-card-row">
-          <span style="color:#aaa;font-size:12px;">代理：</span>${chips}
+          <span style="color:#aaa;font-size:12px;">\u4EE3\u7406\uFF1A</span>${a}
         </div>
         <div class="lp-user-card-row">
-          <span style="color:#aaa;font-size:12px;">规则：</span>${ruleLabel}
+          <span style="color:#aaa;font-size:12px;">\u89C4\u5219\uFF1A</span>${o}
         </div>
-      </div>`;
-    }).join("");
-}
-// ---------------------------------------------------------------------------
-// Data loading
-// ---------------------------------------------------------------------------
-async function loadAdminData() {
-    const [proxyRes, ruleRes, profileRes] = await Promise.all([
-        fetchLatchProxies(),
-        fetchLatchRules(),
-        fetchLatchAdminProfiles(),
-    ]);
-    currentLatchProxies = proxyRes.response.ok ? (proxyRes.data.proxies || []) : [];
-    currentLatchRules = ruleRes.response.ok ? (ruleRes.data.rules || []) : [];
-    currentLatchProfiles = profileRes.response.ok ? (profileRes.data.profiles || []) : [];
-    renderProxies(currentLatchProxies);
-    renderRules(currentLatchRules);
-    renderAdminProfiles(currentLatchProfiles, currentLatchProxies, currentLatchRules);
-    syncProfileSelectors(currentLatchProxies, currentLatchRules);
-}
-async function loadUserData() {
-    const { response, data } = await fetchLatchProfiles();
-    const profiles = response.ok ? (data.profiles || []) : [];
-    renderUserProfiles(profiles);
-}
-// ---------------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------------
-async function init() {
-    initStoredTheme();
-    bindThemeSync();
-    hydrateSiteBrand();
-    const res = await fetch("/api/me", { credentials: "include" });
-    if (!res.ok) {
-        window.location.href = "/login.html";
-        return;
-    }
-    const me = await res.json();
-    isAdmin = me.role === "admin";
-    latchWelcome.textContent = isAdmin ? "管理员模式" : "只读模式";
-    renderSidebarFoot(me);
-    if (isAdmin) {
-        latchTabProxies.hidden = false;
-        latchTabRules.hidden = false;
-        latchProfileAdminGrid.hidden = false;
-        latchProfileUserView.hidden = true;
-        switchTab("proxies");
-        await loadAdminData();
-        wireAdminEvents();
-    }
-    else {
-        latchTabProxies.hidden = true;
-        latchTabRules.hidden = true;
-        latchProfileAdminGrid.hidden = true;
-        latchProfileUserView.hidden = false;
-        switchTab("profiles");
-        await loadUserData();
-    }
-}
-// ---------------------------------------------------------------------------
-// Admin event handlers
-// ---------------------------------------------------------------------------
-function wireAdminEvents() {
-    // Tabs
-    latchSubtabBtns.forEach((btn) => {
-        btn.addEventListener("click", () => switchTab(btn.dataset.latchTab || "proxies"));
-    });
-    // Sidebar nav quick-switch
-    lpNavBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-            const nav = btn.dataset.lpNav || "";
-            if (nav === "proxies" || nav === "dashboard") {
-                switchTab("proxies");
-                return;
-            }
-            if (nav === "rules") {
-                switchTab("rules");
-                return;
-            }
-            if (nav === "profiles") {
-                switchTab("profiles");
-                return;
-            }
-        });
-    });
-    // Advanced card shortcuts
-    lpGoRules.addEventListener("click", () => switchTab("rules"));
-    lpGoRulesAlt.addEventListener("click", () => switchTab("rules"));
-    lpGoProfiles.addEventListener("click", () => switchTab("profiles"));
-    // Overlay / close
-    lpOverlay.addEventListener("click", closeAllPanels);
-    lpProxyClose.addEventListener("click", closeAllPanels);
-    lpRuleClose.addEventListener("click", closeAllPanels);
-    lpProfileClose.addEventListener("click", closeAllPanels);
-    // — Proxy panel —
-    lpAddProxyBtn.addEventListener("click", () => {
-        resetProxyForm();
-        openPanel(lpProxyPanel);
-        latchProxyNameInput.focus();
-    });
-    latchProxyResetBtn.addEventListener("click", resetProxyForm);
-    latchProxySubmitBtn.addEventListener("click", async () => {
-        const name = latchProxyNameInput.value.trim();
-        const type = latchProxyTypeSelect.value;
-        const raw = latchProxyConfigInput.value.trim();
-        if (!name) {
-            setStatus(latchProxyStatus, "请填写代理名称", "error");
-            return;
-        }
-        let config = {};
-        if (raw) {
-            try {
-                config = JSON.parse(raw);
-            }
-            catch {
-                setStatus(latchProxyStatus, "配置 JSON 格式有误", "error");
-                return;
-            }
-        }
-        latchProxySubmitBtn.disabled = true;
-        setStatus(latchProxyStatus, editingProxyGroupId ? "正在更新…" : "正在创建…");
-        try {
-            const { response, data } = editingProxyGroupId
-                ? await updateLatchProxy(editingProxyGroupId, { name, type, config })
-                : await createLatchProxy({ name, type, config });
-            if (!response.ok) {
-                setStatus(latchProxyStatus, data.error || "保存失败", "error");
-                return;
-            }
-            setStatus(latchProxyStatus, data.message || "已保存", "success");
-            closeAllPanels();
-            resetProxyForm();
-            await loadAdminData();
-        }
-        catch {
-            setStatus(latchProxyStatus, "网络错误，请重试", "error");
-        }
-        finally {
-            latchProxySubmitBtn.disabled = false;
-        }
-    });
-    // Search filter
-    lpProxySearch.addEventListener("input", () => {
-        const q = lpProxySearch.value.trim().toLowerCase();
-        latchProxyList.querySelectorAll("tr[data-latch-proxy-gid]").forEach((row) => {
-            const text = row.textContent?.toLowerCase() || "";
-            row.hidden = !!q && !text.includes(q);
-        });
-    });
-    latchProxyList.addEventListener("click", async (e) => {
-        const btn = e.target.closest("button[data-action]");
-        if (!btn)
-            return;
-        const row = btn.closest("[data-latch-proxy-gid]");
-        const gid = row?.dataset.latchProxyGid || "";
-        const proxy = currentLatchProxies.find((p) => p.group_id === gid);
-        if (!proxy)
-            return;
-        const action = btn.dataset.action;
-        if (action === "edit") {
-            fillProxyForm(proxy);
-            return;
-        }
-        if (action === "versions") {
-            try {
-                const { response, data } = await fetchLatchProxyVersions(gid);
-                if (!response.ok) {
-                    setStatus(latchProxyStatus, data.error || "获取失败", "error");
-                    return;
-                }
-                const versions = data.versions || [];
-                const pick = window.prompt(`代理 "${proxy.name}" 版本历史 (当前 v${proxy.version}):\n` +
-                    versions.map((v) => `v${v.version}  SHA1:${v.sha1.slice(0, 8)}  ${new Date(v.created_at).toLocaleString()}`).join("\n") +
-                    "\n\n输入要回滚到的版本号 (留空取消):");
-                if (!pick)
-                    return;
-                const ver = parseInt(pick, 10);
-                if (!ver || ver === proxy.version) {
-                    setStatus(latchProxyStatus, "版本未变", "default");
-                    return;
-                }
-                const { response: r2, data: d2 } = await rollbackLatchProxy(gid, ver);
-                if (!r2.ok) {
-                    setStatus(latchProxyStatus, d2.error || "回滚失败", "error");
-                    return;
-                }
-                setStatus(latchProxyStatus, d2.message || "回滚成功", "success");
-                await loadAdminData();
-            }
-            catch {
-                setStatus(latchProxyStatus, "网络错误，请重试", "error");
-            }
-            return;
-        }
-        if (action === "delete") {
-            if (!window.confirm(`确定删除代理 "${proxy.name}" 的所有版本吗？`))
-                return;
-            try {
-                const { response, data } = await removeLatchProxy(gid);
-                if (!response.ok) {
-                    setStatus(latchProxyStatus, data.error || "删除失败", "error");
-                    return;
-                }
-                if (editingProxyGroupId === gid) {
-                    closeAllPanels();
-                    resetProxyForm();
-                }
-                setStatus(latchProxyStatus, data.message || "已删除", "success");
-                await loadAdminData();
-            }
-            catch {
-                setStatus(latchProxyStatus, "网络错误，请重试", "error");
-            }
-        }
-    });
-    // — Rule panel —
-    lpAddRuleBtn.addEventListener("click", () => {
-        resetRuleForm();
-        openPanel(lpRulePanel);
-        latchRuleNameInput.focus();
-    });
-    latchRuleSourceInlineBtn.addEventListener("click", () => {
-        latchRuleInlineSection.hidden = false;
-        latchRuleFileSection.hidden = true;
-        latchRuleSourceInlineBtn.classList.add("active");
-        latchRuleSourceFileBtn.classList.remove("active");
-    });
-    latchRuleSourceFileBtn.addEventListener("click", () => {
-        latchRuleInlineSection.hidden = true;
-        latchRuleFileSection.hidden = false;
-        latchRuleSourceInlineBtn.classList.remove("active");
-        latchRuleSourceFileBtn.classList.add("active");
-    });
-    latchRuleResetBtn.addEventListener("click", resetRuleForm);
-    latchRuleSubmitBtn.addEventListener("click", async () => {
-        const name = latchRuleNameInput.value.trim();
-        const content = latchRuleContentInput.value;
-        if (!name) {
-            setStatus(latchRuleStatus, "请填写规则名称", "error");
-            return;
-        }
-        latchRuleSubmitBtn.disabled = true;
-        setStatus(latchRuleStatus, editingRuleGroupId ? "正在更新…" : "正在创建…");
-        try {
-            const { response, data } = editingRuleGroupId
-                ? await updateLatchRule(editingRuleGroupId, { name, content })
-                : await createLatchRule({ name, content });
-            if (!response.ok) {
-                setStatus(latchRuleStatus, data.error || "保存失败", "error");
-                return;
-            }
-            setStatus(latchRuleStatus, data.message || "已保存", "success");
-            closeAllPanels();
-            resetRuleForm();
-            await loadAdminData();
-        }
-        catch {
-            setStatus(latchRuleStatus, "网络错误，请重试", "error");
-        }
-        finally {
-            latchRuleSubmitBtn.disabled = false;
-        }
-    });
-    latchRuleUploadBtn.addEventListener("click", async () => {
-        const name = latchRuleNameInput.value.trim();
-        const file = latchRuleFileInput.files?.[0];
-        if (!file) {
-            setStatus(latchRuleStatus, "请先选择文件", "error");
-            return;
-        }
-        const fd = new FormData();
-        if (name)
-            fd.append("name", name);
-        fd.append("file", file);
-        latchRuleUploadBtn.disabled = true;
-        setStatus(latchRuleStatus, "正在上传…");
-        try {
-            const { response, data } = editingRuleGroupId
-                ? await uploadLatchRuleFile(editingRuleGroupId, fd)
-                : await createLatchRuleFromFile(fd);
-            if (!response.ok) {
-                setStatus(latchRuleStatus, data.error || "上传失败", "error");
-                return;
-            }
-            setStatus(latchRuleStatus, data.message || "上传成功", "success");
-            closeAllPanels();
-            resetRuleForm();
-            await loadAdminData();
-        }
-        catch {
-            setStatus(latchRuleStatus, "网络错误，请重试", "error");
-        }
-        finally {
-            latchRuleUploadBtn.disabled = false;
-        }
-    });
-    lpRuleSearch.addEventListener("input", () => {
-        const q = lpRuleSearch.value.trim().toLowerCase();
-        latchRuleList.querySelectorAll("tr[data-latch-rule-gid]").forEach((row) => {
-            row.hidden = !!q && !(row.textContent?.toLowerCase().includes(q));
-        });
-    });
-    latchRuleList.addEventListener("click", async (e) => {
-        const btn = e.target.closest("button[data-action]");
-        if (!btn)
-            return;
-        const row = btn.closest("[data-latch-rule-gid]");
-        const gid = row?.dataset.latchRuleGid || "";
-        const rule = currentLatchRules.find((r) => r.group_id === gid);
-        if (!rule)
-            return;
-        const action = btn.dataset.action;
-        if (action === "edit") {
-            fillRuleForm(rule);
-            return;
-        }
-        if (action === "versions") {
-            try {
-                const { response, data } = await fetchLatchRuleVersions(gid);
-                if (!response.ok) {
-                    setStatus(latchRuleStatus, data.error || "获取失败", "error");
-                    return;
-                }
-                const versions = data.versions || [];
-                const pick = window.prompt(`规则 "${rule.name}" 版本历史 (当前 v${rule.version}):\n` +
-                    versions.map((v) => `v${v.version}  SHA1:${v.sha1.slice(0, 8)}  ${new Date(v.created_at).toLocaleString()}`).join("\n") +
-                    "\n\n输入要回滚到的版本号 (留空取消):");
-                if (!pick)
-                    return;
-                const ver = parseInt(pick, 10);
-                if (!ver || ver === rule.version) {
-                    setStatus(latchRuleStatus, "版本未变", "default");
-                    return;
-                }
-                const { response: r2, data: d2 } = await rollbackLatchRule(gid, ver);
-                if (!r2.ok) {
-                    setStatus(latchRuleStatus, d2.error || "回滚失败", "error");
-                    return;
-                }
-                setStatus(latchRuleStatus, d2.message || "回滚成功", "success");
-                await loadAdminData();
-            }
-            catch {
-                setStatus(latchRuleStatus, "网络错误，请重试", "error");
-            }
-            return;
-        }
-        if (action === "delete") {
-            if (!window.confirm(`确定删除规则 "${rule.name}" 的所有版本吗？`))
-                return;
-            try {
-                const { response, data } = await removeLatchRule(gid);
-                if (!response.ok) {
-                    setStatus(latchRuleStatus, data.error || "删除失败", "error");
-                    return;
-                }
-                if (editingRuleGroupId === gid) {
-                    closeAllPanels();
-                    resetRuleForm();
-                }
-                setStatus(latchRuleStatus, data.message || "已删除", "success");
-                await loadAdminData();
-            }
-            catch {
-                setStatus(latchRuleStatus, "网络错误，请重试", "error");
-            }
-        }
-    });
-    // — Profile panel —
-    lpAddProfileBtn.addEventListener("click", () => {
-        resetProfileForm();
-        openPanel(lpProfilePanel);
-        latchProfileNameInput.focus();
-    });
-    latchProfileResetBtn.addEventListener("click", resetProfileForm);
-    latchProfileSubmitBtn.addEventListener("click", async () => {
-        const name = latchProfileNameInput.value.trim();
-        if (!name) {
-            setStatus(latchProfileStatus, "请填写配置名称", "error");
-            return;
-        }
-        const proxyGroupIds = Array.from(latchProfileProxyCheckboxes.querySelectorAll("input[type=checkbox]:checked")).map((cb) => cb.value);
-        const ruleRadio = latchProfileRuleRadios.querySelector("input[type=radio]:checked");
-        const payload = {
-            name,
-            description: latchProfileDescInput.value.trim(),
-            proxy_group_ids: proxyGroupIds,
-            rule_group_id: ruleRadio?.value || "",
-            enabled: latchProfileEnabledInput.checked,
-            shareable: latchProfileShareableInput.checked,
-        };
-        latchProfileSubmitBtn.disabled = true;
-        setStatus(latchProfileStatus, editingProfileId ? "正在更新…" : "正在创建…");
-        try {
-            const { response, data } = editingProfileId
-                ? await updateLatchProfile(editingProfileId, payload)
-                : await createLatchProfile(payload);
-            if (!response.ok) {
-                setStatus(latchProfileStatus, data.error || "保存失败", "error");
-                return;
-            }
-            setStatus(latchProfileStatus, data.message || "已保存", "success");
-            closeAllPanels();
-            resetProfileForm();
-            await loadAdminData();
-        }
-        catch {
-            setStatus(latchProfileStatus, "网络错误，请重试", "error");
-        }
-        finally {
-            latchProfileSubmitBtn.disabled = false;
-        }
-    });
-    latchProfileList.addEventListener("click", async (e) => {
-        const btn = e.target.closest("button[data-action]");
-        if (!btn)
-            return;
-        const row = btn.closest("[data-latch-profile-id]");
-        const id = row?.dataset.latchProfileId || "";
-        const prof = currentLatchProfiles.find((p) => p.id === id);
-        if (!prof)
-            return;
-        const action = btn.dataset.action;
-        if (action === "edit") {
-            fillProfileForm(prof);
-            return;
-        }
-        if (action === "delete") {
-            if (!window.confirm(`确定删除配置 "${prof.name}" 吗？`))
-                return;
-            try {
-                const { response, data } = await removeLatchProfile(id);
-                if (!response.ok) {
-                    setStatus(latchProfileStatus, data.error || "删除失败", "error");
-                    return;
-                }
-                if (editingProfileId === id) {
-                    closeAllPanels();
-                    resetProfileForm();
-                }
-                setStatus(latchProfileStatus, data.message || "已删除", "success");
-                await loadAdminData();
-            }
-            catch {
-                setStatus(latchProfileStatus, "网络错误，请重试", "error");
-            }
-        }
-    });
-}
-init();
-// Logout
-document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-    try {
-        await logout();
-    }
-    finally {
-        window.location.replace("/login.html");
-    }
-});
+      </div>`}).join("")}async function m(){let[e,t,a]=await Promise.all([Pe(),Se(),Ae()]);F=e.response.ok?e.data.proxies||[]:[],B=t.response.ok?t.data.rules||[]:[],se=a.response.ok?a.data.profiles||[]:[],_t(F),Vt(B),Gt(se,F,B),zt(F,B)}async function Yt(){let{response:e,data:t}=await Ue(),a=e.ok?t.profiles||[]:[];jt(a)}async function Jt(){Ye(),Je(),Ge();let e=await fetch("/api/me",{credentials:"include"});if(!e.ok){window.location.href="/login.html";return}let t=await e.json();ae=t.role==="admin",Rt.textContent=ae?"\u7BA1\u7406\u5458\u6A21\u5F0F":"\u53EA\u8BFB\u6A21\u5F0F",Z(t),ae?(tt.hidden=!1,at.hidden=!1,nt.hidden=!1,it.hidden=!0,b("proxies"),await m(),Qt()):(tt.hidden=!0,at.hidden=!0,nt.hidden=!0,it.hidden=!1,b("profiles"),await Yt())}function Qt(){dt.forEach(e=>{e.addEventListener("click",()=>b(e.dataset.latchTab||"proxies"))}),lt.forEach(e=>{e.addEventListener("click",()=>{let t=e.dataset.lpNav||"";if(t==="proxies"||t==="dashboard"){b("proxies");return}if(t==="rules"){b("rules");return}if(t==="profiles"){b("profiles");return}})}),Bt.addEventListener("click",()=>b("rules")),xt.addEventListener("click",()=>b("rules")),At.addEventListener("click",()=>b("profiles")),ne.addEventListener("click",u),It.addEventListener("click",u),Ht.addEventListener("click",u),Nt.addEventListener("click",u),Et.addEventListener("click",()=>{$(),S(ie),V.focus()}),Dt.addEventListener("click",$),x.addEventListener("click",async()=>{let e=V.value.trim(),t=re.value,a=de.value.trim();if(!e){i(h,"\u8BF7\u586B\u5199\u4EE3\u7406\u540D\u79F0","error");return}let o={};if(a)try{o=JSON.parse(a)}catch{i(h,"\u914D\u7F6E JSON \u683C\u5F0F\u6709\u8BEF","error");return}x.disabled=!0,i(h,k?"\u6B63\u5728\u66F4\u65B0\u2026":"\u6B63\u5728\u521B\u5EFA\u2026");try{let{response:n,data:r}=k?await Le(k,{name:e,type:t,config:o}):await ve({name:e,type:t,config:o});if(!n.ok){i(h,r.error||"\u4FDD\u5B58\u5931\u8D25","error");return}i(h,r.message||"\u5DF2\u4FDD\u5B58","success"),u(),$(),await m()}catch{i(h,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}finally{x.disabled=!1}}),ot.addEventListener("input",()=>{let e=ot.value.trim().toLowerCase();_.querySelectorAll("tr[data-latch-proxy-gid]").forEach(t=>{let a=t.textContent?.toLowerCase()||"";t.hidden=!!e&&!a.includes(e)})}),_.addEventListener("click",async e=>{let t=e.target.closest("button[data-action]");if(!t)return;let o=t.closest("[data-latch-proxy-gid]")?.dataset.latchProxyGid||"",n=F.find(d=>d.group_id===o);if(!n)return;let r=t.dataset.action;if(r==="edit"){Ot(n);return}if(r==="versions"){try{let{response:d,data:p}=await ke(o);if(!d.ok){i(h,p.error||"\u83B7\u53D6\u5931\u8D25","error");return}let P=p.versions||[],R=window.prompt(`\u4EE3\u7406 "${n.name}" \u7248\u672C\u5386\u53F2 (\u5F53\u524D v${n.version}):
+`+P.map(L=>`v${L.version}  SHA1:${L.sha1.slice(0,8)}  ${new Date(L.created_at).toLocaleString()}`).join(`
+`)+`
+
+\u8F93\u5165\u8981\u56DE\u6EDA\u5230\u7684\u7248\u672C\u53F7 (\u7559\u7A7A\u53D6\u6D88):`);if(!R)return;let v=parseInt(R,10);if(!v||v===n.version){i(h,"\u7248\u672C\u672A\u53D8","default");return}let{response:Y,data:C}=await Te(o,v);if(!Y.ok){i(h,C.error||"\u56DE\u6EDA\u5931\u8D25","error");return}i(h,C.message||"\u56DE\u6EDA\u6210\u529F","success"),await m()}catch{i(h,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}return}if(r==="delete"){if(!window.confirm(`\u786E\u5B9A\u5220\u9664\u4EE3\u7406 "${n.name}" \u7684\u6240\u6709\u7248\u672C\u5417\uFF1F`))return;try{let{response:d,data:p}=await we(o);if(!d.ok){i(h,p.error||"\u5220\u9664\u5931\u8D25","error");return}k===o&&(u(),$()),i(h,p.message||"\u5DF2\u5220\u9664","success"),await m()}catch{i(h,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}}}),Mt.addEventListener("click",()=>{M(),S(le),A.focus()}),I.addEventListener("click",()=>{K.hidden=!1,z.hidden=!0,I.classList.add("active"),D.classList.remove("active")}),D.addEventListener("click",()=>{K.hidden=!0,z.hidden=!1,I.classList.remove("active"),D.classList.add("active")}),Ut.addEventListener("click",M),H.addEventListener("click",async()=>{let e=A.value.trim(),t=ce.value;if(!e){i(c,"\u8BF7\u586B\u5199\u89C4\u5219\u540D\u79F0","error");return}H.disabled=!0,i(c,y?"\u6B63\u5728\u66F4\u65B0\u2026":"\u6B63\u5728\u521B\u5EFA\u2026");try{let{response:a,data:o}=y?await Ee(y,{name:e,content:t}):await Re({name:e,content:t});if(!a.ok){i(c,o.error||"\u4FDD\u5B58\u5931\u8D25","error");return}i(c,o.message||"\u5DF2\u4FDD\u5B58","success"),u(),M(),await m()}catch{i(c,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}finally{H.disabled=!1}}),te.addEventListener("click",async()=>{let e=A.value.trim(),t=ht.files?.[0];if(!t){i(c,"\u8BF7\u5148\u9009\u62E9\u6587\u4EF6","error");return}let a=new FormData;e&&a.append("name",e),a.append("file",t),te.disabled=!0,i(c,"\u6B63\u5728\u4E0A\u4F20\u2026");try{let{response:o,data:n}=y?await Me(y,a):await Ce(a);if(!o.ok){i(c,n.error||"\u4E0A\u4F20\u5931\u8D25","error");return}i(c,n.message||"\u4E0A\u4F20\u6210\u529F","success"),u(),M(),await m()}catch{i(c,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}finally{te.disabled=!1}}),st.addEventListener("input",()=>{let e=st.value.trim().toLowerCase();O.querySelectorAll("tr[data-latch-rule-gid]").forEach(t=>{t.hidden=!!e&&!t.textContent?.toLowerCase().includes(e)})}),O.addEventListener("click",async e=>{let t=e.target.closest("button[data-action]");if(!t)return;let o=t.closest("[data-latch-rule-gid]")?.dataset.latchRuleGid||"",n=B.find(d=>d.group_id===o);if(!n)return;let r=t.dataset.action;if(r==="edit"){Kt(n);return}if(r==="versions"){try{let{response:d,data:p}=await Be(o);if(!d.ok){i(c,p.error||"\u83B7\u53D6\u5931\u8D25","error");return}let P=p.versions||[],R=window.prompt(`\u89C4\u5219 "${n.name}" \u7248\u672C\u5386\u53F2 (\u5F53\u524D v${n.version}):
+`+P.map(L=>`v${L.version}  SHA1:${L.sha1.slice(0,8)}  ${new Date(L.created_at).toLocaleString()}`).join(`
+`)+`
+
+\u8F93\u5165\u8981\u56DE\u6EDA\u5230\u7684\u7248\u672C\u53F7 (\u7559\u7A7A\u53D6\u6D88):`);if(!R)return;let v=parseInt(R,10);if(!v||v===n.version){i(c,"\u7248\u672C\u672A\u53D8","default");return}let{response:Y,data:C}=await xe(o,v);if(!Y.ok){i(c,C.error||"\u56DE\u6EDA\u5931\u8D25","error");return}i(c,C.message||"\u56DE\u6EDA\u6210\u529F","success"),await m()}catch{i(c,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}return}if(r==="delete"){if(!window.confirm(`\u786E\u5B9A\u5220\u9664\u89C4\u5219 "${n.name}" \u7684\u6240\u6709\u7248\u672C\u5417\uFF1F`))return;try{let{response:d,data:p}=await Fe(o);if(!d.ok){i(c,p.error||"\u5220\u9664\u5931\u8D25","error");return}y===o&&(u(),M()),i(c,p.message||"\u5DF2\u5220\u9664","success"),await m()}catch{i(c,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}}}),Ft.addEventListener("click",()=>{q(),S(pe),G.focus()}),$t.addEventListener("click",q),U.addEventListener("click",async()=>{let e=G.value.trim();if(!e){i(g,"\u8BF7\u586B\u5199\u914D\u7F6E\u540D\u79F0","error");return}let t=Array.from(W.querySelectorAll("input[type=checkbox]:checked")).map(n=>n.value),a=j.querySelector("input[type=radio]:checked"),o={name:e,description:he.value.trim(),proxy_group_ids:t,rule_group_id:a?.value||"",enabled:ue.checked,shareable:me.checked};U.disabled=!0,i(g,T?"\u6B63\u5728\u66F4\u65B0\u2026":"\u6B63\u5728\u521B\u5EFA\u2026");try{let{response:n,data:r}=T?await De(T,o):await Ie(o);if(!n.ok){i(g,r.error||"\u4FDD\u5B58\u5931\u8D25","error");return}i(g,r.message||"\u5DF2\u4FDD\u5B58","success"),u(),q(),await m()}catch{i(g,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}finally{U.disabled=!1}}),oe.addEventListener("click",async e=>{let t=e.target.closest("button[data-action]");if(!t)return;let o=t.closest("[data-latch-profile-id]")?.dataset.latchProfileId||"",n=se.find(d=>d.id===o);if(!n)return;let r=t.dataset.action;if(r==="edit"){Wt(n);return}if(r==="delete"){if(!window.confirm(`\u786E\u5B9A\u5220\u9664\u914D\u7F6E "${n.name}" \u5417\uFF1F`))return;try{let{response:d,data:p}=await He(o);if(!d.ok){i(g,p.error||"\u5220\u9664\u5931\u8D25","error");return}T===o&&(u(),q()),i(g,p.message||"\u5DF2\u5220\u9664","success"),await m()}catch{i(g,"\u7F51\u7EDC\u9519\u8BEF\uFF0C\u8BF7\u91CD\u8BD5","error")}}})}Jt();document.getElementById("logoutBtn")?.addEventListener("click",async()=>{try{await Ze()}finally{window.location.replace("/login.html")}})});export default Xt();
+//# sourceMappingURL=latch.js.map

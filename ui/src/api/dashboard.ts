@@ -142,6 +142,34 @@ export async function assistMarkdownWithBot(payload: {
   });
 }
 
+export async function assistPostWithBot(payload: {
+  bot_id: number;
+  llm_config_id?: number;
+  content?: string;
+  topic?: string;
+  instruction?: string;
+}) {
+  return requestJson<MarkdownAssistResponse>("/api/posts/assist-with-bot", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function assistReplyWithBot(
+  postId: number,
+  payload: {
+    bot_id: number;
+    llm_config_id?: number;
+    content?: string;
+    instruction?: string;
+  }
+) {
+  return requestJson<MarkdownAssistResponse>(`/api/posts/${postId}/replies/assist-with-bot`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function updateSiteSettings(payload: SiteSettings) {
   return requestJson<SiteSettingsResponse>("/api/site-settings", {
     method: "PUT",

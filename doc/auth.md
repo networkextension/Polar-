@@ -46,6 +46,11 @@ This removes session validation from the relational database hot path and makes 
 
 ## Authentication Flow
 
+Auth uses a two-token model: a short-lived access token on every API
+call and a long-lived refresh token consumed only by the token-refresh
+endpoint. See [auth-refresh.md](./auth-refresh.md) for TTLs, cookie
+attributes, Redis key shapes, family rotation, and replay detection.
+
 ### Register: `POST /api/register`
 
 - validate `username`, `email`, `password`
@@ -56,20 +61,28 @@ This removes session validation from the relational database hot path and makes 
 - ensure email uniqueness
 - hash the password with `bcrypt`
 - create user in PostgreSQL
-- create session in Redis
-- write `session_id` cookie
+- issue a new token family: access + refresh
+- write `access_token` and `refresh_token` cookies
 
 ### Login: `POST /api/login`
 
 - validate `email`, `password`
 - verify password hash
-- create session in Redis
-- write `session_id` cookie
+- issue a new token family: access + refresh
+- write `access_token` and `refresh_token` cookies
+
+### Refresh: `POST /api/token/refresh`
+
+- read the `refresh_token` cookie (or `Authorization: Bearer`)
+- revoke the presented refresh token; if it was already revoked, collapse the whole family
+- issue a fresh access + refresh pair within the same family
+- write both cookies back
 
 ### Logout: `POST /api/logout`
 
-- delete session from Redis
-- clear `session_id` cookie
+- delete the access token from Redis
+- revoke every refresh token in the family
+- clear both cookies
 
 ### Current User: `GET /api/me`
 

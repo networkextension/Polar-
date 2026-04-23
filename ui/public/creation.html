@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n-title="creation.title">Creation</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="lp-page">
+    <div class="lp-app">
+      <aside class="lp-sidebar">
+        <a class="lp-brand" href="/dashboard.html" data-site-brand>
+          <img data-site-icon alt="" />
+          <span class="lp-brand-name" data-site-name>Polar-</span>
+        </a>
+        <nav class="lp-nav">
+          <a class="lp-nav-item" href="/dashboard.html">
+            <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
+          </a>
+          <a class="lp-nav-item" href="/posts.html">
+            <span class="lp-nav-icon">◎</span><span>Posts</span>
+          </a>
+          <a class="lp-nav-item" href="/markdowns.html">
+            <span class="lp-nav-icon">◈</span><span>Markdowns</span>
+          </a>
+          <a class="lp-nav-item" href="/chat.html">
+            <span class="lp-nav-icon">◉</span><span>Chat</span>
+          </a>
+          <a class="lp-nav-item active" href="/creation.html">
+            <span class="lp-nav-icon">✍</span><span data-i18n="nav.creation">Creation</span>
+          </a>
+          <a class="lp-nav-item" href="/editor.html">
+            <span class="lp-nav-icon">✎</span><span>Editor</span>
+          </a>
+          <a class="lp-nav-item" href="/latch.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">⚙</span><span data-i18n="nav.latch">Latch</span>
+          </a>
+          <a class="lp-nav-item" href="/bots.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">◉</span><span data-i18n="nav.bots">Bot Management</span>
+          </a>
+          <a class="lp-nav-item" href="/admin.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">☍</span><span data-i18n="nav.userAdmin">用户管理</span>
+          </a>
+        </nav>
+        <div class="lp-sidebar-foot">
+          <div class="lp-foot-avatar" id="lpFootAvatar">U</div>
+          <div class="lp-foot-info">
+            <div class="lp-foot-name" id="lpFootName">—</div>
+            <div class="lp-foot-role" id="lpFootRole">—</div>
+          </div>
+          <div class="lp-sidebar-foot-actions">
+            <button class="lp-foot-icon-btn" type="button" data-open-settings-center data-settings-target="personalization" title="Settings" data-i18n-tooltip="nav.settings">⚙</button>
+            <button id="logoutBtn" class="lp-foot-icon-btn" type="button" title="Log out">⏻</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="lp-main">
+        <div class="lp-topbar">
+          <span class="lp-topbar-title" data-i18n="creation.title">Creation</span>
+          <div class="lp-topbar-end">
+            <span id="creationStatus" class="lp-mode-badge" data-i18n="creation.newEntry">New story</span>
+            <button id="creationPublicToggleBtn" class="lp-topbar-back" type="button" data-i18n="creation.makePublic">Make public</button>
+            <button id="creationSaveBtn" class="lp-topbar-back" type="button" data-i18n="creation.save">Save</button>
+            <a class="lp-topbar-back" href="/dashboard.html" data-i18n="creation.backToDashboard">Dashboard</a>
+          </div>
+        </div>
+
+        <div class="lp-content creation-content">
+          <div id="alert" class="alert"></div>
+
+          <div class="creation-page">
+            <input id="creationTitle" class="creation-title-input" type="text" data-i18n-placeholder="creation.titlePlaceholder" placeholder="Title your story" maxlength="160" />
+            <div id="creationEditor" class="creation-editor"></div>
+          </div>
+
+          <div id="creationAssistBubble" class="creation-assist-bubble" hidden>
+            <div class="creation-assist-bubble-row">
+              <select id="creationAssistBot" class="input"></select>
+              <select id="creationAssistLLM" class="input"></select>
+            </div>
+            <input id="creationAssistInstruction" class="input" type="text" data-i18n-placeholder="creation.assistInstructionPlaceholder" placeholder="Optional: how should I polish this?" />
+            <div class="creation-assist-presets">
+              <button class="btn-inline btn-secondary creation-assist-preset" data-preset="tighter" type="button" data-i18n="creation.presetTighter">Tighter</button>
+              <button class="btn-inline btn-secondary creation-assist-preset" data-preset="formal" type="button" data-i18n="creation.presetFormal">More formal</button>
+              <button class="btn-inline btn-secondary creation-assist-preset" data-preset="friendly" type="button" data-i18n="creation.presetFriendly">Friendlier</button>
+              <button class="btn-inline btn-secondary creation-assist-preset" data-preset="expand" type="button" data-i18n="creation.presetExpand">Expand</button>
+            </div>
+            <div class="creation-assist-actions">
+              <button id="creationAssistRunBtn" class="btn-inline btn-primary" type="button" data-i18n="creation.assistRun">Polish selection</button>
+              <button id="creationAssistCloseBtn" class="btn-inline btn-secondary" type="button" data-i18n="creation.assistClose">Close</button>
+            </div>
+            <div id="creationAssistStatus" class="status-text"></div>
+            <div id="creationAssistPreview" class="creation-assist-preview" hidden></div>
+            <div id="creationAssistApply" class="creation-assist-actions" hidden>
+              <button id="creationAssistApplyBtn" class="btn-inline btn-primary" type="button" data-i18n="creation.assistApply">Replace selection</button>
+              <button id="creationAssistDiscardBtn" class="btn-inline btn-secondary" type="button" data-i18n="creation.assistDiscard">Discard</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/scripts/creation.js"></script>
+  </body>
+</html>

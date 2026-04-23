@@ -220,7 +220,7 @@ func (a *aiAgent) handleTask(task aiAgentTask) {
 	}
 	now := time.Now()
 	title := buildSystemMarkdownTitle(reply, now)
-	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, reply, false, now)
+	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, reply, "markdown", false, now)
 	if err != nil {
 		log.Printf("save ai markdown failed: %v", err)
 		if _, sendErr := a.server.sendChatMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, reply, now); sendErr != nil {
@@ -351,6 +351,24 @@ func (a *aiAgent) requestOpenAICompatibleChatCompletion(runtimeConfig aiRuntimeC
 			return nil, errors.New(message)
 		}
 		return nil, fmt.Errorf("ai api returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+	}
+	if len(result.Choices) == 0 {
+		// Some OpenAI-compatible gateways (e.g. api.soxai.io) proxy Claude and
+		// return Anthropic-native {"content":[{"type":"text","text":"..."}]}
+		// instead of {"choices":[{"message":{...}}]}. Fall back to parsing
+		// that shape so callers get a usable response.
+		var anthropicResult anthropicMessagesResponse
+		if err := json.Unmarshal(responseBody, &anthropicResult); err == nil {
+			if text := extractAnthropicResponseText(anthropicResult); text != "" {
+				return &aiChatCompletionResponse{
+					Choices: []struct {
+						Message aiChatCompletionMessage `json:"message"`
+					}{
+						{Message: aiChatCompletionMessage{Role: "assistant", Content: text}},
+					},
+				}, nil
+			}
+		}
 	}
 	return &result, nil
 }

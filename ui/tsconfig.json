@@ -5,12 +5,12 @@
     "moduleResolution": "Bundler",
     "lib": ["DOM", "DOM.Iterable", "ES2020"],
     "rootDir": "src",
-    "outDir": "public/scripts",
+    "noEmit": true,
     "strict": false,
-    "noEmitOnError": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": false
   },
   "include": ["src/**/*.ts"]
 }
