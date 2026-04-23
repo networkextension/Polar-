@@ -18,6 +18,11 @@ import {
   updateLatchProfile,
   removeLatchProfile,
   fetchLatchProfiles,
+  fetchLatchServiceNodes,
+  createLatchServiceNode,
+  updateLatchServiceNode,
+  removeLatchServiceNode,
+  issueLatchServiceNodeAgentToken,
 } from "./api/dashboard.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
@@ -28,6 +33,7 @@ import type {
   LatchRule,
   LatchProfile,
   LatchProfileDetail,
+  LatchServiceNode,
 } from "./types/dashboard.js";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +57,9 @@ const latchProxyStatus  = byId<HTMLElement>("latchProxyStatus");
 const latchProxyList    = byId<HTMLElement>("latchProxyList");         // <tbody>
 const lpAddProxyBtn     = byId<HTMLButtonElement>("lpAddProxyBtn");
 const lpProxySearch     = byId<HTMLInputElement>("lpProxySearch");
+const lpAddServiceNodeBtn = byId<HTMLButtonElement>("lpAddServiceNodeBtn");
+const latchServiceNodeStatus = byId<HTMLElement>("latchServiceNodeStatus");
+const latchServiceNodeList = byId<HTMLElement>("latchServiceNodeList");
 
 // Rule section
 const latchRuleStatus   = byId<HTMLElement>("latchRuleStatus");
@@ -80,8 +89,36 @@ const latchProxyFormTitle  = byId<HTMLElement>("latchProxyFormTitle");
 const latchProxyNameInput  = byId<HTMLInputElement>("latchProxyNameInput");
 const latchProxyTypeSelect = byId<HTMLSelectElement>("latchProxyTypeSelect");
 const latchProxyConfigInput= byId<HTMLTextAreaElement>("latchProxyConfigInput");
+const latchProxyFromNodeSelect = byId<HTMLSelectElement>("latchProxyFromNodeSelect");
+const latchProxyCopyNodeBtn = byId<HTMLButtonElement>("latchProxyCopyNodeBtn");
 const latchProxyResetBtn   = byId<HTMLButtonElement>("latchProxyResetBtn");
 const latchProxySubmitBtn  = byId<HTMLButtonElement>("latchProxySubmitBtn");
+
+// Service node slide panel
+const lpServiceNodePanel = byId<HTMLElement>("lpServiceNodePanel");
+const lpServiceNodeClose = byId<HTMLButtonElement>("lpServiceNodeClose");
+const latchServiceNodeFormTitle = byId<HTMLElement>("latchServiceNodeFormTitle");
+const latchServiceNodeNameInput = byId<HTMLInputElement>("latchServiceNodeNameInput");
+const latchServiceNodeIPInput = byId<HTMLInputElement>("latchServiceNodeIPInput");
+const latchServiceNodePortInput = byId<HTMLInputElement>("latchServiceNodePortInput");
+const latchServiceNodeTypeSelect = byId<HTMLSelectElement>("latchServiceNodeTypeSelect");
+const latchServiceNodeStatusSelect = byId<HTMLSelectElement>("latchServiceNodeStatusSelect");
+const latchServiceNodePasteInput = byId<HTMLTextAreaElement>("latchServiceNodePasteInput");
+const latchServiceNodePasteApplyBtn = byId<HTMLButtonElement>("latchServiceNodePasteApplyBtn");
+const latchServiceNodeCfgPassword = byId<HTMLInputElement>("latchServiceNodeCfgPassword");
+const latchServiceNodeCfgMethod = byId<HTMLInputElement>("latchServiceNodeCfgMethod");
+const latchServiceNodeCfgKey = byId<HTMLInputElement>("latchServiceNodeCfgKey");
+const latchServiceNodeCfgCrypt = byId<HTMLInputElement>("latchServiceNodeCfgCrypt");
+const latchServiceNodeCfgMode = byId<HTMLInputElement>("latchServiceNodeCfgMode");
+const latchServiceNodeCfgMTU = byId<HTMLInputElement>("latchServiceNodeCfgMTU");
+const latchServiceNodeCfgPrivateKey = byId<HTMLInputElement>("latchServiceNodeCfgPrivateKey");
+const latchServiceNodeCfgPublicKey = byId<HTMLInputElement>("latchServiceNodeCfgPublicKey");
+const latchServiceNodeCfgEndpoint = byId<HTMLInputElement>("latchServiceNodeCfgEndpoint");
+const latchServiceNodeCfgAllowedIPs = byId<HTMLInputElement>("latchServiceNodeCfgAllowedIPs");
+const latchServiceNodeCfgWireguardRole = byId<HTMLSelectElement>("latchServiceNodeCfgWireguardRole");
+const latchServiceNodeConfigInput = byId<HTMLTextAreaElement>("latchServiceNodeConfigInput");
+const latchServiceNodeSubmitBtn = byId<HTMLButtonElement>("latchServiceNodeSubmitBtn");
+const latchServiceNodeResetBtn = byId<HTMLButtonElement>("latchServiceNodeResetBtn");
 
 // Rule slide panel
 const lpRulePanel            = byId<HTMLElement>("lpRulePanel");
@@ -119,9 +156,11 @@ let isAdmin = false;
 let editingProxyGroupId: string | null = null;
 let editingRuleGroupId: string | null = null;
 let editingProfileId: string | null = null;
+let editingServiceNodeId: string | null = null;
 let currentLatchProxies: LatchProxy[] = [];
 let currentLatchRules: LatchRule[] = [];
 let currentLatchProfiles: LatchProfile[] = [];
+let currentServiceNodes: LatchServiceNode[] = [];
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -135,6 +174,7 @@ function setStatus(el: HTMLElement, msg: string, kind: "default" | "success" | "
 function proxyTypeIcon(type: string): string {
   if (type === "ss")  return `<div class="lp-type-icon ss">SS</div>`;
   if (type === "ss3") return `<div class="lp-type-icon ss3">S3</div>`;
+  if (type === "wireguard") return `<div class="lp-type-icon def">WG</div>`;
   if (type.startsWith("kcp")) return `<div class="lp-type-icon kcp">KCP</div>`;
   return `<div class="lp-type-icon def">PX</div>`;
 }
@@ -149,7 +189,7 @@ function openPanel(panel: HTMLElement): void {
 }
 
 function closeAllPanels(): void {
-  [lpProxyPanel, lpRulePanel, lpProfilePanel].forEach((p) => p.classList.remove("open"));
+  [lpProxyPanel, lpRulePanel, lpProfilePanel, lpServiceNodePanel].forEach((p) => p.classList.remove("open"));
   lpOverlay.classList.remove("open");
 }
 
@@ -175,10 +215,284 @@ function resetProxyForm(): void {
   editingProxyGroupId = null;
   latchProxyNameInput.value = "";
   latchProxyTypeSelect.value = "ss";
+  latchProxyFromNodeSelect.value = "";
   latchProxyConfigInput.value = "";
   latchProxyFormTitle.textContent = "Add Proxy";
   latchProxySubmitBtn.textContent = "保存代理";
   setStatus(latchProxyStatus, "");
+}
+
+function syncProxyNodeSelect(nodes: LatchServiceNode[]): void {
+  if (!nodes.length) {
+    latchProxyFromNodeSelect.innerHTML = `<option value="">暂无服务节点</option>`;
+    latchProxyFromNodeSelect.disabled = true;
+    latchProxyCopyNodeBtn.disabled = true;
+    return;
+  }
+  latchProxyFromNodeSelect.disabled = false;
+  latchProxyFromNodeSelect.innerHTML = `<option value="">选择服务节点以复制到代理配置</option>` + nodes
+    .map((node) => `<option value="${node.id}">${node.name} · ${node.ip}:${node.port} · ${node.proxy_type}</option>`)
+    .join("");
+  latchProxyCopyNodeBtn.disabled = false;
+}
+
+function renderServiceNodes(nodes: LatchServiceNode[]): void {
+  if (!nodes.length) {
+    latchServiceNodeList.innerHTML = `<tr><td colspan="6"><div class="lp-empty">暂无服务节点。点击「Add Service Node」创建。</div></td></tr>`;
+    return;
+  }
+  latchServiceNodeList.innerHTML = nodes.map((node) => `
+    <tr data-latch-service-node-id="${node.id}">
+      <td>
+        <div class="lp-row-name">${node.name}</div>
+        <div class="lp-row-meta">${node.ip}:${node.port}</div>
+      </td>
+      <td><span class="lp-proxy-chip">${node.proxy_type}</span></td>
+      <td><span class="lp-status lp-status-active">${node.status || "unknown"}</span></td>
+      <td style="font-size:12px;color:#aaa;">${new Date(node.last_updated_at || node.updated_at).toLocaleString()}</td>
+      <td style="font-size:12px;color:#aaa;">${new Date(node.created_at).toLocaleDateString()}</td>
+      <td>
+        <div class="lp-actions">
+          <button class="lp-act" type="button" title="生成 Agent Token" data-action="token">🔑</button>
+          <button class="lp-act" type="button" title="编辑" data-action="edit">✎</button>
+          <button class="lp-act del" type="button" title="删除" data-action="delete">✕</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function normalizeServiceNodeProxyType(input: string): string {
+  const value = input.trim().toLowerCase();
+  const alias: Record<string, string> = {
+    ss: "ss",
+    shadowsocks: "ss",
+    ss3: "ss3",
+    "ss-v3": "ss3",
+    kcp_over_http: "kcp_over_http",
+    "kcp-http": "kcp_over_http",
+    kcp_over_ss: "kcp_over_ss",
+    "kcp-ss": "kcp_over_ss",
+    kcp_over_ss3: "kcp_over_ss3",
+    "kcp-ss3": "kcp_over_ss3",
+    wireguard: "wireguard",
+    wg: "wireguard",
+  };
+  return alias[value] || "";
+}
+
+function parsePastedNodeConfig(raw: string): Record<string, unknown> {
+  const text = raw.trim();
+  if (!text) return {};
+
+  if (text.startsWith("{") && text.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Fallback to line parser.
+    }
+  }
+
+  const out: Record<string, unknown> = {};
+  const lines = text.split(/\r?\n|;/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const match = line.match(/^([^:=]+)\s*[:=]\s*(.+)$/);
+    if (!match) continue;
+    const key = match[1].trim().toLowerCase().replace(/\s+/g, "_");
+    out[key] = match[2].trim();
+  }
+  return out;
+}
+
+function firstStringValue(obj: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+    if (typeof value === "number") return String(value);
+    if (typeof value === "boolean") return value ? "true" : "false";
+  }
+  return "";
+}
+
+function applyServiceNodePasteText(raw: string): void {
+  const parsed = parsePastedNodeConfig(raw);
+  if (!Object.keys(parsed).length) {
+    setStatus(latchServiceNodeStatus, "未识别到可用字段，请检查粘贴内容格式", "error");
+    return;
+  }
+
+  const nestedConfig = parsed.config;
+  const merged: Record<string, unknown> = { ...parsed };
+  if (nestedConfig && typeof nestedConfig === "object" && !Array.isArray(nestedConfig)) {
+    for (const [key, value] of Object.entries(nestedConfig as Record<string, unknown>)) {
+      if (merged[key] === undefined) merged[key] = value;
+    }
+  }
+
+  const name = firstStringValue(merged, ["name", "node_name", "节点名称", "名称"]);
+  const ip = firstStringValue(merged, ["ip", "host", "server", "地址"]);
+  const port = firstStringValue(merged, ["port", "端口"]);
+  const proxyTypeRaw = firstStringValue(merged, ["proxy_type", "type", "协议类型", "协议"]);
+  const status = firstStringValue(merged, ["status", "状态"]);
+  const password = firstStringValue(merged, ["password", "passwd", "密码"]);
+  const method = firstStringValue(merged, ["method", "cipher", "加密方式"]);
+  const key = firstStringValue(merged, ["key", "kcp_key"]);
+  const crypt = firstStringValue(merged, ["crypt", "kcp_crypt"]);
+  const mode = firstStringValue(merged, ["mode", "kcp_mode"]);
+  const mtu = firstStringValue(merged, ["mtu", "kcp_mtu"]);
+  const privateKey = firstStringValue(merged, ["private_key", "wg_private_key"]);
+  const publicKey = firstStringValue(merged, ["public_key", "wg_public_key"]);
+  const endpoint = firstStringValue(merged, ["endpoint", "wg_endpoint"]);
+  const allowedIPs = firstStringValue(merged, ["allowed_ips", "wg_allowed_ips"]);
+  const wireguardRole = firstStringValue(merged, ["wireguard_role", "wg_role", "role"]);
+
+  let touched = 0;
+  const setIf = (value: string, setter: (v: string) => void): void => {
+    if (!value) return;
+    setter(value);
+    touched += 1;
+  };
+
+  setIf(name, (v) => { latchServiceNodeNameInput.value = v; });
+  setIf(ip, (v) => { latchServiceNodeIPInput.value = v; });
+  setIf(port, (v) => {
+    const n = Number(v);
+    if (!Number.isNaN(n) && n > 0) latchServiceNodePortInput.value = String(Math.floor(n));
+  });
+  if (proxyTypeRaw) {
+    const normalized = normalizeServiceNodeProxyType(proxyTypeRaw);
+    if (normalized) {
+      latchServiceNodeTypeSelect.value = normalized;
+      touched += 1;
+    }
+  }
+  setIf(status, (v) => {
+    if (["unknown", "up", "down", "degraded"].includes(v)) {
+      latchServiceNodeStatusSelect.value = v;
+    }
+  });
+  setIf(password, (v) => { latchServiceNodeCfgPassword.value = v; });
+  setIf(method, (v) => { latchServiceNodeCfgMethod.value = v; });
+  setIf(key, (v) => { latchServiceNodeCfgKey.value = v; });
+  setIf(crypt, (v) => { latchServiceNodeCfgCrypt.value = v; });
+  setIf(mode, (v) => { latchServiceNodeCfgMode.value = v; });
+  setIf(mtu, (v) => {
+    const n = Number(v);
+    if (!Number.isNaN(n) && n > 0) latchServiceNodeCfgMTU.value = String(Math.floor(n));
+  });
+  setIf(privateKey, (v) => { latchServiceNodeCfgPrivateKey.value = v; });
+  setIf(publicKey, (v) => { latchServiceNodeCfgPublicKey.value = v; });
+  setIf(endpoint, (v) => { latchServiceNodeCfgEndpoint.value = v; });
+  setIf(allowedIPs, (v) => { latchServiceNodeCfgAllowedIPs.value = v; });
+  setIf(wireguardRole.toLowerCase(), (v) => {
+    latchServiceNodeCfgWireguardRole.value = v === "client" ? "client" : "server";
+  });
+
+  refreshServiceNodeConfigPreview();
+  if (touched === 0) {
+    setStatus(latchServiceNodeStatus, "未匹配到可应用字段，请按示例格式粘贴", "error");
+    return;
+  }
+  setStatus(latchServiceNodeStatus, `已从粘贴内容应用 ${touched} 项字段`, "success");
+}
+
+function buildServiceNodeConfigFromForm(proxyType: string): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  const password = latchServiceNodeCfgPassword.value.trim();
+  const method = latchServiceNodeCfgMethod.value.trim();
+  const key = latchServiceNodeCfgKey.value.trim();
+  const crypt = latchServiceNodeCfgCrypt.value.trim();
+  const mode = latchServiceNodeCfgMode.value.trim();
+  const mtu = Number(latchServiceNodeCfgMTU.value || "0");
+  const privateKey = latchServiceNodeCfgPrivateKey.value.trim();
+  const publicKey = latchServiceNodeCfgPublicKey.value.trim();
+  const endpoint = latchServiceNodeCfgEndpoint.value.trim();
+  const allowedIPs = latchServiceNodeCfgAllowedIPs.value.trim();
+  const wireguardRole = latchServiceNodeCfgWireguardRole.value.trim().toLowerCase();
+
+  if (proxyType === "ss" || proxyType === "ss3" || proxyType === "kcp_over_ss" || proxyType === "kcp_over_ss3") {
+    if (password) config.password = password;
+    if (method) config.method = method;
+  }
+  if (proxyType.startsWith("kcp")) {
+    if (key) config.key = key;
+    if (crypt) config.crypt = crypt;
+    if (mode) config.mode = mode;
+    if (mtu > 0) config.mtu = mtu;
+  }
+  if (proxyType === "wireguard") {
+    if (privateKey) config.private_key = privateKey;
+    if (publicKey) config.public_key = publicKey;
+    if (endpoint) config.endpoint = endpoint;
+    if (allowedIPs) config.allowed_ips = allowedIPs;
+    config.wireguard_role = wireguardRole === "client" ? "client" : "server";
+  }
+  return config;
+}
+
+function populateServiceNodeConfigForm(config: Record<string, unknown>, proxyType: string): void {
+  const readString = (key: string): string => {
+    const value = config[key];
+    return typeof value === "string" ? value : "";
+  };
+  const readNumber = (key: string): number => {
+    const value = config[key];
+    if (typeof value === "number") return value;
+    if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) return Number(value);
+    return 0;
+  };
+  latchServiceNodeCfgPassword.value = readString("password");
+  latchServiceNodeCfgMethod.value = readString("method");
+  latchServiceNodeCfgKey.value = readString("key");
+  latchServiceNodeCfgCrypt.value = readString("crypt");
+  latchServiceNodeCfgMode.value = readString("mode");
+  latchServiceNodeCfgMTU.value = String(readNumber("mtu") || 1350);
+  latchServiceNodeCfgPrivateKey.value = readString("private_key");
+  latchServiceNodeCfgPublicKey.value = readString("public_key");
+  latchServiceNodeCfgEndpoint.value = readString("endpoint");
+  latchServiceNodeCfgAllowedIPs.value = readString("allowed_ips");
+  const role = readString("wireguard_role").toLowerCase();
+  latchServiceNodeCfgWireguardRole.value = role === "client" ? "client" : "server";
+
+  const autoConfig = buildServiceNodeConfigFromForm(proxyType);
+  latchServiceNodeConfigInput.value = JSON.stringify(autoConfig, null, 2);
+}
+
+function refreshServiceNodeConfigPreview(): void {
+  const autoConfig = buildServiceNodeConfigFromForm(latchServiceNodeTypeSelect.value);
+  latchServiceNodeConfigInput.value = JSON.stringify(autoConfig, null, 2);
+}
+
+function resetServiceNodeForm(): void {
+  editingServiceNodeId = null;
+  latchServiceNodePasteInput.value = "";
+  latchServiceNodeNameInput.value = "";
+  latchServiceNodeIPInput.value = "";
+  latchServiceNodePortInput.value = "443";
+  latchServiceNodeTypeSelect.value = "ss";
+  latchServiceNodeStatusSelect.value = "unknown";
+  latchServiceNodeCfgWireguardRole.value = "server";
+  populateServiceNodeConfigForm({}, "ss");
+  latchServiceNodeFormTitle.textContent = "Add Service Node";
+  latchServiceNodeSubmitBtn.textContent = "保存节点";
+  setStatus(latchServiceNodeStatus, "");
+}
+
+function fillServiceNodeForm(node: LatchServiceNode): void {
+  editingServiceNodeId = node.id;
+  latchServiceNodeNameInput.value = node.name;
+  latchServiceNodeIPInput.value = node.ip;
+  latchServiceNodePortInput.value = String(node.port);
+  latchServiceNodeTypeSelect.value = node.proxy_type;
+  latchServiceNodeStatusSelect.value = node.status || "unknown";
+  populateServiceNodeConfigForm(node.config ?? {}, node.proxy_type);
+  latchServiceNodeFormTitle.textContent = "Edit Service Node";
+  latchServiceNodeSubmitBtn.textContent = "更新节点";
+  setStatus(latchServiceNodeStatus, "");
+  openPanel(lpServiceNodePanel);
 }
 
 function renderProxies(proxies: LatchProxy[]): void {
@@ -287,20 +601,28 @@ function fillRuleForm(rule: LatchRule): void {
 function syncProfileSelectors(proxies: LatchProxy[], rules: LatchRule[]): void {
   latchProfileProxyCheckboxes.innerHTML = proxies.length
     ? proxies.map((p) => `
-        <label class="lp-check-label" style="padding:4px 0;">
+        <label class="lp-check-label lp-check-item">
           <input type="checkbox" value="${p.group_id}" />
-          <span>${p.name} <span class="lp-proxy-chip">${p.type}</span></span>
+          <span class="lp-check-text">
+            <span class="lp-check-main">${p.name}</span>
+            <span class="lp-check-meta">类型：${p.type}</span>
+          </span>
         </label>`).join("")
-    : '<span style="color:var(--muted,#aaa);font-size:13px;padding:4px;">暂无代理</span>';
+    : '<span class="lp-check-empty">暂无代理</span>';
 
   latchProfileRuleRadios.innerHTML = `
-    <label class="lp-check-label" style="padding:4px 0;">
+    <label class="lp-check-label lp-check-item">
       <input type="radio" name="latch_rule" value="" checked />
-      <span style="color:#aaa;">不使用规则</span>
+      <span class="lp-check-text">
+        <span class="lp-check-main lp-check-main-muted">不使用规则</span>
+      </span>
     </label>` + rules.map((r) => `
-    <label class="lp-check-label" style="padding:4px 0;">
+    <label class="lp-check-label lp-check-item">
       <input type="radio" name="latch_rule" value="${r.group_id}" />
-      <span>${r.name} <span class="lp-ver">v${r.version}</span></span>
+      <span class="lp-check-text">
+        <span class="lp-check-main">${r.name}</span>
+        <span class="lp-check-meta">版本：v${r.version}</span>
+      </span>
     </label>`).join("");
 }
 
@@ -310,7 +632,7 @@ function resetProfileForm(): void {
   latchProfileDescInput.value = "";
   latchProfileEnabledInput.checked = true;
   latchProfileShareableInput.checked = false;
-  latchProfileFormTitle.textContent = "Add Profile";
+  latchProfileFormTitle.textContent = "新建配置模板";
   latchProfileSubmitBtn.textContent = "保存配置";
   setStatus(latchProfileStatus, "");
   latchProfileProxyCheckboxes.querySelectorAll<HTMLInputElement>("input[type=checkbox]").forEach((cb) => { cb.checked = false; });
@@ -368,7 +690,7 @@ function fillProfileForm(prof: LatchProfile): void {
   latchProfileRuleRadios.querySelectorAll<HTMLInputElement>("input[type=radio]").forEach((r) => {
     r.checked = r.value === (prof.rule_group_id || "");
   });
-  latchProfileFormTitle.textContent = "Edit Profile";
+  latchProfileFormTitle.textContent = "编辑配置模板";
   latchProfileSubmitBtn.textContent = "更新配置";
   setStatus(latchProfileStatus, "");
   openPanel(lpProfilePanel);
@@ -409,16 +731,20 @@ function renderUserProfiles(profiles: LatchProfileDetail[]): void {
 // ---------------------------------------------------------------------------
 
 async function loadAdminData(): Promise<void> {
-  const [proxyRes, ruleRes, profileRes] = await Promise.all([
+  const [proxyRes, ruleRes, profileRes, nodeRes] = await Promise.all([
     fetchLatchProxies(),
     fetchLatchRules(),
     fetchLatchAdminProfiles(),
+    fetchLatchServiceNodes(false),
   ]);
   currentLatchProxies  = proxyRes.response.ok   ? (proxyRes.data.proxies   as LatchProxy[]   || []) : [];
   currentLatchRules    = ruleRes.response.ok     ? (ruleRes.data.rules     as LatchRule[]     || []) : [];
   currentLatchProfiles = profileRes.response.ok ? (profileRes.data.profiles as LatchProfile[] || []) : [];
+  currentServiceNodes = nodeRes.response.ok ? (nodeRes.data.nodes as LatchServiceNode[] || []) : [];
   renderProxies(currentLatchProxies);
   renderRules(currentLatchRules);
+  renderServiceNodes(currentServiceNodes);
+  syncProxyNodeSelect(currentServiceNodes);
   renderAdminProfiles(currentLatchProfiles, currentLatchProxies, currentLatchRules);
   syncProfileSelectors(currentLatchProxies, currentLatchRules);
 }
@@ -494,12 +820,35 @@ function wireAdminEvents(): void {
   lpProxyClose.addEventListener("click",   closeAllPanels);
   lpRuleClose.addEventListener("click",    closeAllPanels);
   lpProfileClose.addEventListener("click", closeAllPanels);
+  lpServiceNodeClose.addEventListener("click", closeAllPanels);
 
   // — Proxy panel —
   lpAddProxyBtn.addEventListener("click", () => {
     resetProxyForm();
     openPanel(lpProxyPanel);
     latchProxyNameInput.focus();
+  });
+
+  latchProxyCopyNodeBtn.addEventListener("click", () => {
+    const nodeID = latchProxyFromNodeSelect.value;
+    if (!nodeID) {
+      setStatus(latchProxyStatus, "请先选择服务节点", "error");
+      return;
+    }
+    const node = currentServiceNodes.find((item) => item.id === nodeID);
+    if (!node) {
+      setStatus(latchProxyStatus, "服务节点不存在或已删除", "error");
+      return;
+    }
+    latchProxyNameInput.value = `${node.name}`;
+    latchProxyTypeSelect.value = node.proxy_type;
+    const mergedConfig = {
+      server: node.ip,
+      port: node.port,
+      ...(typeof node.config === "object" && node.config ? node.config : {}),
+    };
+    latchProxyConfigInput.value = JSON.stringify(mergedConfig, null, 2);
+    setStatus(latchProxyStatus, `已从服务节点「${node.name}」复制配置`, "success");
   });
 
   latchProxyResetBtn.addEventListener("click", resetProxyForm);
@@ -580,6 +929,121 @@ function wireAdminEvents(): void {
         setStatus(latchProxyStatus, data.message || "已删除", "success");
         await loadAdminData();
       } catch { setStatus(latchProxyStatus, "网络错误，请重试", "error"); }
+    }
+  });
+
+  // — Service node panel —
+  lpAddServiceNodeBtn.addEventListener("click", () => {
+    resetServiceNodeForm();
+    openPanel(lpServiceNodePanel);
+    latchServiceNodeNameInput.focus();
+  });
+
+  latchServiceNodeResetBtn.addEventListener("click", resetServiceNodeForm);
+  latchServiceNodePasteApplyBtn.addEventListener("click", () => {
+    applyServiceNodePasteText(latchServiceNodePasteInput.value);
+  });
+  latchServiceNodeTypeSelect.addEventListener("change", refreshServiceNodeConfigPreview);
+  [
+    latchServiceNodeCfgPassword,
+    latchServiceNodeCfgMethod,
+    latchServiceNodeCfgKey,
+    latchServiceNodeCfgCrypt,
+    latchServiceNodeCfgMode,
+    latchServiceNodeCfgMTU,
+    latchServiceNodeCfgPrivateKey,
+    latchServiceNodeCfgPublicKey,
+    latchServiceNodeCfgEndpoint,
+    latchServiceNodeCfgAllowedIPs,
+  ].forEach((input) => input.addEventListener("input", refreshServiceNodeConfigPreview));
+  latchServiceNodeCfgWireguardRole.addEventListener("change", refreshServiceNodeConfigPreview);
+
+  latchServiceNodeSubmitBtn.addEventListener("click", async () => {
+    const name = latchServiceNodeNameInput.value.trim();
+    const ip = latchServiceNodeIPInput.value.trim();
+    const port = Number(latchServiceNodePortInput.value || "0");
+    const proxyType = latchServiceNodeTypeSelect.value;
+    const status = latchServiceNodeStatusSelect.value || "unknown";
+
+    if (!name || !ip || !proxyType || !port) {
+      setStatus(latchServiceNodeStatus, "请填写名称/IP/端口/类型", "error");
+      return;
+    }
+    if (port <= 0 || port > 65535) {
+      setStatus(latchServiceNodeStatus, "端口必须在 1-65535", "error");
+      return;
+    }
+    const config = buildServiceNodeConfigFromForm(proxyType);
+    latchServiceNodeSubmitBtn.disabled = true;
+    setStatus(latchServiceNodeStatus, editingServiceNodeId ? "正在更新节点…" : "正在创建节点…");
+    try {
+      const payload = { name, ip, port, proxy_type: proxyType, config, status };
+      const { response, data } = editingServiceNodeId
+        ? await updateLatchServiceNode(editingServiceNodeId, payload)
+        : await createLatchServiceNode(payload);
+      if (!response.ok) {
+        setStatus(latchServiceNodeStatus, data.error || "保存失败", "error");
+        return;
+      }
+      setStatus(latchServiceNodeStatus, data.message || "已保存", "success");
+      closeAllPanels();
+      resetServiceNodeForm();
+      await loadAdminData();
+    } catch {
+      setStatus(latchServiceNodeStatus, "网络错误，请重试", "error");
+    } finally {
+      latchServiceNodeSubmitBtn.disabled = false;
+    }
+  });
+
+  latchServiceNodeList.addEventListener("click", async (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-action]");
+    if (!btn) return;
+    const row = btn.closest<HTMLElement>("[data-latch-service-node-id]");
+    const id = row?.dataset.latchServiceNodeId || "";
+    const node = currentServiceNodes.find((item) => item.id === id);
+    if (!node) return;
+    const action = btn.dataset.action;
+    if (action === "token") {
+      try {
+        const { response, data } = await issueLatchServiceNodeAgentToken(id);
+        if (!response.ok) {
+          setStatus(latchServiceNodeStatus, data.error || "生成 token 失败", "error");
+          return;
+        }
+        const token = (data as { token?: string }).token || "";
+        if (!token) {
+          setStatus(latchServiceNodeStatus, "token 返回为空", "error");
+          return;
+        }
+        window.prompt(`Agent token（仅显示一次，请立即保存）\n节点：${node.name}`, token);
+        setStatus(latchServiceNodeStatus, "Agent token 已生成", "success");
+      } catch {
+        setStatus(latchServiceNodeStatus, "网络错误，请重试", "error");
+      }
+      return;
+    }
+    if (action === "edit") {
+      fillServiceNodeForm(node);
+      return;
+    }
+    if (action === "delete") {
+      if (!window.confirm(`确定删除服务节点 "${node.name}" 吗？`)) return;
+      try {
+        const { response, data } = await removeLatchServiceNode(id);
+        if (!response.ok) {
+          setStatus(latchServiceNodeStatus, data.error || "删除失败", "error");
+          return;
+        }
+        if (editingServiceNodeId === id) {
+          closeAllPanels();
+          resetServiceNodeForm();
+        }
+        setStatus(latchServiceNodeStatus, data.message || "已删除", "success");
+        await loadAdminData();
+      } catch {
+        setStatus(latchServiceNodeStatus, "网络错误，请重试", "error");
+      }
     }
   });
 
@@ -766,4 +1230,3 @@ init();
 document.getElementById("logoutBtn")?.addEventListener("click", async () => {
   try { await logout(); } finally { window.location.replace("/login.html"); }
 });
-

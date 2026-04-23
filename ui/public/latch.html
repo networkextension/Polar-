@@ -6,7 +6,7 @@
     <title>Latch 服务</title>
     <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/styles.css?v=20260423-readability-1" />
   </head>
   <body class="lp-page">
     <!-- Panel overlay -->
@@ -93,6 +93,27 @@
                 <span class="lp-search-icon">⌕</span>
                 <input type="text" placeholder="Search proxies..." id="lpProxySearch" />
               </div>
+            </div>
+
+            <div class="lp-section">
+              <div class="lp-section-head">
+                <span class="lp-section-title">Service Nodes</span>
+                <button class="lp-add-btn" type="button" id="lpAddServiceNodeBtn">＋ Add Service Node</button>
+              </div>
+              <table class="lp-table">
+                <thead>
+                  <tr>
+                    <th>Name / Address</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Last Update</th>
+                    <th>Created</th>
+                    <th>Actions ◆</th>
+                  </tr>
+                </thead>
+                <tbody id="latchServiceNodeList"></tbody>
+              </table>
+              <div id="latchServiceNodeStatus" class="status-text" style="margin-top:8px;padding:0 4px;"></div>
             </div>
 
             <div class="lp-section">
@@ -244,7 +265,15 @@
             <option value="kcp_over_http">kcp_over_http</option>
             <option value="kcp_over_ss">kcp_over_ss</option>
             <option value="kcp_over_ss3">kcp_over_ss3</option>
+            <option value="wireguard">wireguard</option>
           </select>
+        </div>
+        <div class="lp-field">
+          <label class="lp-label">从服务节点复制</label>
+          <div class="lp-inline-row">
+            <select id="latchProxyFromNodeSelect" class="lp-input"></select>
+            <button id="latchProxyCopyNodeBtn" class="lp-manage-btn" type="button">Copy</button>
+          </div>
         </div>
         <div class="lp-field" style="flex:1;">
           <label class="lp-label">配置 JSON</label>
@@ -296,26 +325,33 @@
     <!-- ===== PROFILE SLIDE PANEL ===== -->
     <div class="lp-panel" id="lpProfilePanel">
       <div class="lp-panel-head">
-        <span class="lp-panel-title" id="latchProfileFormTitle">Add Profile</span>
+        <span class="lp-panel-title" id="latchProfileFormTitle">新建配置模板</span>
         <button class="lp-panel-close" type="button" id="lpProfileClose">✕</button>
       </div>
       <div class="lp-panel-body">
         <div class="lp-field">
-          <label class="lp-label">名称</label>
-          <input id="latchProfileNameInput" class="lp-input" type="text" maxlength="80" placeholder="例如 工作 / 学习 / 社交" />
+          <label class="lp-label" for="latchProfileNameInput">名称</label>
+          <input id="latchProfileNameInput" class="lp-input" type="text" maxlength="80" placeholder="例如：工作 / 学习 / 社交" />
         </div>
         <div class="lp-field">
-          <label class="lp-label">备注</label>
-          <input id="latchProfileDescInput" class="lp-input" type="text" maxlength="200" placeholder="例如 日常工作使用" />
+          <label class="lp-label" for="latchProfileDescInput">备注</label>
+          <input id="latchProfileDescInput" class="lp-input" type="text" maxlength="200" placeholder="例如：日常办公网络、课堂环境" />
+          <div class="lp-field-hint">备注会展示在列表里，便于快速识别用途。</div>
         </div>
-        <div class="lp-check-row">
+
+        <div class="lp-field">
+          <label class="lp-label">配置选项</label>
+        </div>
+        <div class="lp-check-row lp-check-row-card">
           <label class="lp-check-label">
-            <input id="latchProfileEnabledInput" type="checkbox" checked /> Enabled
+            <input id="latchProfileEnabledInput" type="checkbox" checked /> 启用
           </label>
           <label class="lp-check-label">
-            <input id="latchProfileShareableInput" type="checkbox" /> Shareable
+            <input id="latchProfileShareableInput" type="checkbox" /> 可共享
           </label>
         </div>
+        <div class="lp-field-hint">开启“可共享”后，其他用户可在可用配置中看到该模板。</div>
+
         <div class="lp-field">
           <label class="lp-label">关联代理（可多选）</label>
           <div id="latchProfileProxyCheckboxes" class="lp-check-scroll"></div>
@@ -329,6 +365,136 @@
       <div class="lp-panel-foot">
         <button id="latchProfileSubmitBtn" class="lp-add-btn" type="button" style="flex:1;">保存配置</button>
         <button id="latchProfileResetBtn" class="lp-manage-btn" type="button">清空</button>
+      </div>
+    </div>
+
+    <!-- ===== SERVICE NODE SLIDE PANEL ===== -->
+    <div class="lp-panel" id="lpServiceNodePanel">
+      <div class="lp-panel-head">
+        <span class="lp-panel-title" id="latchServiceNodeFormTitle">Add Service Node</span>
+        <button class="lp-panel-close" type="button" id="lpServiceNodeClose">✕</button>
+      </div>
+      <div class="lp-panel-body">
+        <div class="lp-field">
+          <label class="lp-label" for="latchServiceNodeNameInput">节点名称</label>
+          <input id="latchServiceNodeNameInput" class="lp-input" type="text" maxlength="80" placeholder="例如 Tokyo-A" />
+        </div>
+        <div class="lp-inline-grid">
+          <div class="lp-field">
+            <label class="lp-label" for="latchServiceNodeIPInput">IP</label>
+            <input id="latchServiceNodeIPInput" class="lp-input" type="text" placeholder="例如 1.2.3.4" />
+          </div>
+          <div class="lp-field">
+            <label class="lp-label" for="latchServiceNodePortInput">Port</label>
+            <input id="latchServiceNodePortInput" class="lp-input" type="number" min="1" max="65535" value="443" />
+          </div>
+        </div>
+        <div class="lp-inline-grid">
+          <div class="lp-field">
+            <label class="lp-label" for="latchServiceNodeTypeSelect">Proxy Type</label>
+            <select id="latchServiceNodeTypeSelect" class="lp-input">
+              <option value="ss">ss</option>
+              <option value="ss3">ss3</option>
+              <option value="kcp_over_http">kcp_over_http</option>
+              <option value="kcp_over_ss">kcp_over_ss</option>
+              <option value="kcp_over_ss3">kcp_over_ss3</option>
+              <option value="wireguard">wireguard</option>
+            </select>
+          </div>
+          <div class="lp-field">
+            <label class="lp-label" for="latchServiceNodeStatusSelect">Status</label>
+            <select id="latchServiceNodeStatusSelect" class="lp-input">
+              <option value="unknown">unknown</option>
+              <option value="up">up</option>
+              <option value="down">down</option>
+              <option value="degraded">degraded</option>
+            </select>
+          </div>
+        </div>
+        <div class="lp-field">
+          <label class="lp-label" for="latchServiceNodePasteInput">快速粘贴（新手）</label>
+          <textarea
+            id="latchServiceNodePasteInput"
+            class="lp-input lp-textarea"
+            rows="4"
+            placeholder='支持 JSON 或多行 key=value。例如：&#10;name=Tokyo-A&#10;ip=1.2.3.4&#10;port=443&#10;proxy_type=wireguard&#10;wireguard_role=server'
+          ></textarea>
+          <div class="lp-actions" style="margin-top:8px;">
+            <button id="latchServiceNodePasteApplyBtn" class="lp-manage-btn" type="button">应用粘贴内容</button>
+          </div>
+        </div>
+
+        <div class="lp-field" id="latchServiceNodeConfigForm">
+          <label class="lp-label">Config Form</label>
+          <div class="lp-inline-grid">
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgPassword">Password</label>
+              <input id="latchServiceNodeCfgPassword" class="lp-input" type="text" />
+            </div>
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgMethod">Method</label>
+              <input id="latchServiceNodeCfgMethod" class="lp-input" type="text" placeholder="aes-256-gcm / chacha20-ietf-poly1305" />
+            </div>
+          </div>
+          <div class="lp-inline-grid">
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgKey">KCP Key</label>
+              <input id="latchServiceNodeCfgKey" class="lp-input" type="text" />
+            </div>
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgCrypt">KCP Crypt</label>
+              <input id="latchServiceNodeCfgCrypt" class="lp-input" type="text" placeholder="none / aes" />
+            </div>
+          </div>
+          <div class="lp-inline-grid">
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgMode">KCP Mode</label>
+              <input id="latchServiceNodeCfgMode" class="lp-input" type="text" placeholder="fast / fast2 / normal" />
+            </div>
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgMTU">KCP MTU</label>
+              <input id="latchServiceNodeCfgMTU" class="lp-input" type="number" min="1" max="9000" value="1350" />
+            </div>
+          </div>
+          <div class="lp-inline-grid">
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgPrivateKey">WG Private Key</label>
+              <input id="latchServiceNodeCfgPrivateKey" class="lp-input" type="text" />
+            </div>
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgPublicKey">WG Public Key</label>
+              <input id="latchServiceNodeCfgPublicKey" class="lp-input" type="text" />
+            </div>
+          </div>
+          <div class="lp-inline-grid">
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgEndpoint">WG Endpoint</label>
+              <input id="latchServiceNodeCfgEndpoint" class="lp-input" type="text" placeholder="1.2.3.4:51820" />
+            </div>
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgAllowedIPs">WG Allowed IPs</label>
+              <input id="latchServiceNodeCfgAllowedIPs" class="lp-input" type="text" placeholder="0.0.0.0/0,::/0" />
+            </div>
+          </div>
+          <div class="lp-inline-grid">
+            <div class="lp-field">
+              <label class="lp-label" for="latchServiceNodeCfgWireguardRole">WG Role</label>
+              <select id="latchServiceNodeCfgWireguardRole" class="lp-select">
+                <option value="server" selected>server</option>
+                <option value="client">client</option>
+              </select>
+            </div>
+            <div class="lp-field"></div>
+          </div>
+        </div>
+        <div class="lp-field" style="flex:1;">
+          <label class="lp-label" for="latchServiceNodeConfigInput">Config JSON (Auto)</label>
+          <textarea id="latchServiceNodeConfigInput" class="lp-input lp-textarea" rows="8" readonly></textarea>
+        </div>
+      </div>
+      <div class="lp-panel-foot">
+        <button id="latchServiceNodeSubmitBtn" class="lp-add-btn" type="button" style="flex:1;">保存节点</button>
+        <button id="latchServiceNodeResetBtn" class="lp-manage-btn" type="button">清空</button>
       </div>
     </div>
 
