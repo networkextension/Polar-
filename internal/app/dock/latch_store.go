@@ -1,9 +1,12 @@
 package dock
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
+	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -60,6 +63,45 @@ type LatchProfileDetail struct {
 	Rule    *LatchRule   `json:"rule,omitempty"`
 }
 
+// LatchServiceNode is a deployment-side node template that can be copied into
+// proxy configs when creating or editing proxies.
+type LatchServiceNode struct {
+	ID            string          `json:"id"`
+	Name          string          `json:"name"`
+	IP            string          `json:"ip"`
+	Port          int             `json:"port"`
+	ProxyType     string          `json:"proxy_type"`
+	Config        json.RawMessage `json:"config"`
+	Status        string          `json:"status"`
+	LastUpdatedAt time.Time       `json:"last_updated_at"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	IsDeleted     bool            `json:"is_deleted"`
+}
+
+type LatchServiceNodeAgentToken struct {
+	ID         string     `json:"id"`
+	NodeID     string     `json:"node_id"`
+	CreatedBy  string     `json:"created_by"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	Revoked    bool       `json:"revoked"`
+}
+
+type LatchServiceNodeHeartbeat struct {
+	ID             string          `json:"id"`
+	NodeID         string          `json:"node_id"`
+	Status         string          `json:"status"`
+	ConnectedPeers int             `json:"connected_peers"`
+	RXBytes        int64           `json:"rx_bytes"`
+	TXBytes        int64           `json:"tx_bytes"`
+	AgentVersion   string          `json:"agent_version"`
+	Hostname       string          `json:"hostname"`
+	Payload        json.RawMessage `json:"payload"`
+	ReportedAt     time.Time       `json:"reported_at"`
+	CreatedAt      time.Time       `json:"created_at"`
+}
+
 // ---------------------------------------------------------------------------
 // SHA1 helpers
 // ---------------------------------------------------------------------------
@@ -74,6 +116,300 @@ func latchRuleSHA1(content string) string {
 	h := sha1.New()
 	h.Write([]byte(content))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func generateLatchAgentToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func hashLatchAgentToken(token string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(token)))
+	return hex.EncodeToString(sum[:])
+}
+
+// ---------------------------------------------------------------------------
+// Service node store
+// ---------------------------------------------------------------------------
+
+const latchServiceNodeSelectCols = `id, name, ip, port, proxy_type, config, status, last_updated_at, created_at, updated_at, is_deleted`
+
+func scanLatchServiceNode(scan func(dest ...any) error) (*LatchServiceNode, error) {
+	var (
+		item       LatchServiceNode
+		configJSON []byte
+	)
+	if err := scan(
+		&item.ID,
+		&item.Name,
+		&item.IP,
+		&item.Port,
+		&item.ProxyType,
+		&configJSON,
+		&item.Status,
+		&item.LastUpdatedAt,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&item.IsDeleted,
+	); err != nil {
+		return nil, err
+	}
+	if len(configJSON) > 0 {
+		item.Config = json.RawMessage(configJSON)
+	} else {
+		item.Config = json.RawMessage(`{}`)
+	}
+	return &item, nil
+}
+
+func (s *Server) listLatchServiceNodes(includeDeleted bool) ([]LatchServiceNode, error) {
+	query := `
+		SELECT ` + latchServiceNodeSelectCols + `
+		  FROM latch_service_nodes
+		 WHERE ($1::boolean = TRUE OR is_deleted = FALSE)
+		 ORDER BY updated_at DESC, created_at DESC`
+	rows, err := s.db.Query(query, includeDeleted)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]LatchServiceNode, 0)
+	for rows.Next() {
+		item, err := scanLatchServiceNode(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, *item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Server) getLatchServiceNode(id string) (*LatchServiceNode, error) {
+	item, err := scanLatchServiceNode(s.db.QueryRow(
+		`SELECT `+latchServiceNodeSelectCols+`
+		   FROM latch_service_nodes
+		  WHERE id = $1`,
+		id,
+	).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return item, nil
+}
+
+func (s *Server) createLatchServiceNode(name, ip string, port int, proxyType string, configJSON []byte, status string, now time.Time) (*LatchServiceNode, error) {
+	id := generateResourceID()
+	item, err := scanLatchServiceNode(s.db.QueryRow(
+		`INSERT INTO latch_service_nodes (id, name, ip, port, proxy_type, config, status, last_updated_at, created_at, updated_at, is_deleted)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$8,FALSE)
+		 RETURNING `+latchServiceNodeSelectCols,
+		id, name, ip, port, proxyType, string(configJSON), status, now,
+	).Scan)
+	if err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+func (s *Server) updateLatchServiceNode(id, name, ip string, port int, proxyType string, configJSON []byte, status string, now time.Time) (*LatchServiceNode, error) {
+	item, err := scanLatchServiceNode(s.db.QueryRow(
+		`UPDATE latch_service_nodes
+		    SET name = $2,
+		        ip = $3,
+		        port = $4,
+		        proxy_type = $5,
+		        config = $6,
+		        status = $7,
+		        last_updated_at = $8,
+		        updated_at = $8
+		  WHERE id = $1 AND is_deleted = FALSE
+		  RETURNING `+latchServiceNodeSelectCols,
+		id, name, ip, port, proxyType, string(configJSON), status, now,
+	).Scan)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return item, nil
+}
+
+func (s *Server) softDeleteLatchServiceNode(id string, now time.Time) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE latch_service_nodes
+		    SET is_deleted = TRUE,
+		        updated_at = $2,
+		        last_updated_at = $2
+		  WHERE id = $1 AND is_deleted = FALSE`,
+		id, now,
+	)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+func (s *Server) issueLatchServiceNodeAgentToken(nodeID, createdBy string, now time.Time) (tokenPlain string, tokenMeta *LatchServiceNodeAgentToken, err error) {
+	node, err := s.getLatchServiceNode(nodeID)
+	if err != nil {
+		return "", nil, err
+	}
+	if node == nil || node.IsDeleted {
+		return "", nil, nil
+	}
+
+	tokenPlain, err = generateLatchAgentToken()
+	if err != nil {
+		return "", nil, err
+	}
+	tokenHash := hashLatchAgentToken(tokenPlain)
+	tokenID := generateResourceID()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", nil, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(
+		`UPDATE latch_service_node_agent_tokens
+		    SET revoked = TRUE
+		  WHERE node_id = $1 AND revoked = FALSE`,
+		nodeID,
+	); err != nil {
+		return "", nil, err
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO latch_service_node_agent_tokens (id, node_id, token_hash, created_by, created_at, revoked)
+		 VALUES ($1,$2,$3,$4,$5,FALSE)`,
+		tokenID, nodeID, tokenHash, strings.TrimSpace(createdBy), now,
+	); err != nil {
+		return "", nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", nil, err
+	}
+
+	return tokenPlain, &LatchServiceNodeAgentToken{
+		ID:        tokenID,
+		NodeID:    nodeID,
+		CreatedBy: strings.TrimSpace(createdBy),
+		CreatedAt: now,
+		Revoked:   false,
+	}, nil
+}
+
+func (s *Server) authenticateLatchAgentToken(token string) (*LatchServiceNode, string, error) {
+	tokenHash := hashLatchAgentToken(token)
+	var (
+		node       LatchServiceNode
+		configJSON []byte
+		tokenID    string
+	)
+	err := s.db.QueryRow(
+		`SELECT n.id, n.name, n.ip, n.port, n.proxy_type, n.config, n.status, n.last_updated_at, n.created_at, n.updated_at, n.is_deleted, t.id
+		   FROM latch_service_node_agent_tokens t
+		   JOIN latch_service_nodes n ON n.id = t.node_id
+		  WHERE t.token_hash = $1
+		    AND t.revoked = FALSE
+		    AND n.is_deleted = FALSE
+		  ORDER BY t.created_at DESC
+		  LIMIT 1`,
+		tokenHash,
+	).Scan(
+		&node.ID,
+		&node.Name,
+		&node.IP,
+		&node.Port,
+		&node.ProxyType,
+		&configJSON,
+		&node.Status,
+		&node.LastUpdatedAt,
+		&node.CreatedAt,
+		&node.UpdatedAt,
+		&node.IsDeleted,
+		&tokenID,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", nil
+		}
+		return nil, "", err
+	}
+	if len(configJSON) > 0 {
+		node.Config = json.RawMessage(configJSON)
+	} else {
+		node.Config = json.RawMessage(`{}`)
+	}
+	return &node, tokenID, nil
+}
+
+func (s *Server) touchLatchAgentToken(tokenID string, now time.Time) error {
+	if strings.TrimSpace(tokenID) == "" {
+		return nil
+	}
+	_, err := s.db.Exec(
+		`UPDATE latch_service_node_agent_tokens
+		    SET last_used_at = $2
+		  WHERE id = $1`,
+		tokenID, now,
+	)
+	return err
+}
+
+func (s *Server) appendLatchServiceNodeHeartbeat(nodeID, status string, connectedPeers int, rxBytes, txBytes int64, agentVersion, hostname string, payloadJSON []byte, reportedAt, now time.Time) (*LatchServiceNodeHeartbeat, error) {
+	if len(payloadJSON) == 0 {
+		payloadJSON = []byte(`{}`)
+	}
+	item := &LatchServiceNodeHeartbeat{}
+	rawPayload := []byte{}
+	err := s.db.QueryRow(
+		`INSERT INTO latch_service_node_heartbeats (
+		     id, node_id, status, connected_peers, rx_bytes, tx_bytes, agent_version, hostname, payload, reported_at, created_at
+		 )
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		 RETURNING id, node_id, status, connected_peers, rx_bytes, tx_bytes, agent_version, hostname, payload, reported_at, created_at`,
+		generateResourceID(), nodeID, status, connectedPeers, rxBytes, txBytes, agentVersion, hostname, string(payloadJSON), reportedAt, now,
+	).Scan(
+		&item.ID,
+		&item.NodeID,
+		&item.Status,
+		&item.ConnectedPeers,
+		&item.RXBytes,
+		&item.TXBytes,
+		&item.AgentVersion,
+		&item.Hostname,
+		&rawPayload,
+		&item.ReportedAt,
+		&item.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	item.Payload = json.RawMessage(rawPayload)
+
+	if _, err := s.db.Exec(
+		`UPDATE latch_service_nodes
+		    SET status = $2,
+		        last_updated_at = $3,
+		        updated_at = $3
+		  WHERE id = $1`,
+		nodeID, status, now,
+	); err != nil {
+		return nil, err
+	}
+	return item, nil
 }
 
 // ---------------------------------------------------------------------------

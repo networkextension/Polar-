@@ -84,11 +84,42 @@ function escapeHtml(input: string): string {
     .split("'").join("&#39;");
 }
 
+// shared_markdown messages carry: a title (first ~60 chars of the AI reply),
+// a preview (first ~120 chars), and on expand, the full markdown which the
+// backend stored as `# {title}\n\n{reply}`. All three start with the same
+// text, so naive rendering shows the opening sentence three times. These
+// helpers strip the redundancy.
+function isPrefixOverlap(title: string, preview: string): boolean {
+  const a = title.replace(/\s+/g, "").trim();
+  const b = preview.replace(/\s+/g, "").trim();
+  if (!a || !b) return false;
+  return b.startsWith(a.slice(0, Math.min(a.length, 20)));
+}
+
+function stripLeadingHeading(markdown: string, title: string): string {
+  const trimmed = markdown.replace(/^﻿/, "").trimStart();
+  if (!trimmed.startsWith("#")) return markdown;
+  const newlineIdx = trimmed.indexOf("\n");
+  const headingLine = newlineIdx >= 0 ? trimmed.slice(0, newlineIdx) : trimmed;
+  const headingText = headingLine.replace(/^#+\s*/, "").trim();
+  const titleText = title.trim();
+  if (!titleText) return markdown;
+  if (headingText === titleText || headingText.startsWith(titleText) || titleText.startsWith(headingText)) {
+    return newlineIdx >= 0 ? trimmed.slice(newlineIdx + 1).trimStart() : "";
+  }
+  return markdown;
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) {
     return t("chat.fileSizeMB", { size: (bytes / (1024 * 1024)).toFixed(1) });
   }
   return t("chat.fileSizeKB", { size: String(Math.ceil(bytes / 1024)) });
+}
+
+function formatLatency(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}s`;
 }
 
 function attachmentIcon(mimeType: string): string {
@@ -608,14 +639,26 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
         : isAttachment && msg.attachment
           ? renderAttachment(msg.attachment)
         : isSharedMarkdown
-          ? `
-              <div class="message-markdown-card">
-                <div class="message-markdown-title">${escapeHtml(msg.markdown_title || t("chat.aiMarkdownReply"))}</div>
-                <div class="message-markdown-preview">${escapeHtml(msg.content || "")}</div>
-                ${isExpanded ? `<div class="message-markdown-expanded markdown-body">${isLoadingExpanded ? t("chat.loadingContent") : renderMarkdown(expandedContent)}</div>` : ""}
-                ${markdownActions}
-              </div>
-            `
+          ? (() => {
+              const title = msg.markdown_title || t("chat.aiMarkdownReply");
+              const preview = msg.content || "";
+              const titleHtml = isPrefixOverlap(title, preview)
+                ? ""
+                : `<div class="message-markdown-title">${escapeHtml(title)}</div>`;
+              const expandedMarkdown = isExpanded
+                ? (isLoadingExpanded
+                    ? t("chat.loadingContent")
+                    : renderMarkdown(stripLeadingHeading(expandedContent, msg.markdown_title || "")))
+                : "";
+              return `
+                <div class="message-markdown-card">
+                  ${titleHtml}
+                  <div class="message-markdown-preview">${escapeHtml(preview)}</div>
+                  ${isExpanded ? `<div class="message-markdown-expanded markdown-body">${expandedMarkdown}</div>` : ""}
+                  ${markdownActions}
+                </div>
+              `;
+            })()
         : isSystem
           ? renderMarkdown(msg.content || "")
           : escapeHtml(msg.content || "");
@@ -634,8 +677,11 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
       const botModelMeta = isBotReply
         ? (activeThread?.config_model || activeThread?.config_name || "LLM")
         : "";
+      const latencyMeta = isBotReply && typeof msg.latency_ms === "number" && msg.latency_ms > 0
+        ? ` · ${formatLatency(msg.latency_ms)}`
+        : "";
       const messageMeta = isBotReply
-        ? `${msg.sender_username} · ${botModelMeta} · ${formatTime(msg.created_at)}${isFailedBotReply ? ` · ${t("chat.failed")}` : ""}`
+        ? `${msg.sender_username} · ${botModelMeta} · ${formatTime(msg.created_at)}${latencyMeta}${isFailedBotReply ? ` · ${t("chat.failed")}` : ""}`
         : `${msg.sender_username} · ${formatTime(msg.created_at)}`;
       if (isMine) {
         return `

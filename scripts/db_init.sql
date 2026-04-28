@@ -1,8 +1,8 @@
-apple=# CREATE DATABASE gin_auth;
-CREATE DATABASE
-apple=# CREATE USER gin_tester WITH PASSWORD 'test123456';
-CREATE ROLE
-apple=# GRANT ALL PRIVILEGES ON DATABASE gin_auth TO gin_tester;
-GRANT
-apple=# ALTER DATABASE gin_auth OWNER TO gin_tester;
-ALTER DATABASE
+-- Reference snippet for first-time PostgreSQL setup.
+-- Run as a superuser (e.g. `psql -U postgres` or `psql -U $(whoami) -d postgres`).
+-- The application defaults expect db=ideamesh, user=ideamesh.
+
+CREATE DATABASE ideamesh;
+CREATE USER ideamesh WITH PASSWORD 'test123456';
+GRANT ALL PRIVILEGES ON DATABASE ideamesh TO ideamesh;
+ALTER DATABASE ideamesh OWNER TO ideamesh;

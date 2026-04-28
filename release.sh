@@ -80,9 +80,39 @@ for f in LICENSE README.md; do
   fi
 done
 
-# include UI dist if built
+# include UI dist + the express server so the bundle can serve the UI
+# without re-building. node + npm install are still required at run time.
 if [ -d "${REPO_ROOT}/ui/dist" ]; then
-  cp -r "${REPO_ROOT}/ui/dist" "${PKG_DIR}/ui"
+  mkdir -p "${PKG_DIR}/ui"
+  cp -r "${REPO_ROOT}/ui/dist" "${PKG_DIR}/ui/dist"
+  cp "${REPO_ROOT}/ui/server.js" "${PKG_DIR}/ui/server.js"
+  cp "${REPO_ROOT}/ui/package.json" "${PKG_DIR}/ui/package.json"
+  if [ -f "${REPO_ROOT}/ui/package-lock.json" ]; then
+    cp "${REPO_ROOT}/ui/package-lock.json" "${PKG_DIR}/ui/package-lock.json"
+  fi
+fi
+
+# scripts: DB init + eval launcher + migration tool
+mkdir -p "${PKG_DIR}/scripts"
+for f in db_init.sql eval_start.sh migrate_db_to_ideamesh.sh; do
+  if [ -f "${REPO_ROOT}/scripts/${f}" ]; then
+    cp "${REPO_ROOT}/scripts/${f}" "${PKG_DIR}/scripts/${f}"
+    case "$f" in *.sh) chmod +x "${PKG_DIR}/scripts/${f}" ;; esac
+  fi
+done
+
+# documentation: ship just the eval-relevant subset to keep the bundle lean
+mkdir -p "${PKG_DIR}/doc"
+for f in eval-quickstart.md deploy-local.md; do
+  if [ -f "${REPO_ROOT}/doc/${f}" ]; then
+    cp "${REPO_ROOT}/doc/${f}" "${PKG_DIR}/doc/${f}"
+  fi
+done
+
+# top-level QUICKSTART for sales: a copy at the package root so the very
+# first thing in the tarball is the eval guide.
+if [ -f "${PKG_DIR}/doc/eval-quickstart.md" ]; then
+  cp "${PKG_DIR}/doc/eval-quickstart.md" "${PKG_DIR}/QUICKSTART.md"
 fi
 
 # create tarball
