@@ -3,6 +3,7 @@ import { logout, fetchCurrentUser } from "./api/session.js";
 import { formatDeviceType } from "./lib/client.js";
 import { byId } from "./lib/dom.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
+import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 import type { AdminUserSummary } from "./types/admin.js";
 import type { LoginRecord } from "./types/dashboard.js";
@@ -268,5 +269,8 @@ logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = false;
   }
 });
+
+initStoredTheme();
+bindThemeSync();
 
 void bootstrap();

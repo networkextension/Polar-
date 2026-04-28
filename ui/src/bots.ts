@@ -14,6 +14,7 @@ import { logout, fetchCurrentUser } from "./api/session.js";
 import { byId } from "./lib/dom.js";
 import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint } from "./lib/llm_presets.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
+import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
 import { renderMarkdown } from "./lib/marked.js";
 import type { BotPayload, BotUser, LLMConfig, LLMConfigPayload } from "./types/dashboard.js";
@@ -454,6 +455,9 @@ logoutBtn.addEventListener("click", async () => {
     logoutBtn.disabled = false;
   }
 });
+
+initStoredTheme();
+bindThemeSync();
 
 void bootstrap();
 
