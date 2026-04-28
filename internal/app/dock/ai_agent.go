@@ -52,8 +52,10 @@ type aiRuntimeConfig struct {
 }
 
 type aiChatCompletionRequest struct {
-	Model    string                    `json:"model"`
-	Messages []aiChatCompletionMessage `json:"messages"`
+	Model              string                    `json:"model"`
+	Messages           []aiChatCompletionMessage `json:"messages"`
+	MaxTokens          int                       `json:"max_tokens,omitempty"`
+	ChatTemplateKwargs map[string]any            `json:"chat_template_kwargs,omitempty"`
 }
 
 type aiChatCompletionMessage struct {
@@ -165,7 +167,7 @@ func newAIAgent(server *Server, cfg Config) *aiAgent {
 		tasks:        make(chan aiAgentTask, 64),
 		stopCh:       make(chan struct{}),
 		httpClient: &http.Client{
-			Timeout: 90 * time.Second,
+			Timeout: 180 * time.Second,
 		},
 	}
 }
@@ -205,11 +207,14 @@ func (a *aiAgent) run() {
 }
 
 func (a *aiAgent) handleTask(task aiAgentTask) {
+	start := time.Now()
 	reply, err := a.generateReply(task)
+	latencyMs := time.Since(start).Milliseconds()
+	latencyPtr := &latencyMs
 	if err != nil {
-		log.Printf("ai agent reply failed: %v", err)
+		log.Printf("ai agent reply failed after %dms: %v", latencyMs, err)
 		reply = "我暂时无法完成这次处理，请稍后再试。"
-		if _, sendErr := a.server.sendFailedBotMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, reply, time.Now()); sendErr != nil {
+		if _, sendErr := a.server.sendFailedBotMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, reply, latencyPtr, time.Now()); sendErr != nil {
 			log.Printf("send failed ai agent chat message failed: %v", sendErr)
 		}
 		return
@@ -218,17 +223,18 @@ func (a *aiAgent) handleTask(task aiAgentTask) {
 	if reply == "" {
 		reply = "我暂时没有可返回的结果。"
 	}
+	log.Printf("ai agent reply ok in %dms (thread=%d)", latencyMs, task.ThreadID)
 	now := time.Now()
 	title := buildSystemMarkdownTitle(reply, now)
 	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, reply, "markdown", false, now)
 	if err != nil {
 		log.Printf("save ai markdown failed: %v", err)
-		if _, sendErr := a.server.sendChatMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, reply, now); sendErr != nil {
+		if _, sendErr := a.server.sendBotChatMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, reply, latencyPtr, now); sendErr != nil {
 			log.Printf("send fallback ai agent chat message failed: %v", sendErr)
 		}
 		return
 	}
-	if _, err := a.server.sendSharedMarkdownMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, entry.ID, entry.Title, buildMarkdownPreview(reply, 120), now); err != nil {
+	if _, err := a.server.sendSharedMarkdownMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, entry.ID, entry.Title, buildMarkdownPreview(reply, 120), latencyPtr, now); err != nil {
 		log.Printf("send ai shared markdown message failed: %v", err)
 	}
 }
@@ -266,6 +272,8 @@ func (a *aiAgent) generateReply(task aiAgentTask) (string, error) {
 				Content: task.Content,
 			},
 		},
+		MaxTokens:          32768,
+		ChatTemplateKwargs: map[string]any{"enable_thinking": false},
 	}
 
 	result, err := a.requestChatCompletion(runtimeConfig, payload)

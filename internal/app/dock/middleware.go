@@ -73,6 +73,17 @@ func extractAccessToken(c *gin.Context) string {
 	return ""
 }
 
+func extractBearerToken(c *gin.Context) string {
+	if header := c.GetHeader("Authorization"); header != "" {
+		if parts := strings.SplitN(header, " ", 2); len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			if tok := strings.TrimSpace(parts[1]); tok != "" {
+				return tok
+			}
+		}
+	}
+	return ""
+}
+
 // extractRefreshToken reads the refresh token from cookie, request
 // body, or Authorization header (in that order). The body fallback
 // lets native clients carry the token outside of cookies.
@@ -152,6 +163,38 @@ func (s *Server) GuestMiddleware() gin.HandlerFunc {
 				return
 			}
 		}
+		c.Next()
+	}
+}
+
+func (s *Server) AgentAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := extractBearerToken(c)
+		if token == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
+			c.Abort()
+			return
+		}
+		node, tokenID, err := s.authenticateLatchAgentToken(token)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server error"})
+			c.Abort()
+			return
+		}
+		if node == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid agent token"})
+			c.Abort()
+			return
+		}
+		now := time.Now()
+		if err := s.touchLatchAgentToken(tokenID, now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "server error"})
+			c.Abort()
+			return
+		}
+		c.Set("agent_node", node)
+		c.Set("agent_node_id", node.ID)
+		c.Set("agent_token_id", tokenID)
 		c.Next()
 	}
 }

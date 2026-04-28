@@ -434,6 +434,7 @@ type ChatMessage struct {
 	Content         string                 `json:"content"`
 	MarkdownEntryID *int64                 `json:"markdown_entry_id,omitempty"`
 	MarkdownTitle   string                 `json:"markdown_title,omitempty"`
+	LatencyMs       *int64                 `json:"latency_ms,omitempty"`
 	Attachment      *ChatMessageAttachment `json:"attachment,omitempty"`
 	CreatedAt       time.Time              `json:"created_at"`
 	DeletedAt       *time.Time             `json:"deleted_at,omitempty"`
@@ -1041,6 +1042,9 @@ ALTER TABLE chat_messages
 ALTER TABLE chat_messages
 	ADD COLUMN IF NOT EXISTS attachment TEXT;
 
+ALTER TABLE chat_messages
+	ADD COLUMN IF NOT EXISTS latency_ms INTEGER;
+
 CREATE TABLE IF NOT EXISTS chat_reads (
 	thread_id BIGINT NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1104,6 +1108,47 @@ CREATE TABLE IF NOT EXISTS latch_proxies (
 	PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS idx_latch_proxies_group_version ON latch_proxies(group_id, version DESC);
+
+CREATE TABLE IF NOT EXISTS latch_service_nodes (
+	id              TEXT NOT NULL PRIMARY KEY,
+	name            TEXT NOT NULL,
+	ip              TEXT NOT NULL,
+	port            INT NOT NULL,
+	proxy_type      TEXT NOT NULL,
+	config          JSONB NOT NULL DEFAULT '{}'::jsonb,
+	status          TEXT NOT NULL DEFAULT 'unknown',
+	last_updated_at TIMESTAMPTZ NOT NULL,
+	created_at      TIMESTAMPTZ NOT NULL,
+	updated_at      TIMESTAMPTZ NOT NULL,
+	is_deleted      BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_latch_service_nodes_active_updated ON latch_service_nodes(is_deleted, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS latch_service_node_agent_tokens (
+	id         TEXT NOT NULL PRIMARY KEY,
+	node_id    TEXT NOT NULL REFERENCES latch_service_nodes(id) ON DELETE CASCADE,
+	token_hash TEXT NOT NULL UNIQUE,
+	created_by TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL,
+	last_used_at TIMESTAMPTZ,
+	revoked    BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_latch_service_node_agent_tokens_node_active ON latch_service_node_agent_tokens(node_id, revoked, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS latch_service_node_heartbeats (
+	id              TEXT NOT NULL PRIMARY KEY,
+	node_id         TEXT NOT NULL REFERENCES latch_service_nodes(id) ON DELETE CASCADE,
+	status          TEXT NOT NULL DEFAULT 'unknown',
+	connected_peers INT NOT NULL DEFAULT 0,
+	rx_bytes        BIGINT NOT NULL DEFAULT 0,
+	tx_bytes        BIGINT NOT NULL DEFAULT 0,
+	agent_version   TEXT NOT NULL DEFAULT '',
+	hostname        TEXT NOT NULL DEFAULT '',
+	payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
+	reported_at     TIMESTAMPTZ NOT NULL,
+	created_at      TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_latch_service_node_heartbeats_node_time ON latch_service_node_heartbeats(node_id, reported_at DESC);
 
 CREATE TABLE IF NOT EXISTS latch_rules (
 	id         TEXT NOT NULL,
@@ -5069,7 +5114,7 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 	if offset < 0 {
 		offset = 0
 	}
-	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 		   FROM chat_messages m
 		   JOIN users u ON u.id = m.sender_id
 		  WHERE m.thread_id = $1`
@@ -5092,6 +5137,7 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 		var msg ChatMessage
 		var llmThreadIDValue sql.NullInt64
 		var markdownEntryID sql.NullInt64
+		var latencyMs sql.NullInt64
 		var attachmentJSON sql.NullString
 		var deletedAt sql.NullTime
 		var deletedBy sql.NullString
@@ -5107,6 +5153,7 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 			&msg.Content,
 			&markdownEntryID,
 			&msg.MarkdownTitle,
+			&latencyMs,
 			&attachmentJSON,
 			&msg.CreatedAt,
 			&deletedAt,
@@ -5124,6 +5171,9 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 		}
 		if markdownEntryID.Valid {
 			msg.MarkdownEntryID = &markdownEntryID.Int64
+		}
+		if latencyMs.Valid {
+			msg.LatencyMs = &latencyMs.Int64
 		}
 		if deletedBy.Valid {
 			msg.DeletedBy = deletedBy.String
@@ -5502,11 +5552,11 @@ func buildLLMThreadTitle(content string, fallback string) string {
 }
 
 func (s *Server) createChatMessage(threadID int64, llmThreadID *int64, senderID, content string, createdAt time.Time) (int64, error) {
-	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", createdAt)
+	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", nil, createdAt)
 }
 
-func (s *Server) createChatMessageWithMetadata(threadID int64, llmThreadID *int64, senderID, messageType, content string, markdownEntryID *int64, markdownTitle string, createdAt time.Time) (int64, error) {
-	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, messageType, false, content, markdownEntryID, markdownTitle, createdAt)
+func (s *Server) createChatMessageWithMetadata(threadID int64, llmThreadID *int64, senderID, messageType, content string, markdownEntryID *int64, markdownTitle string, latencyMs *int64, createdAt time.Time) (int64, error) {
+	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, messageType, false, content, markdownEntryID, markdownTitle, latencyMs, createdAt)
 }
 
 func (s *Server) createAttachmentChatMessage(threadID int64, senderID, preview string, att ChatMessageAttachment, createdAt time.Time) (int64, error) {
@@ -5557,7 +5607,7 @@ func (s *Server) createAttachmentChatMessage(threadID int64, senderID, preview s
 	return id, nil
 }
 
-func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64, senderID, messageType string, failed bool, content string, markdownEntryID *int64, markdownTitle string, createdAt time.Time) (int64, error) {
+func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64, senderID, messageType string, failed bool, content string, markdownEntryID *int64, markdownTitle string, latencyMs *int64, createdAt time.Time) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
@@ -5570,8 +5620,8 @@ func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64
 
 	var id int64
 	err = tx.QueryRow(
-		`INSERT INTO chat_messages (thread_id, llm_thread_id, sender_id, message_type, failed, content, markdown_entry_id, markdown_title, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`INSERT INTO chat_messages (thread_id, llm_thread_id, sender_id, message_type, failed, content, markdown_entry_id, markdown_title, latency_ms, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 RETURNING id`,
 		threadID,
 		llmThreadID,
@@ -5581,6 +5631,7 @@ func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64
 		content,
 		markdownEntryID,
 		markdownTitle,
+		latencyMs,
 		createdAt,
 	).Scan(&id)
 	if err != nil {
@@ -5638,11 +5689,12 @@ func (s *Server) getChatMessageByID(messageID int64) (*ChatMessage, error) {
 	var msg ChatMessage
 	var llmThreadID sql.NullInt64
 	var markdownEntryID sql.NullInt64
+	var latencyMs sql.NullInt64
 	var deletedAt sql.NullTime
 	var deletedBy sql.NullString
 	var attachmentJSON sql.NullString
 	err := s.db.QueryRow(
-		`SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+		`SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 		   FROM chat_messages m
 		   JOIN users u ON u.id = m.sender_id
 		  WHERE m.id = $1`,
@@ -5659,6 +5711,7 @@ func (s *Server) getChatMessageByID(messageID int64) (*ChatMessage, error) {
 		&msg.Content,
 		&markdownEntryID,
 		&msg.MarkdownTitle,
+		&latencyMs,
 		&attachmentJSON,
 		&msg.CreatedAt,
 		&deletedAt,
@@ -5681,6 +5734,9 @@ func (s *Server) getChatMessageByID(messageID int64) (*ChatMessage, error) {
 	if markdownEntryID.Valid {
 		msg.MarkdownEntryID = &markdownEntryID.Int64
 	}
+	if latencyMs.Valid {
+		msg.LatencyMs = &latencyMs.Int64
+	}
 	if deletedBy.Valid {
 		msg.DeletedBy = deletedBy.String
 	}
@@ -5697,7 +5753,7 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 	if limit <= 0 {
 		limit = 10
 	}
-	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 		   FROM chat_messages m
 		   JOIN users u ON u.id = m.sender_id
 		  WHERE m.thread_id = $1`
@@ -5720,6 +5776,7 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 		var msg ChatMessage
 		var llmThreadIDValue sql.NullInt64
 		var markdownEntryID sql.NullInt64
+		var latencyMs sql.NullInt64
 		var attachmentJSON sql.NullString
 		var deletedAt sql.NullTime
 		var deletedBy sql.NullString
@@ -5735,6 +5792,7 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 			&msg.Content,
 			&markdownEntryID,
 			&msg.MarkdownTitle,
+			&latencyMs,
 			&attachmentJSON,
 			&msg.CreatedAt,
 			&deletedAt,
@@ -5751,6 +5809,9 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 		}
 		if markdownEntryID.Valid {
 			msg.MarkdownEntryID = &markdownEntryID.Int64
+		}
+		if latencyMs.Valid {
+			msg.LatencyMs = &latencyMs.Int64
 		}
 		if deletedBy.Valid {
 			msg.DeletedBy = deletedBy.String
@@ -5777,7 +5838,7 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 		return nil, nil
 	}
 
-	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 	   FROM chat_messages m
 	   JOIN users u ON u.id = m.sender_id
 	  WHERE m.thread_id = $1
@@ -5797,6 +5858,7 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 	var msg ChatMessage
 	var llmThreadID sql.NullInt64
 	var markdownEntryID sql.NullInt64
+	var latencyMs sql.NullInt64
 	var attachmentJSON sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy sql.NullString
@@ -5812,6 +5874,7 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 		&msg.Content,
 		&markdownEntryID,
 		&msg.MarkdownTitle,
+		&latencyMs,
 		&attachmentJSON,
 		&msg.CreatedAt,
 		&deletedAt,
@@ -5828,6 +5891,9 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 	}
 	if markdownEntryID.Valid {
 		msg.MarkdownEntryID = &markdownEntryID.Int64
+	}
+	if latencyMs.Valid {
+		msg.LatencyMs = &latencyMs.Int64
 	}
 	if deletedAt.Valid {
 		msg.DeletedAt = &deletedAt.Time

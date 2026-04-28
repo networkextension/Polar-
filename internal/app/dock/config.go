@@ -29,7 +29,7 @@ const (
 	DefaultUploadDir     = "data/uploads"
 	DefaultGeoLiteDBPath = "data/GeoLite2-City.mmdb"
 	DefaultAddr          = ":8080"
-	DefaultPostgresDSN   = "postgres://gin_tester:test123456@localhost:5432/gin_auth?sslmode=disable"
+	DefaultPostgresDSN   = "postgres://ideamesh:test123456@localhost:5432/ideamesh?sslmode=disable"
 	DefaultPasskeyRPID   = "localhost"
 	DefaultPasskeyOrigin = "http://localhost:8080"
 	DefaultPasskeyRPName = "Gin Auth Demo"

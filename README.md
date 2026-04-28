@@ -20,7 +20,8 @@ Today, the project includes account authentication, Markdown content management,
 ### Authentication
 
 - Email/password registration and login
-- Cookie + server-side session management
+- Access + refresh cookie pair with server-side session state
+  (30-minute access, 30-day rotating refresh, family-based replay detection)
 - Logout and authenticated user lookup
 - Redis-backed session persistence
 
@@ -126,11 +127,19 @@ This design keeps the implementation lightweight while preserving enough structu
 Authentication is intentionally session-based:
 
 - more natural for browser-first flows
-- simpler logout semantics
+- simpler logout semantics (revocation is an atomic Redis `DEL`)
 - straightforward server-side control
 - well suited to a prototype with evolving auth requirements
 
-Redis is used as the session store to keep authentication checks fast and lightweight on the API path. Passkey support is layered on top of this foundation rather than replacing it.
+The cookie keep-alive layer is a short-lived access cookie (30 min,
+`Path=/`) plus a long-lived rotating refresh cookie (30 days,
+`Path=/api/token`, `SameSite=Strict`). The browser client installs a
+single global 401-interceptor that serializes one `/api/token/refresh`
+call and retries the original request — see [doc/auth.md](./doc/auth.md)
+and [doc/auth-refresh.md](./doc/auth-refresh.md) for the full
+contract. Redis holds the session state so auth checks stay fast on
+the API path. Passkey support is layered on top of this foundation
+rather than replacing it.
 
 ### 4. Lightweight frontend by choice
 
@@ -170,6 +179,20 @@ This keeps the core product path resilient.
 ```
 
 ## Local Development
+
+For a full setup walkthrough (PostgreSQL/Redis bootstrap, env vars, AI agent, R2, troubleshooting) see [`doc/deploy-local.md`](doc/deploy-local.md). The migration script for upgrading an existing `gin_auth`/`gin_tester` database lives at `scripts/migrate_db_to_ideamesh.sh`.
+
+## Evaluation Bundle (Sales / Trial)
+
+Release tarballs produced by `./release.sh` ship a self-contained evaluation kit in addition to the binary:
+
+- `QUICKSTART.md` (top-level eval guide focused on the LLM experience)
+- `doc/eval-quickstart.md`, `doc/deploy-local.md`
+- `scripts/eval_start.sh` — auto-detects PostgreSQL/Redis, creates the `ideamesh` DB on first run, starts backend + UI in one command
+- `scripts/db_init.sql`, `scripts/migrate_db_to_ideamesh.sh`
+- `ui/` (built static assets + `server.js` so the UI can be served without re-building)
+
+Recipient flow: extract → install Postgres/Redis/Node → `./scripts/eval_start.sh` → open `http://localhost:3000`.
 
 ### Start the backend
 

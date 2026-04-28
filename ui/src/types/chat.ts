@@ -44,6 +44,7 @@ export type ChatMessage = {
   content: string;
   markdown_entry_id?: number;
   markdown_title?: string;
+  latency_ms?: number;
   attachment?: ChatMessageAttachment;
   deleted?: boolean;
   created_at: string;

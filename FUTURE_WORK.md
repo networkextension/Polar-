@@ -74,10 +74,20 @@ Some handlers return `{"error": "..."}`, others return `{"message": "..."}` or c
 
 ### Centralize Constants
 Several values are duplicated across files:
-- Session duration (`24 * time.Hour`) — define once in `config.go`
 - Default Markdown directory (`"data/markdown"`) — read from config, not hardcoded
 - Video attachment limit (`100 << 20`) — one constant used in all upload handlers
 - LLM task queue depth (`64`) — one constant in the agent package
+
+### Access Token TTL Policy
+Current `AccessTokenTTL = 30 * time.Minute` was picked when the web UI was
+the only client. 30 min is tight for native clients that wake up rarely
+(e.g. Latch iOS fetches `/api/latch/profiles` then goes idle): every cold
+launch after ~half an hour hits a 401 → refresh round-trip before the
+first useful request. Likely target is ~24h access with refresh still at
+30d, or a per-client-type TTL driven by the `X-Device-Type` header
+(browser stays short, native gets long). Revisit once more than profile
+reads are in play on mobile, and make sure it's covered by an explicit
+threat-model note rather than a single constant.
 
 ### API Versioning
 All routes live at `/api/...` with no version prefix. Adding `/api/v1/` now, before any external consumers exist, avoids a forced migration later.

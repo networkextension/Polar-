@@ -871,16 +871,24 @@ func (s *Server) sendChatMessage(threadID int64, llmThreadID *int64, senderID, s
 	return s.broadcastChatMessageByID(threadID, msgID, senderID, senderName)
 }
 
-func (s *Server) sendFailedBotMessage(threadID int64, llmThreadID *int64, senderID, senderName, content string, now time.Time) (int64, error) {
-	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", true, content, nil, "", now)
+func (s *Server) sendFailedBotMessage(threadID int64, llmThreadID *int64, senderID, senderName, content string, latencyMs *int64, now time.Time) (int64, error) {
+	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", true, content, nil, "", latencyMs, now)
 	if err != nil {
 		return 0, err
 	}
 	return s.broadcastChatMessageByID(threadID, msgID, senderID, senderName)
 }
 
-func (s *Server) sendSharedMarkdownMessage(threadID int64, llmThreadID *int64, senderID, senderName string, markdownEntryID int64, markdownTitle, preview string, now time.Time) (int64, error) {
-	msgID, err := s.createChatMessageWithMetadata(threadID, llmThreadID, senderID, "shared_markdown", preview, &markdownEntryID, markdownTitle, now)
+func (s *Server) sendBotChatMessage(threadID int64, llmThreadID *int64, senderID, senderName, content string, latencyMs *int64, now time.Time) (int64, error) {
+	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", latencyMs, now)
+	if err != nil {
+		return 0, err
+	}
+	return s.broadcastChatMessageByID(threadID, msgID, senderID, senderName)
+}
+
+func (s *Server) sendSharedMarkdownMessage(threadID int64, llmThreadID *int64, senderID, senderName string, markdownEntryID int64, markdownTitle, preview string, latencyMs *int64, now time.Time) (int64, error) {
+	msgID, err := s.createChatMessageWithMetadata(threadID, llmThreadID, senderID, "shared_markdown", preview, &markdownEntryID, markdownTitle, latencyMs, now)
 	if err != nil {
 		return 0, err
 	}
