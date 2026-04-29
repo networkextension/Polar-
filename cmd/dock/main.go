@@ -45,6 +45,7 @@ func main() {
 		AIAgentBaseURL:      envOrDefault("AI_AGENT_BASE_URL", "https://api.openai.com/v1/chat/completions"),
 		AIAgentModel:        envOrDefault("AI_AGENT_MODEL", "gpt-4.1-mini"),
 		AIAgentSystemPrompt: envOrDefault("AI_AGENT_SYSTEM_PROMPT", "你是站内 system 助理。请结合项目运行目录中的文档和用户提问，给出简洁、准确、可执行的中文回答。如果资料不足，请明确说明。"),
+		AIAgentStreaming:    envBoolDefault("AI_AGENT_STREAMING", true),
 		ApplePushTopic:      os.Getenv("APPLE_PUSH_TOPIC"),
 		ApplePushTopicDev:   os.Getenv("APPLE_PUSH_TOPIC_DEV"),
 		ApplePushTopicProd:  os.Getenv("APPLE_PUSH_TOPIC_PROD"),
@@ -89,4 +90,17 @@ func envOrDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBoolDefault(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Printf("invalid %s=%q, falling back to %v", key, value, fallback)
+		return fallback
+	}
+	return parsed
 }

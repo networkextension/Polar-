@@ -25,6 +25,9 @@ type chatInternalEvent struct {
 	ReadAt     *time.Time `json:"read_at,omitempty"`
 	DeletedAt  *time.Time `json:"deleted_at,omitempty"`
 	OccurredAt time.Time  `json:"occurred_at"`
+	// Silent suppresses push-notification side effects; used by streaming
+	// republishes that fire ~once per second per generation.
+	Silent bool `json:"silent,omitempty"`
 }
 
 func (s *Server) prefixedRedisKey(parts ...string) string {
@@ -120,14 +123,25 @@ func (s *Server) handleMessageCreatedEvent(event chatInternalEvent) {
 		if err != nil {
 			log.Printf("load chat message for event failed: %v", err)
 		} else if message != nil {
-			if userLow, userHigh, err := s.getChatParticipants(event.ChatID); err == nil {
+			userLow, userHigh, perr := s.getChatParticipants(event.ChatID)
+			if perr == nil {
 				s.broadcastChatEvent([]string{userLow, userHigh}, chatEvent{
 					Type:    "message",
 					ChatID:  event.ChatID,
 					Message: message,
 				})
+				if event.Silent {
+					log.Printf("ws broadcast streaming chunk: chat=%d msg=%d streaming=%v seq=%d len=%d", event.ChatID, event.MessageID, message.Streaming, message.Seq, len(message.Content))
+				}
+			} else {
+				log.Printf("load chat participants for message event failed: chat=%d msg=%d err=%v", event.ChatID, event.MessageID, perr)
 			}
+		} else if err == nil {
+			log.Printf("chat message %d not found for created event (chat=%d)", event.MessageID, event.ChatID)
 		}
+	}
+	if event.Silent {
+		return
 	}
 	if err := s.preparePushDeliveries(event.ChatID, event.MessageID, event.SenderID); err != nil {
 		log.Printf("prepare push deliveries failed: %v", err)

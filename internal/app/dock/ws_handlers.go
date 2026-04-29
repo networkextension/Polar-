@@ -2,6 +2,7 @@ package dock
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -44,6 +45,7 @@ func (s *Server) handleChatWS(c *gin.Context) {
 
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Printf("ws upgrade failed user=%s err=%v", session.UserID, err)
 		return
 	}
 
@@ -51,12 +53,13 @@ func (s *Server) handleChatWS(c *gin.Context) {
 		hub:        s.wsHub,
 		server:     s,
 		conn:       conn,
-		send:       make(chan []byte, 32),
+		send:       make(chan []byte, 256),
 		connID:     generateSessionID()[:16],
 		userID:     session.UserID,
 		deviceType: normalizeDeviceType(session.DeviceType),
 		deviceID:   normalizeDeviceID(session.DeviceID, session.DeviceType),
 	}
+	log.Printf("ws connected user=%s conn=%s", client.userID, client.connID)
 
 	s.wsHub.register <- client
 

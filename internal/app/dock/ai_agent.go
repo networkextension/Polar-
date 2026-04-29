@@ -2,6 +2,7 @@ package dock
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,10 +30,17 @@ type aiAgent struct {
 	baseURL      string
 	model        string
 	systemPrompt string
+	streaming    bool
 	tasks        chan aiAgentTask
 	stopCh       chan struct{}
 	stopOnce     sync.Once
 	httpClient   *http.Client
+	streamClient *http.Client
+
+	// streams tracks in-flight streaming generations keyed by chat_messages.id
+	// so a revoke handler can cancel the LLM HTTP call mid-stream.
+	streamsMu sync.Mutex
+	streams   map[int64]context.CancelFunc
 }
 
 type aiAgentTask struct {
@@ -49,12 +57,14 @@ type aiRuntimeConfig struct {
 	BaseURL      string
 	Model        string
 	SystemPrompt string
+	Streaming    bool
 }
 
 type aiChatCompletionRequest struct {
 	Model              string                    `json:"model"`
 	Messages           []aiChatCompletionMessage `json:"messages"`
 	MaxTokens          int                       `json:"max_tokens,omitempty"`
+	Stream             bool                      `json:"stream,omitempty"`
 	ChatTemplateKwargs map[string]any            `json:"chat_template_kwargs,omitempty"`
 }
 
@@ -164,11 +174,18 @@ func newAIAgent(server *Server, cfg Config) *aiAgent {
 		baseURL:      strings.TrimSpace(cfg.AIAgentBaseURL),
 		model:        strings.TrimSpace(cfg.AIAgentModel),
 		systemPrompt: strings.TrimSpace(cfg.AIAgentSystemPrompt),
+		streaming:    cfg.AIAgentStreaming,
 		tasks:        make(chan aiAgentTask, 64),
 		stopCh:       make(chan struct{}),
+		streams:      make(map[int64]context.CancelFunc),
 		httpClient: &http.Client{
 			Timeout: 180 * time.Second,
 		},
+		// streamClient has no overall timeout; the per-stream idle-gap
+		// watchdog cancels the request context instead. A 180s wall-clock
+		// limit would hard-kill long generations on slow self-hosted
+		// inference, defeating the point of streaming.
+		streamClient: &http.Client{Timeout: 0},
 	}
 }
 
@@ -207,8 +224,28 @@ func (a *aiAgent) run() {
 }
 
 func (a *aiAgent) handleTask(task aiAgentTask) {
+	cfg, err := a.runtimeConfig(task.ThreadID, task.LLMThreadID, task.ResponderUserID)
+	if err != nil {
+		log.Printf("ai agent resolve runtime config failed: %v", err)
+		latency := int64(0)
+		if _, sendErr := a.server.sendFailedBotMessage(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, "AI 助理配置无法加载，请联系管理员。", &latency, time.Now()); sendErr != nil {
+			log.Printf("send failed ai agent chat message failed: %v", sendErr)
+		}
+		return
+	}
+	if cfg.Streaming {
+		a.handleStreamingTask(task, cfg)
+		return
+	}
+	a.handleSyncTask(task, cfg)
+}
+
+// handleSyncTask is the original non-streaming flow: one HTTP call, save
+// markdown, send the shared_markdown message. Kept verbatim so flipping
+// streaming=false is a true regression gate.
+func (a *aiAgent) handleSyncTask(task aiAgentTask, cfg aiRuntimeConfig) {
 	start := time.Now()
-	reply, err := a.generateReply(task)
+	reply, err := a.generateReply(task, cfg)
 	latencyMs := time.Since(start).Milliseconds()
 	latencyPtr := &latencyMs
 	if err != nil {
@@ -239,11 +276,206 @@ func (a *aiAgent) handleTask(task aiAgentTask) {
 	}
 }
 
-func (a *aiAgent) generateReply(task aiAgentTask) (string, error) {
-	runtimeConfig, err := a.runtimeConfig(task.ThreadID, task.LLMThreadID, task.ResponderUserID)
-	if err != nil {
-		return "", err
+// handleStreamingTask:
+//  1. Insert an empty placeholder shared_markdown row (streaming=true) and
+//     broadcast it so the UI can show a "thinking…" bubble immediately.
+//  2. Call requestStreamingChatCompletion with an onDelta that accumulates
+//     text in memory and flushes to DB at most once per second (republishing
+//     the message-created event each time so WS subscribers see the growth).
+//  3. On success: saveMarkdownDocument + finalizeChatMessage with the
+//     markdown link, latency, streaming=false. Republish.
+//  4. On error: finalizeChatMessage with failed=true and partial text.
+//
+// Cancellation is honored via context: revoke handler can call
+// aiAgent.cancelStream(messageID) which fires the stored CancelFunc.
+func (a *aiAgent) handleStreamingTask(task aiAgentTask, cfg aiRuntimeConfig) {
+	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.BaseURL) == "" || strings.TrimSpace(cfg.Model) == "" {
+		// Fall back to the synchronous error message — same UX as before.
+		a.handleSyncTask(task, cfg)
+		return
 	}
+
+	now := time.Now()
+	placeholderID, err := a.server.sendStreamingPlaceholder(task.ThreadID, task.LLMThreadID, task.ResponderUserID, task.ResponderName, now)
+	if err != nil {
+		log.Printf("ai agent placeholder insert failed: %v", err)
+		a.handleSyncTask(task, cfg)
+		return
+	}
+
+	contextText, ctxErr := a.buildContext(task.ThreadID, task.LLMThreadID)
+	if ctxErr != nil {
+		log.Printf("build ai context failed: %v", ctxErr)
+	}
+
+	payload := aiChatCompletionRequest{
+		Model: cfg.Model,
+		Messages: []aiChatCompletionMessage{
+			{Role: "system", Content: cfg.SystemPrompt},
+			{Role: "system", Content: contextText},
+			{Role: "user", Content: task.Content},
+		},
+		MaxTokens:          32768,
+		ChatTemplateKwargs: map[string]any{"enable_thinking": false},
+	}
+
+	streamCtx, cancel := context.WithCancel(context.Background())
+	a.registerStream(placeholderID, cancel)
+	defer a.unregisterStream(placeholderID)
+
+	var (
+		accumulator   strings.Builder
+		lastFlushed   time.Time
+		lastFlushLen  int
+		flushInterval = time.Second
+		streamStart   = time.Now()
+	)
+
+	flush := func(force bool) {
+		current := accumulator.String()
+		if !force && (len(current) == lastFlushLen || time.Since(lastFlushed) < flushInterval) {
+			return
+		}
+		ok, err := a.server.updateChatMessageContent(placeholderID, current)
+		if err != nil {
+			log.Printf("ai agent update streaming content failed: %v", err)
+			return
+		}
+		if !ok {
+			log.Printf("ai agent stream flush row not updated (id=%d, len=%d) — finalized or revoked", placeholderID, len(current))
+			cancel()
+			return
+		}
+		lastFlushed = time.Now()
+		lastFlushLen = len(current)
+		log.Printf("ai agent stream flush id=%d len=%d", placeholderID, len(current))
+		a.republishMessageCreatedSilent(task.ThreadID, placeholderID, task.ResponderUserID)
+	}
+
+	final, streamErr := a.requestStreamingChatCompletion(streamCtx, cfg, payload, func(delta string) {
+		accumulator.WriteString(delta)
+		flush(false)
+	})
+
+	// Drain any unflushed tail so the user sees the last chunks before we
+	// transition to the finalized markdown card.
+	flush(true)
+
+	totalLatency := time.Since(streamStart).Milliseconds()
+	totalLatencyPtr := &totalLatency
+
+	if streamErr != nil {
+		partial := strings.TrimSpace(accumulator.String())
+		if partial == "" {
+			partial = strings.TrimSpace(final)
+		}
+		if partial == "" {
+			partial = "我暂时无法完成这次处理，请稍后再试。"
+		} else {
+			partial += "\n\n（生成被中断：" + streamErr.Error() + "）"
+		}
+		log.Printf("ai agent stream failed after %dms (thread=%d): %v", totalLatency, task.ThreadID, streamErr)
+		if err := a.server.finalizeChatMessage(placeholderID, partial, nil, "", totalLatencyPtr, true); err != nil {
+			log.Printf("finalize streaming failed: %v", err)
+		}
+		a.republishMessageCreated(task.ThreadID, placeholderID, task.ResponderUserID)
+		return
+	}
+
+	finalText := strings.TrimSpace(final)
+	if finalText == "" {
+		finalText = strings.TrimSpace(accumulator.String())
+	}
+	if finalText == "" {
+		finalText = "我暂时没有可返回的结果。"
+	}
+	log.Printf("ai agent stream ok in %dms (thread=%d, bytes=%d)", totalLatency, task.ThreadID, len(finalText))
+
+	completedAt := time.Now()
+	title := buildSystemMarkdownTitle(finalText, completedAt)
+	entry, _, err := a.server.saveMarkdownDocument(task.ResponderUserID, title, finalText, "markdown", false, completedAt)
+	if err != nil {
+		log.Printf("save ai markdown failed: %v", err)
+		// Finalize without a markdown link; the streaming bubble keeps the
+		// final text and just loses the "expand" button.
+		if finalErr := a.server.finalizeChatMessage(placeholderID, finalText, nil, "", totalLatencyPtr, false); finalErr != nil {
+			log.Printf("finalize streaming (no markdown) failed: %v", finalErr)
+		}
+		a.republishMessageCreated(task.ThreadID, placeholderID, task.ResponderUserID)
+		return
+	}
+
+	preview := buildMarkdownPreview(finalText, 120)
+	if err := a.server.finalizeChatMessage(placeholderID, preview, &entry.ID, entry.Title, totalLatencyPtr, false); err != nil {
+		log.Printf("finalize streaming success failed: %v", err)
+	}
+	a.republishMessageCreated(task.ThreadID, placeholderID, task.ResponderUserID)
+}
+
+// republishMessageCreated re-fires the chatEventMessageCreated event so the
+// WS hub re-fetches the row and broadcasts the updated state. The hub uses
+// getChatMessageByID, so each republish carries the latest content/seq.
+// Mid-stream republishes are marked silent so we don't fire push-prep work
+// once per second; the final post-finalize republish leaves silent=false so
+// the receiver still gets a notification for the completed reply.
+func (a *aiAgent) republishMessageCreated(threadID, messageID int64, senderID string) {
+	a.server.publishChatInternalEvent(chatInternalEvent{
+		Event:     chatEventMessageCreated,
+		ChatID:    threadID,
+		MessageID: messageID,
+		SenderID:  senderID,
+	})
+}
+
+func (a *aiAgent) republishMessageCreatedSilent(threadID, messageID int64, senderID string) {
+	a.server.publishChatInternalEvent(chatInternalEvent{
+		Event:     chatEventMessageCreated,
+		ChatID:    threadID,
+		MessageID: messageID,
+		SenderID:  senderID,
+		Silent:    true,
+	})
+}
+
+func (a *aiAgent) registerStream(messageID int64, cancel context.CancelFunc) {
+	if a == nil || messageID <= 0 || cancel == nil {
+		return
+	}
+	a.streamsMu.Lock()
+	defer a.streamsMu.Unlock()
+	if a.streams == nil {
+		a.streams = make(map[int64]context.CancelFunc)
+	}
+	a.streams[messageID] = cancel
+}
+
+func (a *aiAgent) unregisterStream(messageID int64) {
+	if a == nil || messageID <= 0 {
+		return
+	}
+	a.streamsMu.Lock()
+	defer a.streamsMu.Unlock()
+	delete(a.streams, messageID)
+}
+
+// cancelStream aborts an in-flight streaming generation for the given
+// placeholder message id. Safe to call when no stream is active. Used by
+// the revoke handler so deleting a streaming bubble immediately tears down
+// the upstream LLM connection.
+func (a *aiAgent) cancelStream(messageID int64) {
+	if a == nil || messageID <= 0 {
+		return
+	}
+	a.streamsMu.Lock()
+	cancel, ok := a.streams[messageID]
+	delete(a.streams, messageID)
+	a.streamsMu.Unlock()
+	if ok && cancel != nil {
+		cancel()
+	}
+}
+
+func (a *aiAgent) generateReply(task aiAgentTask, runtimeConfig aiRuntimeConfig) (string, error) {
 	if strings.TrimSpace(runtimeConfig.APIKey) == "" || strings.TrimSpace(runtimeConfig.BaseURL) == "" || strings.TrimSpace(runtimeConfig.Model) == "" {
 		if task.ResponderUserID == systemUserID {
 			return "AI 助理尚未配置完成，请联系管理员设置 `AI_AGENT_API_KEY`、`AI_AGENT_BASE_URL` 和 `AI_AGENT_MODEL`。", nil
@@ -562,6 +794,7 @@ func (a *aiAgent) runtimeConfig(threadID int64, llmThreadID *int64, responderUse
 			BaseURL:      strings.TrimSpace(a.baseURL),
 			Model:        strings.TrimSpace(a.model),
 			SystemPrompt: strings.TrimSpace(a.systemPrompt),
+			Streaming:    a.streaming,
 		}, nil
 	}
 
@@ -604,6 +837,7 @@ func (a *aiAgent) runtimeConfig(threadID int64, llmThreadID *int64, responderUse
 		BaseURL:      strings.TrimSpace(item.BaseURL),
 		Model:        strings.TrimSpace(item.Model),
 		SystemPrompt: systemPrompt,
+		Streaming:    item.Streaming,
 	}, nil
 }
 
