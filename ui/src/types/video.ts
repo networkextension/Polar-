@@ -98,8 +98,11 @@ export type VideoSingleAssetResponse = {
 };
 
 export type VideoSubmitAllResponse = {
-  submitted?: number;
-  failed?: number;
+  // Async fan-out: handler returns immediately and the goroutine submits
+  // each shot in the background, broadcasting status via WS as it goes.
+  queued?: number;
+  shot_ids?: number[];
+  async?: boolean;
   error?: string;
 };
 

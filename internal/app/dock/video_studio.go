@@ -377,6 +377,68 @@ func (s *Server) handleVideoShotUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"shot": shot})
 }
 
+// handleVideoShotDuplicate copies an existing shot's prompt + params into a
+// new pending shot at the end of the project. Mode-1 iteration helper:
+// "make a tweaked variant" without retyping. The new row's task_id is empty
+// and its status is pending so the user must explicitly Submit it before
+// it costs a provider call.
+func (s *Server) handleVideoShotDuplicate(c *gin.Context) {
+	userID, ok := requireUserID(c)
+	if !ok {
+		return
+	}
+	projectID, ok := parseInt64Param(c, "id")
+	if !ok {
+		return
+	}
+	shotID, ok := parseInt64Param(c, "shotId")
+	if !ok {
+		return
+	}
+	project, err := s.getVideoProject(userID, projectID)
+	if err != nil || project == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "项目不存在"})
+		return
+	}
+	src, err := s.getVideoShot(project.ID, shotID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if src == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "镜头不存在"})
+		return
+	}
+	siblings, err := s.listVideoShotsForProject(project.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	nextOrd := 0
+	for _, sh := range siblings {
+		if sh.Ord >= nextOrd {
+			nextOrd = sh.Ord + 1
+		}
+	}
+	clone, err := s.createVideoShot(CreateVideoShotInput{
+		ProjectID:     project.ID,
+		Ord:           nextOrd,
+		Prompt:        src.Prompt,
+		Ratio:         src.Ratio,
+		Duration:      src.Duration,
+		GenerateAudio: src.GenerateAudio,
+		Watermark:     src.Watermark,
+		LLMConfigID:   src.LLMConfigID,
+		TrimStartMs:   src.TrimStartMs,
+		TrimEndMs:     src.TrimEndMs,
+	}, time.Now())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"shot": clone})
+}
+
 func (s *Server) handleVideoShotDelete(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -472,9 +534,11 @@ func (s *Server) handleVideoShotSubmit(c *gin.Context) {
 	}
 	if err := s.submitShotToProvider(userID, project, shot); err != nil {
 		_ = s.markVideoShotStatus(shot.ID, VideoShotStatusFailed, "", err.Error(), time.Now())
+		s.broadcastVideoShotEvent(project, shot.ID, VideoShotStatusFailed, "", err.Error())
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
+	s.broadcastVideoShotEvent(project, shot.ID, VideoShotStatusQueued, "", "")
 	updated, _ := s.getVideoShot(project.ID, shot.ID)
 	c.JSON(http.StatusOK, gin.H{"shot": updated})
 }
@@ -485,6 +549,11 @@ func (s *Server) handleVideoShotRetry(c *gin.Context) {
 	s.handleVideoShotSubmit(c)
 }
 
+// handleVideoProjectSubmitAll kicks off submission of every pending/failed
+// shot in the project and returns immediately. The actual submissions run
+// in a background goroutine so a 10-shot script doesn't block the HTTP
+// request for ~20s (provider rate-limit pacing × N). Status flows back to
+// the UI via WS broadcasts as each shot lands in the queued state.
 func (s *Server) handleVideoProjectSubmitAll(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -504,8 +573,8 @@ func (s *Server) handleVideoProjectSubmitAll(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
-	submitted := 0
-	failed := 0
+	pending := make([]VideoShot, 0, len(shots))
+	pendingIDs := make([]int64, 0, len(shots))
 	for i := range shots {
 		shot := shots[i]
 		// Only auto-submit shots that haven't been sent yet OR that previously
@@ -514,20 +583,55 @@ func (s *Server) handleVideoProjectSubmitAll(c *gin.Context) {
 		if shot.Status != VideoShotStatusPending && shot.Status != VideoShotStatusFailed {
 			continue
 		}
+		pending = append(pending, shot)
+		pendingIDs = append(pendingIDs, shot.ID)
+	}
+	if len(pending) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"queued":    0,
+			"shot_ids":  pendingIDs,
+			"async":     true,
+		})
+		return
+	}
+	go s.runSubmitAllInBackground(userID, project.ID, pending)
+	c.JSON(http.StatusAccepted, gin.H{
+		"queued":   len(pending),
+		"shot_ids": pendingIDs,
+		"async":    true,
+	})
+}
+
+// runSubmitAllInBackground iterates the pre-filtered shot list and submits
+// each one with a 2-second pause between calls (mirrors the bash script's
+// sleep 2 to dodge per-account rate limits). After every state transition
+// we broadcast a shot_status WS event so the studio page reflects progress
+// in real time without polling. The function takes a fresh copy of the
+// project pointer per shot so a concurrent rename or default-config swap
+// doesn't poison submissions mid-run.
+func (s *Server) runSubmitAllInBackground(userID string, projectID int64, shots []VideoShot) {
+	for i := range shots {
+		shot := shots[i]
+		// Re-load the project on every iteration so a default-config swap
+		// during the run is honored, and so a deletion mid-run aborts the
+		// remaining submissions instead of erroring on each one.
+		project, err := s.getVideoProjectByID(projectID)
+		if err != nil || project == nil {
+			return
+		}
+		if project.OwnerUserID != userID {
+			return
+		}
 		if err := s.submitShotToProvider(userID, project, &shot); err != nil {
 			_ = s.markVideoShotStatus(shot.ID, VideoShotStatusFailed, "", err.Error(), time.Now())
-			failed++
-			continue
+			s.broadcastVideoShotEvent(project, shot.ID, VideoShotStatusFailed, "", err.Error())
+		} else {
+			s.broadcastVideoShotEvent(project, shot.ID, VideoShotStatusQueued, "", "")
 		}
-		submitted++
-		// Mirror the bash script's `sleep 2` between submissions to dodge
-		// per-account rate limits on the provider side.
-		time.Sleep(2 * time.Second)
+		if i < len(shots)-1 {
+			time.Sleep(2 * time.Second)
+		}
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"submitted": submitted,
-		"failed":    failed,
-	})
 }
 
 // ---- Asset upload + tweak --------------------------------------------------

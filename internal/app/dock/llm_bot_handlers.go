@@ -59,6 +59,10 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
 		Shared       bool   `json:"shared"`
+		// Optional discriminator + extras blob. Empty values get the
+		// 'text' / '{}' DB defaults so existing clients keep working.
+		ProviderKind string `json:"provider_kind"`
+		Extras       string `json:"extras"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
@@ -71,6 +75,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "名称、Base URL 和 Model 不能为空"})
 		return
 	}
+	now := time.Now()
 	item, err := s.createLLMConfig(
 		userIDStr,
 		name,
@@ -80,11 +85,23 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		strings.TrimSpace(req.SystemPrompt),
 		generateSessionID()[:24],
 		req.Shared,
-		time.Now(),
+		now,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
 		return
+	}
+	if kind := strings.TrimSpace(req.ProviderKind); kind != "" && kind != LLMConfigKindText {
+		extras := strings.TrimSpace(req.Extras)
+		if extras == "" {
+			extras = "{}"
+		}
+		if err := s.upsertLLMConfigKindAndExtras(userIDStr, item.ID, kind, []byte(extras), now); err != nil {
+			// Soft failure: the row exists, just without the kind/extras
+			// override. Worth logging but don't fail the create.
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 provider 类型失败"})
+			return
+		}
 	}
 	c.JSON(http.StatusCreated, gin.H{"config": item, "message": "配置已创建"})
 }
@@ -105,6 +122,8 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		SystemPrompt string `json:"system_prompt"`
 		Shared       bool   `json:"shared"`
 		UpdateAPIKey bool   `json:"update_api_key"`
+		ProviderKind string `json:"provider_kind"`
+		Extras       string `json:"extras"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
@@ -117,6 +136,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "名称、Base URL 和 Model 不能为空"})
 		return
 	}
+	now := time.Now()
 	item, err := s.updateLLMConfig(
 		userIDStr, id,
 		name,
@@ -126,7 +146,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		strings.TrimSpace(req.SystemPrompt),
 		req.Shared,
 		req.UpdateAPIKey,
-		time.Now(),
+		now,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败"})
@@ -135,6 +155,16 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 	if item == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
 		return
+	}
+	if kind := strings.TrimSpace(req.ProviderKind); kind != "" {
+		extras := strings.TrimSpace(req.Extras)
+		if extras == "" {
+			extras = "{}"
+		}
+		if err := s.upsertLLMConfigKindAndExtras(userIDStr, item.ID, kind, []byte(extras), now); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 provider 类型失败"})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"config": item, "message": "配置已更新"})
 }

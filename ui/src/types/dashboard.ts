@@ -135,6 +135,10 @@ export type LLMConfigPayload = {
   api_key?: string;
   system_prompt: string;
   shared?: boolean;
+  // Optional discriminator + extras blob. Defaults to "text" / "{}" on the
+  // backend; only video-kind presets (Seedance et al.) need to set these.
+  provider_kind?: string;
+  extras?: string;
 };
 
 export type LLMConfig = {

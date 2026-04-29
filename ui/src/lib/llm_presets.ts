@@ -1,11 +1,18 @@
 export type LLMProviderPreset = {
   id: string;
   displayName: string;
-  kind: "claude" | "openaiCompatible" | "xaiResponses";
+  kind: "claude" | "openaiCompatible" | "xaiResponses" | "videoSeedance";
   endpoint: string | null;
   defaultModelID: string;
   docsURL: string;
   note: string;
+  // providerKind maps to llm_configs.provider_kind; "text" for chat models,
+  // "video.seedance" for the Volces/Doubao Seedance video adapter, etc.
+  // Defaults to "text" when unset so existing presets stay text-only.
+  providerKind?: string;
+  // extras is a JSON blob of provider-specific defaults persisted on the
+  // config row. For Seedance: ratio / duration / generate_audio / watermark.
+  extras?: string;
 };
 
 export const LLM_PROVIDER_PRESETS: LLMProviderPreset[] = [
@@ -81,6 +88,20 @@ export const LLM_PROVIDER_PRESETS: LLMProviderPreset[] = [
     docsURL: "https://mimo.xiaomi.com/",
     note: "Xiaomi MiMo",
   },
+  {
+    // Video preset. NOT a chat model — this config is consumed only by
+    // the Video Studio module and is filtered out of the chat / bot
+    // pickers by provider_kind on the backend.
+    id: "seedance",
+    displayName: "🎬 Seedance · 火山豆包视频",
+    kind: "videoSeedance",
+    endpoint: "https://ark.cn-beijing.volces.com/api/v3",
+    defaultModelID: "doubao-seedance-1-0-pro-250528",
+    docsURL: "https://console.volcengine.com/ark",
+    note: "Video generation only. Use in Video Studio, not Chat. 仅用于 Video Studio，不参与 Chat。",
+    providerKind: "video.seedance",
+    extras: `{"ratio":"9:16","duration":10,"generate_audio":true,"watermark":false}`,
+  },
 ];
 
 export function getPresetByID(id: string): LLMProviderPreset | undefined {
@@ -98,6 +119,14 @@ export function resolvePresetEndpoint(preset: LLMProviderPreset): string {
     return "https://api.anthropic.com/v1/messages";
   }
   return "";
+}
+
+export function resolvePresetProviderKind(preset: LLMProviderPreset): string {
+  return preset.providerKind || "text";
+}
+
+export function resolvePresetExtras(preset: LLMProviderPreset): string {
+  return preset.extras || "{}";
 }
 
 export function matchPresetByBaseURL(baseURL: string): string | null {

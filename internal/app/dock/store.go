@@ -1623,13 +1623,19 @@ func (s *Server) getLLMConfigForBot(botUserID string) (*LLMConfig, string, error
 	return &item, apiKey, nil
 }
 
+// getAvailableLLMConfigWithAPIKey resolves a chat-side LLM config the user
+// can use. Filters out video-kind rows so a forged config_id (e.g. someone
+// pasting a Seedance video config id into chat-start) can't bypass the
+// list-side filtering and end up calling a video provider as a chat bot.
 func (s *Server) getAvailableLLMConfigWithAPIKey(ownerUserID string, id int64) (*LLMConfig, string, error) {
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
 		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
-		  WHERE id = $1 AND (owner_user_id = $2 OR shared = TRUE)`,
+		  WHERE id = $1
+		    AND (owner_user_id = $2 OR shared = TRUE)
+		    AND (provider_kind = 'text' OR provider_kind = '' OR provider_kind IS NULL)`,
 		id,
 		ownerUserID,
 	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
@@ -1694,11 +1700,17 @@ func (s *Server) deleteLLMConfig(ownerUserID string, id int64) (bool, error) {
 	return affected > 0, nil
 }
 
+// listAvailableLLMConfigs returns the user's own configs + shared configs
+// from other users, but **only text-kind** ones — chat / bot pickers must
+// not surface video providers (Seedance et al.) or the user gets confused
+// when their bot can't reply. Empty provider_kind is treated as 'text' so
+// existing rows pre-migration keep working.
 func (s *Server) listAvailableLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
 	rows, err := s.db.Query(
 		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
-		  WHERE owner_user_id = $1 OR shared = TRUE
+		  WHERE (owner_user_id = $1 OR shared = TRUE)
+		    AND (provider_kind = 'text' OR provider_kind = '' OR provider_kind IS NULL)
 		  ORDER BY (owner_user_id = $1) DESC, updated_at DESC, id DESC`,
 		ownerUserID,
 	)

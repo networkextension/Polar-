@@ -97,6 +97,12 @@ export async function retryVideoShot(projectID: number, shotID: number) {
   });
 }
 
+export async function duplicateVideoShot(projectID: number, shotID: number) {
+  return requestJson<VideoSingleShotResponse>(`/api/video-projects/${projectID}/shots/${shotID}/duplicate`, {
+    method: "POST",
+  });
+}
+
 export async function submitAllVideoShots(projectID: number) {
   return requestJson<VideoSubmitAllResponse>(`/api/video-projects/${projectID}/submit-all`, {
     method: "POST",

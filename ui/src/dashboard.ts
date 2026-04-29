@@ -36,7 +36,7 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
-import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint } from "./lib/llm_presets.js";
+import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint, resolvePresetExtras, resolvePresetProviderKind } from "./lib/llm_presets.js";
 import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
 import { t, getLang, setLang, applyI18n } from "./lib/i18n.js";
@@ -216,6 +216,8 @@ function collectLLMConfigPayloadFromForm(): LLMConfigPayload {
     api_key: llmConfigApiKeyInput.value.trim(),
     system_prompt: llmConfigSystemPromptInput.value.trim(),
     shared: llmConfigSharedInput.checked,
+    provider_kind: resolvePresetProviderKind(preset),
+    extras: resolvePresetExtras(preset),
   };
 }
 

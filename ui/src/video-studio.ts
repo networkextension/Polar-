@@ -12,6 +12,7 @@ import {
   deleteVideoAsset,
   deleteVideoProject,
   deleteVideoShot,
+  duplicateVideoShot,
   fetchVideoLLMConfigs,
   fetchVideoProject,
   fetchVideoProjects,
@@ -48,6 +49,7 @@ const projectTitleInput = byId<HTMLInputElement>("videoProjectTitle");
 const projectStatusEl = byId<HTMLElement>("videoProjectStatus");
 const projectConfigSelect = byId<HTMLSelectElement>("videoProjectConfigSelect");
 const submitAllBtn = byId<HTMLButtonElement>("videoSubmitAllBtn");
+const downloadAllBtn = byId<HTMLButtonElement>("videoDownloadAllBtn");
 const renderBtn = byId<HTMLButtonElement>("videoRenderBtn");
 const deleteProjectBtn = byId<HTMLButtonElement>("videoDeleteProjectBtn");
 const addShotBtn = byId<HTMLButtonElement>("videoAddShotBtn");
@@ -178,6 +180,7 @@ function renderShotList(): void {
             <div class="video-shot-actions">
               ${submitable ? `<button class="btn-chip" data-shot-action="submit" type="button">${submitLabel}</button>` : ""}
               ${downloadBtn}
+              <button class="btn-chip" data-shot-action="duplicate" type="button">${escapeHtml(t("video.duplicate") || "Duplicate")}</button>
               <button class="btn-chip" data-shot-action="delete" type="button">${escapeHtml(t("common.delete") || "Delete")}</button>
             </div>
           </header>
@@ -422,16 +425,31 @@ bulkImportConfirmBtn.addEventListener("click", async () => {
 submitAllBtn.addEventListener("click", async () => {
   if (!activeProject) return;
   submitAllBtn.disabled = true;
+  // Backend is async (202 + WS broadcasts), so we don't block on the
+  // network round-trip — the click feedback is enough. Optimistically flip
+  // the returned shot_ids to "queued" in the local state so the user sees
+  // movement instantly even before the first WS event arrives.
   try {
     const { response, data } = await submitAllVideoShots(activeProject.id);
     if (!response.ok) {
       alert(data.error || "Submit-all failed");
       return;
     }
-    await refreshActiveProject();
+    if (data.shot_ids?.length) {
+      const queued = new Set(data.shot_ids);
+      activeShots = activeShots.map((shot) => (queued.has(shot.id) ? { ...shot, status: "queued" as const } : shot));
+      renderShotList();
+    }
   } finally {
     submitAllBtn.disabled = false;
   }
+});
+
+downloadAllBtn.addEventListener("click", () => {
+  if (!activeProject) return;
+  // Plain redirect — the auth cookie rides along, the response sets
+  // Content-Disposition so the browser saves rather than navigates.
+  window.location.href = `/api/video-projects/${activeProject.id}/shots.zip`;
 });
 
 renderBtn.addEventListener("click", async () => {
@@ -494,6 +512,13 @@ shotListEl.addEventListener("click", async (event) => {
       : await submitVideoShot(activeProject.id, shotID);
     if (!response.ok) {
       alert(data.error || "Submit failed");
+    }
+    await refreshActiveProject();
+  } else if (action === "duplicate") {
+    const { response, data } = await duplicateVideoShot(activeProject.id, shotID);
+    if (!response.ok) {
+      alert(data.error || "Duplicate failed");
+      return;
     }
     await refreshActiveProject();
   } else if (action === "delete") {
