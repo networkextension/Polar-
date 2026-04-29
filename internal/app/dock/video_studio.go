@@ -697,7 +697,10 @@ func (s *Server) submitShotToProvider(userID string, project *VideoProject, shot
 	if err != nil {
 		return err
 	}
-	if err := s.markVideoShotSubmitted(shot.ID, taskID, time.Now()); err != nil {
+	// markVideoShotResubmitted clears stale video_url / poster_url too,
+	// which is what we want for the regenerate flow. First-time
+	// submissions are unaffected since those fields are already empty.
+	if err := s.markVideoShotResubmitted(shot.ID, taskID, time.Now()); err != nil {
 		return err
 	}
 	return nil

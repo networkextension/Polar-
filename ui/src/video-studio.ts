@@ -162,19 +162,33 @@ function renderShotList(): void {
       const errorBlock = shot.error_message
         ? `<div class="video-shot-error">${escapeHtml(shot.error_message)}</div>`
         : "";
+      // Cache-bust video and poster URLs whenever the row changes so a
+      // regenerate (which keeps the deterministic filename) doesn't serve
+      // stale bytes out of the browser cache. updated_at bumps on every
+      // status change, so it's a natural version cookie.
+      const cacheBust = shot.updated_at ? `?v=${encodeURIComponent(shot.updated_at)}` : "";
+      const videoSrc = shot.video_url ? `${shot.video_url}${cacheBust}` : "";
+      const posterSrc = shot.poster_url ? `${shot.poster_url}${cacheBust}` : "";
       // preload="none" + poster avoids browsers fetching MP4 bytes until
       // the user actually presses play. The cached poster is generated
       // server-side via ffmpeg right after the shot lands in storage.
-      const posterAttr = shot.poster_url ? ` poster="${escapeHtml(shot.poster_url)}"` : "";
-      const playerBlock = shot.video_url
-        ? `<video class="video-shot-preview" src="${escapeHtml(shot.video_url)}" controls preload="none"${posterAttr}></video>`
+      const posterAttr = posterSrc ? ` poster="${escapeHtml(posterSrc)}"` : "";
+      const playerBlock = videoSrc
+        ? `<video class="video-shot-preview" src="${escapeHtml(videoSrc)}" controls preload="none"${posterAttr}></video>`
         : `<div class="video-shot-placeholder">${escapeHtml(t("video.notReady") || "Not ready yet")}</div>`;
       const submitable = shot.status === "pending" || shot.status === "failed";
       const submitLabel = shot.status === "failed"
         ? escapeHtml(t("video.retry") || "Retry")
         : escapeHtml(t("video.submit") || "Submit");
+      // Regenerate is the "I want to tweak the prompt and try again" path
+      // for shots already in the can. Only show it on succeeded — queued
+      // and running already have a request in flight; pending/failed use
+      // the Submit/Retry chip path.
+      const regenBtn = shot.status === "succeeded"
+        ? `<button class="btn-chip" data-shot-action="regenerate" type="button">${escapeHtml(t("video.regenerate") || "Regenerate")}</button>`
+        : "";
       const downloadBtn = shot.video_url
-        ? `<a class="btn-chip" href="${escapeHtml(shot.video_url)}" download>${escapeHtml(t("video.download") || "Download")}</a>`
+        ? `<a class="btn-chip" href="${escapeHtml(videoSrc)}" download>${escapeHtml(t("video.download") || "Download")}</a>`
         : "";
       const captureBtn = shot.video_url
         ? `<button class="btn-chip" data-shot-action="capture-frame" type="button" title="${escapeHtml(t("video.useThisFrameHint") || "Pause the video at the desired frame, then click")}">${escapeHtml(t("video.useThisFrame") || "📸 Use this frame")}</button>`
@@ -188,6 +202,7 @@ function renderShotList(): void {
             <input class="input video-shot-duration" type="number" min="1" max="60" data-shot-field="duration" value="${dur}" />
             <div class="video-shot-actions">
               ${submitable ? `<button class="btn-chip" data-shot-action="submit" type="button">${submitLabel}</button>` : ""}
+              ${regenBtn}
               ${downloadBtn}
               ${captureBtn}
               <button class="btn-chip" data-shot-action="duplicate" type="button">${escapeHtml(t("video.duplicate") || "Duplicate")}</button>
@@ -576,6 +591,27 @@ shotListEl.addEventListener("click", async (event) => {
       return;
     }
     await refreshActiveProject();
+  } else if (action === "regenerate") {
+    if (!window.confirm(t("video.confirmRegenerate") || "Regenerating will replace the current video. Continue?")) return;
+    // Optimistic flip so the shot card immediately shows "queued" state
+    // and the stale player vanishes — WS broadcast reconciles on real
+    // status arrival. Reuses the existing /shots/:id/submit endpoint;
+    // the backend's markVideoShotResubmitted clears video_url + poster_url
+    // server-side too.
+    const idx = activeShots.findIndex((s) => s.id === shotID);
+    if (idx !== -1) {
+      const next = activeShots.slice();
+      next[idx] = { ...next[idx], status: "queued", video_url: undefined, poster_url: undefined, error_message: undefined };
+      activeShots = next;
+      renderShotList();
+    }
+    const { response, data } = await submitVideoShot(activeProject.id, shotID);
+    if (!response.ok) {
+      alert(data.error || "Regenerate failed");
+      // Recover authoritative state on failure (the row may still be
+      // succeeded if the provider rejected the new request).
+      await refreshActiveProject();
+    }
   } else if (action === "delete") {
     if (!window.confirm(t("video.confirmDeleteShot") || "Delete this shot?")) return;
     const response = await deleteVideoShot(activeProject.id, shotID);

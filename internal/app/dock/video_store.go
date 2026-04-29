@@ -432,6 +432,28 @@ func (s *Server) markVideoShotSubmitted(id int64, taskID string, now time.Time) 
 	return err
 }
 
+// markVideoShotResubmitted is the path used by both first-time submissions
+// and regenerations — clears video_url / poster_url / completed_at along
+// with the queued-state reset so the UI flips back to "generating" the
+// instant the user clicks Regenerate. Safe for first-time submissions
+// because those fields are already empty.
+func (s *Server) markVideoShotResubmitted(id int64, taskID string, now time.Time) error {
+	_, err := s.db.Exec(
+		`UPDATE video_shots
+		    SET task_id = $2,
+		        status = 'queued',
+		        video_url = '',
+		        poster_url = '',
+		        error_message = '',
+		        completed_at = NULL,
+		        submitted_at = $3,
+		        updated_at = $3
+		  WHERE id = $1`,
+		id, taskID, now,
+	)
+	return err
+}
+
 // markVideoShotStatus updates the in-flight status as the poll worker sees
 // new states from the provider. videoURL is only meaningful when the new
 // status is 'succeeded'; errorMessage only when 'failed'.
