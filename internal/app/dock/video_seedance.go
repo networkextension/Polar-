@@ -107,9 +107,14 @@ type seedanceSubmitRequest struct {
 	Watermark      bool                    `json:"watermark"`
 }
 
+// seedanceContentEntry is a single entry in the multimodal content array.
+// type="text" carries Text; type="image_url" carries ImageURL (used for
+// character-reference / first-frame conditioning so multi-shot sequences
+// keep the same character).
 type seedanceContentEntry struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
 }
 
 type seedanceSubmitResponse struct {
@@ -135,8 +140,11 @@ type seedanceMediaBlock struct {
 
 // submitSeedanceTask posts one prompt to the Seedance task endpoint and
 // returns the new task_id. The model + auth come from the supplied
-// LLMConfig.
-func submitSeedanceTask(ctx context.Context, client *http.Client, baseURL, apiKey, model, prompt string, params SeedanceParams) (string, error) {
+// LLMConfig. characterRefURL is optional — when set, Seedance receives
+// a multimodal content payload (image_url + text) so the generated video
+// uses the supplied frame as the character/style reference instead of
+// inventing a fresh face every shot.
+func submitSeedanceTask(ctx context.Context, client *http.Client, baseURL, apiKey, model, prompt, characterRefURL string, params SeedanceParams) (string, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -149,11 +157,19 @@ func submitSeedanceTask(ctx context.Context, client *http.Client, baseURL, apiKe
 	if strings.TrimSpace(prompt) == "" {
 		return "", errors.New("seedance: empty prompt")
 	}
+	finalPrompt := prompt
+	content := []seedanceContentEntry{}
+	if ref := strings.TrimSpace(characterRefURL); ref != "" {
+		// Prepend the reference image first (Seedance expects image_url
+		// before text in the content array) and lightly nudge the prompt
+		// so the model knows to lock onto the referenced character.
+		content = append(content, seedanceContentEntry{Type: "image_url", ImageURL: ref})
+		finalPrompt = "基于参考图人物保持外貌一致；" + prompt
+	}
+	content = append(content, seedanceContentEntry{Type: "text", Text: finalPrompt})
 	body, err := json.Marshal(seedanceSubmitRequest{
-		Model: model,
-		Content: []seedanceContentEntry{
-			{Type: "text", Text: prompt},
-		},
+		Model:         model,
+		Content:       content,
 		Ratio:         params.Ratio,
 		Duration:      params.Duration,
 		GenerateAudio: params.GenerateAudio,

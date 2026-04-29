@@ -59,7 +59,7 @@ export type VideoShot = {
 export type VideoAsset = {
   id: number;
   project_id: number;
-  kind: "audio_bgm" | "voiceover";
+  kind: "audio_bgm" | "voiceover" | "character_reference";
   url: string;
   file_name: string;
   mime_type: string;

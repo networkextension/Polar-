@@ -13,6 +13,7 @@ import {
   deleteVideoProject,
   deleteVideoShot,
   duplicateVideoShot,
+  extractCharacterFrame,
   fetchVideoLLMConfigs,
   fetchVideoProject,
   fetchVideoProjects,
@@ -60,6 +61,7 @@ const bulkImportPreview = byId<HTMLElement>("videoBulkImportPreview");
 const bulkImportCancelBtn = byId<HTMLButtonElement>("videoBulkImportCancelBtn");
 const bulkImportConfirmBtn = byId<HTMLButtonElement>("videoBulkImportConfirmBtn");
 const shotListEl = byId<HTMLElement>("videoShotList");
+const referenceStripEl = byId<HTMLElement>("videoReferenceStrip");
 const bgmInput = byId<HTMLInputElement>("videoBgmInput");
 const voiceInput = byId<HTMLInputElement>("videoVoiceInput");
 const recordBtn = byId<HTMLButtonElement>("videoRecordBtn");
@@ -170,6 +172,9 @@ function renderShotList(): void {
       const downloadBtn = shot.video_url
         ? `<a class="btn-chip" href="${escapeHtml(shot.video_url)}" download>${escapeHtml(t("video.download") || "Download")}</a>`
         : "";
+      const captureBtn = shot.video_url
+        ? `<button class="btn-chip" data-shot-action="capture-frame" type="button" title="${escapeHtml(t("video.useThisFrameHint") || "Pause the video at the desired frame, then click")}">${escapeHtml(t("video.useThisFrame") || "📸 Use this frame")}</button>`
+        : "";
       return `
         <article class="video-shot-card" data-shot-id="${shot.id}">
           <header class="video-shot-head">
@@ -180,6 +185,7 @@ function renderShotList(): void {
             <div class="video-shot-actions">
               ${submitable ? `<button class="btn-chip" data-shot-action="submit" type="button">${submitLabel}</button>` : ""}
               ${downloadBtn}
+              ${captureBtn}
               <button class="btn-chip" data-shot-action="duplicate" type="button">${escapeHtml(t("video.duplicate") || "Duplicate")}</button>
               <button class="btn-chip" data-shot-action="delete" type="button">${escapeHtml(t("common.delete") || "Delete")}</button>
             </div>
@@ -198,6 +204,37 @@ function renderAssets(): void {
   const voice = activeAssets.filter((a) => a.kind === "voiceover");
   bgmListEl.innerHTML = renderAssetGroup(bgm, "audio_bgm");
   voiceListEl.innerHTML = renderAssetGroup(voice, "voiceover");
+  renderReferenceStrip();
+}
+
+function renderReferenceStrip(): void {
+  const refs = activeAssets.filter((a) => a.kind === "character_reference");
+  if (!refs.length) {
+    referenceStripEl.hidden = true;
+    referenceStripEl.innerHTML = "";
+    return;
+  }
+  referenceStripEl.hidden = false;
+  // Latest-first so the one currently used by submissions is leftmost.
+  const ordered = [...refs].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+  referenceStripEl.innerHTML = `
+    <div class="video-reference-head">
+      <span class="badge">${escapeHtml(t("video.characterReferences") || "Character references")}</span>
+      <span class="video-reference-hint">${escapeHtml(t("video.characterReferenceHint") || "Latest used as first frame on submit")}</span>
+    </div>
+    <div class="video-reference-thumbs">
+      ${ordered
+        .map(
+          (asset, idx) => `
+        <div class="video-reference-thumb${idx === 0 ? " is-active" : ""}" data-asset-id="${asset.id}">
+          <img src="${escapeHtml(asset.url)}" alt="character reference" />
+          <button class="video-reference-delete" type="button" data-asset-action="delete" title="${escapeHtml(t("common.delete") || "Delete")}">×</button>
+        </div>
+      `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function renderAssetGroup(assets: VideoAsset[], kind: "audio_bgm" | "voiceover"): string {
@@ -514,6 +551,20 @@ shotListEl.addEventListener("click", async (event) => {
       alert(data.error || "Submit failed");
     }
     await refreshActiveProject();
+  } else if (action === "capture-frame") {
+    const videoEl = card.querySelector<HTMLVideoElement>("video.video-shot-preview");
+    if (!videoEl) {
+      alert("Video not available yet");
+      return;
+    }
+    const ms = (videoEl.currentTime || 0) * 1000;
+    const { response, data } = await extractCharacterFrame(activeProject.id, shotID, ms);
+    if (!response.ok || !data.asset) {
+      alert(data.error || "Capture failed");
+      return;
+    }
+    activeAssets = [data.asset, ...activeAssets];
+    renderAssets();
   } else if (action === "duplicate") {
     const { response, data } = await duplicateVideoShot(activeProject.id, shotID);
     if (!response.ok) {
@@ -685,6 +736,23 @@ assetListContainer?.addEventListener("click", async (event) => {
     return;
   }
   await refreshActiveProject();
+});
+
+referenceStripEl.addEventListener("click", async (event) => {
+  if (!activeProject) return;
+  const target = event.target as HTMLElement;
+  if (target.dataset.assetAction !== "delete") return;
+  const thumb = target.closest<HTMLElement>(".video-reference-thumb");
+  if (!thumb) return;
+  const assetID = Number(thumb.dataset.assetId);
+  if (!assetID) return;
+  const response = await deleteVideoAsset(activeProject.id, assetID);
+  if (!response.ok) {
+    alert("Delete failed");
+    return;
+  }
+  activeAssets = activeAssets.filter((a) => a.id !== assetID);
+  renderAssets();
 });
 
 // ---- WebSocket: multiplex on the existing chat connection ---------------

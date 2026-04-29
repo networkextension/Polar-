@@ -323,8 +323,9 @@ type VideoAsset struct {
 }
 
 const (
-	VideoAssetKindBGM       = "audio_bgm"
-	VideoAssetKindVoiceover = "voiceover"
+	VideoAssetKindBGM           = "audio_bgm"
+	VideoAssetKindVoiceover     = "voiceover"
+	VideoAssetKindCharacterRef  = "character_reference"
 )
 
 type PackTunnelProfile struct {

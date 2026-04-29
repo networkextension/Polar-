@@ -103,6 +103,13 @@ export async function duplicateVideoShot(projectID: number, shotID: number) {
   });
 }
 
+export async function extractCharacterFrame(projectID: number, shotID: number, timestampMs: number) {
+  return requestJson<VideoSingleAssetResponse>(`/api/video-projects/${projectID}/shots/${shotID}/extract-frame`, {
+    method: "POST",
+    body: { timestamp_ms: Math.max(0, Math.round(timestampMs)) },
+  });
+}
+
 export async function submitAllVideoShots(projectID: number) {
   return requestJson<VideoSubmitAllResponse>(`/api/video-projects/${projectID}/submit-all`, {
     method: "POST",

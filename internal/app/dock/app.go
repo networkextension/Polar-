@@ -515,6 +515,7 @@ func (s *Server) registerRoutes() {
 		api.POST("/video-projects/:id/shots/:shotId/submit", s.AuthMiddleware(), s.handleVideoShotSubmit)
 		api.POST("/video-projects/:id/shots/:shotId/retry", s.AuthMiddleware(), s.handleVideoShotRetry)
 		api.POST("/video-projects/:id/shots/:shotId/duplicate", s.AuthMiddleware(), s.handleVideoShotDuplicate)
+		api.POST("/video-projects/:id/shots/:shotId/extract-frame", s.AuthMiddleware(), s.handleVideoShotExtractFrame)
 		api.POST("/video-projects/:id/submit-all", s.AuthMiddleware(), s.handleVideoProjectSubmitAll)
 		api.POST("/video-projects/:id/assets", s.AuthMiddleware(), s.handleVideoAssetUpload)
 		api.PATCH("/video-projects/:id/assets/:assetId", s.AuthMiddleware(), s.handleVideoAssetUpdate)

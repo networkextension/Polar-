@@ -7,10 +7,12 @@ package dock
 // only persist state and enqueue.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -377,6 +379,123 @@ func (s *Server) handleVideoShotUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"shot": shot})
 }
 
+// extractCharacterFrameAsset downloads the shot's video into a temp dir,
+// runs ffmpeg to grab one PNG frame at the requested timestamp, hands the
+// PNG off to the existing Storage interface (local /uploads or R2), and
+// inserts a video_assets row tagged character_reference. Reuses the same
+// downloadOrCopy resolver as the render worker so local + R2 video URLs
+// behave identically here.
+func (s *Server) extractCharacterFrameAsset(ctx context.Context, project *VideoProject, shot *VideoShot, timestampMs int64) (*VideoAsset, error) {
+	if s.uploadDir == "" {
+		return nil, fmt.Errorf("upload dir not configured")
+	}
+	workDir, err := os.MkdirTemp("", fmt.Sprintf("video-frame-%d-", shot.ID))
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(workDir)
+	videoPath := filepath.Join(workDir, "src.mp4")
+	if err := s.downloadOrCopy(ctx, shot.VideoURL, videoPath); err != nil {
+		return nil, fmt.Errorf("stage source video: %w", err)
+	}
+	framePath := filepath.Join(workDir, "frame.png")
+	// -ss before -i is fast (input-side seek). -frames:v 1 grabs exactly
+	// one frame; PNG is lossless so the reference quality stays high.
+	cmd := exec.CommandContext(ctx, videoFFmpegBin(),
+		"-y",
+		"-ss", fmt.Sprintf("%.3f", float64(timestampMs)/1000.0),
+		"-i", videoPath,
+		"-frames:v", "1",
+		"-q:v", "2",
+		framePath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("ffmpeg extract failed: %w: %s", err, truncateBody(out, 400))
+	}
+	stat, err := os.Stat(framePath)
+	if err != nil {
+		return nil, fmt.Errorf("frame not produced: %w", err)
+	}
+	filename := fmt.Sprintf("video_charref_%s_%d_%d_%d.png",
+		strings.ReplaceAll(project.OwnerUserID, "/", "_"),
+		project.ID, shot.ID, time.Now().Unix())
+	dst := filepath.Join(s.uploadDir, filename)
+	if err := os.Rename(framePath, dst); err != nil {
+		if cerr := copyFile(framePath, dst); cerr != nil {
+			return nil, cerr
+		}
+	}
+	publicURL, err := s.chatStorage.Store(ctx, dst, filename, "image/png")
+	if err != nil {
+		removeLocalFile(dst)
+		return nil, fmt.Errorf("store frame: %w", err)
+	}
+	asset, err := s.createVideoAsset(CreateVideoAssetInput{
+		ProjectID: project.ID,
+		Kind:      VideoAssetKindCharacterRef,
+		URL:       publicURL,
+		FileName:  filename,
+		MimeType:  "image/png",
+		Size:      stat.Size(),
+	}, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	return asset, nil
+}
+
+// handleVideoShotExtractFrame pulls a single frame out of a finished shot
+// and saves it as a project-level character_reference asset. The frontend
+// reads the user's preferred timestamp from the playing <video> element
+// (videoEl.currentTime * 1000) and posts it here, so users pause where the
+// character's face is clearest and the resulting PNG becomes the next
+// shot's first-frame conditioner — keeping the same actor across shots.
+func (s *Server) handleVideoShotExtractFrame(c *gin.Context) {
+	userID, ok := requireUserID(c)
+	if !ok {
+		return
+	}
+	projectID, ok := parseInt64Param(c, "id")
+	if !ok {
+		return
+	}
+	shotID, ok := parseInt64Param(c, "shotId")
+	if !ok {
+		return
+	}
+	project, err := s.getVideoProject(userID, projectID)
+	if err != nil || project == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "项目不存在"})
+		return
+	}
+	shot, err := s.getVideoShot(project.ID, shotID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if shot == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "镜头不存在"})
+		return
+	}
+	if shot.Status != VideoShotStatusSucceeded || shot.VideoURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该镜头尚未生成完成"})
+		return
+	}
+	var req struct {
+		TimestampMs int64 `json:"timestamp_ms"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	if req.TimestampMs < 0 {
+		req.TimestampMs = 0
+	}
+	asset, err := s.extractCharacterFrameAsset(c.Request.Context(), project, shot, req.TimestampMs)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"asset": asset})
+}
+
 // handleVideoShotDuplicate copies an existing shot's prompt + params into a
 // new pending shot at the end of the project. Mode-1 iteration helper:
 // "make a tweaked variant" without retyping. The new row's task_id is empty
@@ -495,7 +614,19 @@ func (s *Server) submitShotToProvider(userID string, project *VideoProject, shot
 		GenerateAudio: shot.GenerateAudio,
 		Watermark:     shot.Watermark,
 	}
-	taskID, err := s.videoProvider.submitVideoTask(s.videoProviderCtx, cfg, apiKey, shot.Prompt, override)
+	// Look up the most recent character_reference asset for this project
+	// so the provider gets a consistent first-frame across shots. Latest
+	// wins — re-capturing implicitly overrides the older reference.
+	characterRefURL := ""
+	if assets, err := s.listVideoAssetsForProject(project.ID); err == nil {
+		for _, a := range assets {
+			if a.Kind == VideoAssetKindCharacterRef && a.URL != "" {
+				characterRefURL = a.URL
+				break // listVideoAssetsForProject orders DESC by created_at, first match is latest
+			}
+		}
+	}
+	taskID, err := s.videoProvider.submitVideoTask(s.videoProviderCtx, cfg, apiKey, shot.Prompt, characterRefURL, override)
 	if err != nil {
 		return err
 	}

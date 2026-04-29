@@ -39,15 +39,16 @@ func newVideoProviderClient() *videoProviderClient {
 // submitVideoTask dispatches a per-shot submission to the right provider
 // and returns the external task id. Today: Seedance only; other kinds get
 // ErrUnsupportedVideoProvider so the caller can flip the shot to failed
-// with a clear message.
-func (vp *videoProviderClient) submitVideoTask(ctx context.Context, cfg *LLMConfig, apiKey, prompt string, shotParams SeedanceParams) (string, error) {
+// with a clear message. characterRefURL is optional and only honored by
+// providers that support image+text multimodal input.
+func (vp *videoProviderClient) submitVideoTask(ctx context.Context, cfg *LLMConfig, apiKey, prompt, characterRefURL string, shotParams SeedanceParams) (string, error) {
 	if cfg == nil {
 		return "", errors.New("video provider: nil config")
 	}
 	switch cfg.ProviderKind {
 	case LLMConfigKindVideoSeedance:
 		params := SeedanceParamsFromExtras(cfg.Extras, shotParams)
-		return submitSeedanceTask(ctx, vp.http, cfg.BaseURL, apiKey, cfg.Model, prompt, params)
+		return submitSeedanceTask(ctx, vp.http, cfg.BaseURL, apiKey, cfg.Model, prompt, characterRefURL, params)
 	default:
 		return "", fmt.Errorf("%w: %q", ErrUnsupportedVideoProvider, cfg.ProviderKind)
 	}
