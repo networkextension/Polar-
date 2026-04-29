@@ -231,18 +231,101 @@ type SystemInfo struct {
 }
 
 type LLMConfig struct {
-	ID           int64     `json:"id"`
-	OwnerUserID  string    `json:"owner_user_id"`
-	ShareID      string    `json:"share_id"`
-	Shared       bool      `json:"shared"`
-	Name         string    `json:"name"`
-	BaseURL      string    `json:"base_url"`
-	Model        string    `json:"model"`
-	SystemPrompt string    `json:"system_prompt"`
-	HasAPIKey    bool      `json:"has_api_key"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64           `json:"id"`
+	OwnerUserID  string          `json:"owner_user_id"`
+	ShareID      string          `json:"share_id"`
+	Shared       bool            `json:"shared"`
+	Name         string          `json:"name"`
+	BaseURL      string          `json:"base_url"`
+	Model        string          `json:"model"`
+	SystemPrompt string          `json:"system_prompt"`
+	HasAPIKey    bool            `json:"has_api_key"`
+	ProviderKind string          `json:"provider_kind,omitempty"`
+	Extras       json.RawMessage `json:"extras,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
+
+// LLMConfigKind discriminator values for the provider_kind column.
+const (
+	LLMConfigKindText           = "text"
+	LLMConfigKindVideoSeedance  = "video.seedance"
+)
+
+// VideoProject is the top-level container for a multi-shot video production
+// (a "script"). Owns shots and audio assets via FK cascade.
+type VideoProject struct {
+	ID                 int64     `json:"id"`
+	OwnerUserID        string    `json:"owner_user_id"`
+	Title              string    `json:"title"`
+	DefaultLLMConfigID *int64    `json:"default_llm_config_id,omitempty"`
+	Status             string    `json:"status"`
+	FinalVideoURL      string    `json:"final_video_url,omitempty"`
+	FinalRenderError   string    `json:"final_render_error,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+const (
+	VideoProjectStatusDraft     = "draft"
+	VideoProjectStatusRendering = "rendering"
+	VideoProjectStatusRendered  = "rendered"
+	VideoProjectStatusFailed    = "failed"
+)
+
+// VideoShot is one prompt -> one external task -> one downloaded MP4. The
+// trim_start_ms / trim_end_ms columns are reserved for a future browser-side
+// trim UI; the ffmpeg concat pipeline already honors them.
+type VideoShot struct {
+	ID            int64      `json:"id"`
+	ProjectID     int64      `json:"project_id"`
+	Ord           int        `json:"ord"`
+	Prompt        string     `json:"prompt"`
+	Ratio         string     `json:"ratio"`
+	Duration      int        `json:"duration"`
+	GenerateAudio bool       `json:"generate_audio"`
+	Watermark     bool       `json:"watermark"`
+	LLMConfigID   *int64     `json:"llm_config_id,omitempty"`
+	TaskID        string     `json:"task_id,omitempty"`
+	Status        string     `json:"status"`
+	VideoURL      string     `json:"video_url,omitempty"`
+	TrimStartMs   int        `json:"trim_start_ms"`
+	TrimEndMs     int        `json:"trim_end_ms"`
+	ErrorMessage  string     `json:"error_message,omitempty"`
+	SubmittedAt   *time.Time `json:"submitted_at,omitempty"`
+	CompletedAt   *time.Time `json:"completed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+const (
+	VideoShotStatusPending   = "pending"
+	VideoShotStatusQueued    = "queued"
+	VideoShotStatusRunning   = "running"
+	VideoShotStatusSucceeded = "succeeded"
+	VideoShotStatusFailed    = "failed"
+)
+
+// VideoAsset is a per-project audio attachment: either background music
+// (uploaded mp3/aac) or a voiceover (uploaded or recorded via MediaRecorder).
+type VideoAsset struct {
+	ID          int64     `json:"id"`
+	ProjectID   int64     `json:"project_id"`
+	Kind        string    `json:"kind"`
+	URL         string    `json:"url"`
+	FileName    string    `json:"file_name"`
+	MimeType    string    `json:"mime_type"`
+	Size        int64     `json:"size"`
+	DurationMs  int       `json:"duration_ms"`
+	BGMVolume   float64   `json:"bgm_volume"`
+	VoiceVolume float64   `json:"voice_volume"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+const (
+	VideoAssetKindBGM       = "audio_bgm"
+	VideoAssetKindVoiceover = "voiceover"
+)
 
 type PackTunnelProfile struct {
 	ID        string                    `json:"id"`
@@ -1174,6 +1257,63 @@ CREATE TABLE IF NOT EXISTS latch_profiles (
 	updated_at      TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_latch_profiles_enabled_shareable ON latch_profiles(enabled, shareable, created_at DESC);
+
+ALTER TABLE llm_configs
+	ADD COLUMN IF NOT EXISTS provider_kind TEXT NOT NULL DEFAULT 'text';
+ALTER TABLE llm_configs
+	ADD COLUMN IF NOT EXISTS extras JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS video_projects (
+	id BIGSERIAL PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	title TEXT NOT NULL DEFAULT '',
+	default_llm_config_id BIGINT REFERENCES llm_configs(id) ON DELETE SET NULL,
+	status TEXT NOT NULL DEFAULT 'draft',
+	final_video_url TEXT NOT NULL DEFAULT '',
+	final_render_error TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_video_projects_owner ON video_projects(owner_user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS video_shots (
+	id BIGSERIAL PRIMARY KEY,
+	project_id BIGINT NOT NULL REFERENCES video_projects(id) ON DELETE CASCADE,
+	ord INT NOT NULL DEFAULT 0,
+	prompt TEXT NOT NULL DEFAULT '',
+	ratio TEXT NOT NULL DEFAULT '9:16',
+	duration INT NOT NULL DEFAULT 10,
+	generate_audio BOOLEAN NOT NULL DEFAULT TRUE,
+	watermark BOOLEAN NOT NULL DEFAULT FALSE,
+	llm_config_id BIGINT REFERENCES llm_configs(id) ON DELETE SET NULL,
+	task_id TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'pending',
+	video_url TEXT NOT NULL DEFAULT '',
+	trim_start_ms INT NOT NULL DEFAULT 0,
+	trim_end_ms INT NOT NULL DEFAULT 0,
+	error_message TEXT NOT NULL DEFAULT '',
+	submitted_at TIMESTAMPTZ,
+	completed_at TIMESTAMPTZ,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_video_shots_project ON video_shots(project_id, ord);
+CREATE INDEX IF NOT EXISTS idx_video_shots_status ON video_shots(status);
+
+CREATE TABLE IF NOT EXISTS video_assets (
+	id BIGSERIAL PRIMARY KEY,
+	project_id BIGINT NOT NULL REFERENCES video_projects(id) ON DELETE CASCADE,
+	kind TEXT NOT NULL,
+	url TEXT NOT NULL DEFAULT '',
+	file_name TEXT NOT NULL DEFAULT '',
+	mime_type TEXT NOT NULL DEFAULT '',
+	size BIGINT NOT NULL DEFAULT 0,
+	duration_ms INT NOT NULL DEFAULT 0,
+	bgm_volume REAL NOT NULL DEFAULT 0.3,
+	voice_volume REAL NOT NULL DEFAULT 1.0,
+	created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_video_assets_project ON video_assets(project_id, kind);
 `
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()

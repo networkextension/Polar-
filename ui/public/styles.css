@@ -3221,3 +3221,425 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
   max-height: 220px;
   overflow-y: auto;
 }
+
+/* ==== Video Studio ====================================================== */
+
+/* Slim ghost-chip button reused across video-studio (and on the streaming
+   branch's chat header). Smaller and lighter than .btn-inline so toolbars
+   don't overpower the content area. */
+.btn-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.btn-chip:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-color: color-mix(in srgb, var(--text) 20%, var(--border));
+}
+
+.btn-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-chip.is-recording {
+  background: rgba(230, 82, 44, 0.18);
+  border-color: rgba(230, 82, 44, 0.5);
+  color: #e6522c;
+}
+
+.video-studio-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+  padding: 16px;
+  height: 100%;
+}
+
+.video-studio-projects {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.video-studio-projects-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-studio-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.video-project-row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.video-project-row:hover {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.video-project-row.active {
+  background: color-mix(in srgb, var(--primary, #6c7cff) 12%, transparent);
+  border-color: color-mix(in srgb, var(--primary, #6c7cff) 35%, var(--border));
+}
+
+.video-project-row-title {
+  font-weight: 500;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.video-project-row-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.video-studio-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  overflow-y: auto;
+  gap: 16px;
+}
+
+.video-studio-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.video-studio-project {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.video-studio-project-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.video-studio-title-input {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 0;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.video-studio-title-input:hover,
+.video-studio-title-input:focus {
+  border-color: var(--border);
+}
+
+.video-studio-project-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.video-status-pill {
+  display: inline-flex;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--muted);
+}
+
+.video-status-pill.status-rendering,
+.video-status-pill.status-running,
+.video-status-pill.status-queued {
+  background: color-mix(in srgb, var(--primary, #6c7cff) 18%, transparent);
+  color: var(--primary, #6c7cff);
+}
+
+.video-status-pill.status-rendered,
+.video-status-pill.status-succeeded {
+  background: rgba(34, 197, 94, 0.18);
+  color: #16a34a;
+}
+
+.video-status-pill.status-failed {
+  background: rgba(230, 82, 44, 0.2);
+  color: #e6522c;
+}
+
+.video-studio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.video-studio-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-shot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.video-shot-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-shot-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-shot-index {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 28px;
+}
+
+.video-shot-ratio {
+  width: 80px;
+  margin-bottom: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.video-shot-duration {
+  width: 80px;
+  margin-bottom: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.video-shot-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
+.video-shot-prompt {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.video-shot-error {
+  font-size: 12px;
+  color: #e6522c;
+  background: rgba(230, 82, 44, 0.08);
+  border: 1px solid rgba(230, 82, 44, 0.25);
+  border-radius: 6px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+}
+
+.video-shot-preview {
+  width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  background: #000;
+}
+
+.video-shot-placeholder {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.video-audio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .video-audio-grid {
+    grid-template-columns: 1fr;
+  }
+  .video-studio-projects {
+    width: 100%;
+  }
+  .video-studio-layout {
+    flex-direction: column;
+  }
+}
+
+.video-audio-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.video-audio-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-audio-kind {
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.video-voice-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.video-record-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-radius: 8px;
+}
+
+.video-audio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-asset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 80%, transparent);
+}
+
+.video-asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.video-asset-name {
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.video-asset-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.video-asset-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.video-asset-volume input[type="range"] {
+  width: 120px;
+}
+
+.video-asset-volume-value {
+  width: 32px;
+  text-align: right;
+}
+
+.video-final-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.video-final-preview {
+  width: 100%;
+  max-height: 480px;
+  border-radius: 10px;
+  background: #000;
+}
+
+.video-render-error {
+  font-size: 12px;
+  color: #e6522c;
+  background: rgba(230, 82, 44, 0.08);
+  border: 1px solid rgba(230, 82, 44, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}

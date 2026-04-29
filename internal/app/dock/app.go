@@ -58,6 +58,16 @@ type Server struct {
 	apnsTokens          map[string]cachedAPNSToken
 	publicBaseURL       string
 	mailer              MailSender
+	// Video studio: provider client + bg context for submissions, in-process
+	// render queue for ffmpeg concat. Workers (poll + render) are spawned in
+	// NewServer and shut down via backgroundCtx cancellation.
+	videoProvider        *videoProviderClient
+	videoProviderCtx     context.Context
+	videoRenderQueue     chan int64
+	videoPollIntervalSec int
+	videoSeedanceBaseURL string
+	videoSeedanceModel   string
+	videoSeedanceAPIKey  string
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -175,6 +185,20 @@ func NewServer(cfg Config) (*Server, error) {
 		go server.aiAgent.run()
 	}
 
+	// Video studio wiring. The provider client is stateless — created here
+	// once so handlers and the poll worker share the same HTTP transport.
+	server.videoProvider = newVideoProviderClient()
+	server.videoProviderCtx = server.backgroundCtx
+	server.videoPollIntervalSec = cfg.VideoPollIntervalSeconds
+	server.videoSeedanceBaseURL = cfg.VideoSeedanceBaseURL
+	server.videoSeedanceModel = cfg.VideoSeedanceModel
+	server.videoSeedanceAPIKey = cfg.VideoSeedanceAPIKey
+	if err := server.ensureSeedanceSystemConfig(); err != nil {
+		log.Printf("seed seedance system config failed: %v", err)
+	}
+	server.startVideoRenderWorker(server.backgroundCtx)
+	go server.runVideoPollWorker(server.backgroundCtx)
+
 	server.router = gin.Default()
 	// Increase max upload size for video files (default gin limit is 32 MiB)
 	server.router.MaxMultipartMemory = 512 << 20 // 512 MiB
@@ -209,6 +233,48 @@ func (s *Server) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+// ensureSeedanceSystemConfig seeds an LLMConfig row with provider_kind =
+// 'video.seedance' on first boot when VIDEO_SEEDANCE_API_KEY is set, so the
+// operator can ship a working default without clicking through the UI form.
+// Idempotent: if a row already exists for the system user we leave it alone
+// (operators can edit it via the LLM-config form afterwards).
+func (s *Server) ensureSeedanceSystemConfig() error {
+	if s == nil {
+		return nil
+	}
+	apiKey := strings.TrimSpace(s.videoSeedanceAPIKey)
+	baseURL := strings.TrimSpace(s.videoSeedanceBaseURL)
+	model := strings.TrimSpace(s.videoSeedanceModel)
+	if apiKey == "" || baseURL == "" || model == "" {
+		return nil
+	}
+	var existingID int64
+	err := s.db.QueryRow(
+		`SELECT id FROM llm_configs WHERE owner_user_id = $1 AND provider_kind = $2 LIMIT 1`,
+		systemUserID, LLMConfigKindVideoSeedance,
+	).Scan(&existingID)
+	if err == nil && existingID > 0 {
+		return nil
+	}
+	now := time.Now()
+	if _, err := s.db.Exec(
+		`INSERT INTO llm_configs (owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, provider_kind, extras, created_at, updated_at)
+		 VALUES ($1, '', TRUE, $2, $3, $4, $5, '', $6, $7::jsonb, $8, $8)`,
+		systemUserID,
+		"Seedance · 默认",
+		baseURL,
+		model,
+		apiKey,
+		LLMConfigKindVideoSeedance,
+		`{"ratio":"9:16","duration":10,"generate_audio":true,"watermark":false}`,
+		now,
+	); err != nil {
+		return err
+	}
+	log.Printf("seeded seedance system config (model=%s)", model)
+	return nil
 }
 
 func (s *Server) ensureSystemUser() error {
@@ -435,6 +501,25 @@ func (s *Server) registerRoutes() {
 		api.POST("/chats/:id/messages/:messageId/retry", s.AuthMiddleware(), s.handleChatRetry)
 		api.GET("/chats/:id/messages/:messageId/markdown", s.AuthMiddleware(), s.handleChatSharedMarkdown)
 		api.DELETE("/chats/:id/messages/:messageId", s.AuthMiddleware(), s.handleChatDelete)
+		// Video studio. Project + shot + asset CRUD, provider submit/retry,
+		// and final render. All endpoints require auth and verify ownership.
+		api.GET("/video-llm-configs", s.AuthMiddleware(), s.handleVideoLLMConfigList)
+		api.GET("/video-projects", s.AuthMiddleware(), s.handleVideoProjectList)
+		api.POST("/video-projects", s.AuthMiddleware(), s.handleVideoProjectCreate)
+		api.GET("/video-projects/:id", s.AuthMiddleware(), s.handleVideoProjectDetail)
+		api.PATCH("/video-projects/:id", s.AuthMiddleware(), s.handleVideoProjectUpdate)
+		api.DELETE("/video-projects/:id", s.AuthMiddleware(), s.handleVideoProjectDelete)
+		api.POST("/video-projects/:id/shots", s.AuthMiddleware(), s.handleVideoShotCreate)
+		api.PATCH("/video-projects/:id/shots/:shotId", s.AuthMiddleware(), s.handleVideoShotUpdate)
+		api.DELETE("/video-projects/:id/shots/:shotId", s.AuthMiddleware(), s.handleVideoShotDelete)
+		api.POST("/video-projects/:id/shots/:shotId/submit", s.AuthMiddleware(), s.handleVideoShotSubmit)
+		api.POST("/video-projects/:id/shots/:shotId/retry", s.AuthMiddleware(), s.handleVideoShotRetry)
+		api.POST("/video-projects/:id/submit-all", s.AuthMiddleware(), s.handleVideoProjectSubmitAll)
+		api.POST("/video-projects/:id/assets", s.AuthMiddleware(), s.handleVideoAssetUpload)
+		api.PATCH("/video-projects/:id/assets/:assetId", s.AuthMiddleware(), s.handleVideoAssetUpdate)
+		api.DELETE("/video-projects/:id/assets/:assetId", s.AuthMiddleware(), s.handleVideoAssetDelete)
+		api.POST("/video-projects/:id/render", s.AuthMiddleware(), s.handleVideoProjectRender)
+		api.GET("/video-projects/:id/download", s.AuthMiddleware(), s.handleVideoProjectDownload)
 		api.GET("/system-agent", s.AuthMiddleware(), s.handleSystemAgentStatus)
 		api.GET("/admin/users", s.AuthMiddleware(), s.AdminMiddleware(), s.handleAdminUserList)
 		api.GET("/admin/users/:id/login-history", s.AuthMiddleware(), s.AdminMiddleware(), s.handleAdminUserLoginHistory)

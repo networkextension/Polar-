@@ -77,4 +77,11 @@ type Config struct {
 	CloudflareR2SecretAccessKey string // R2 secret access key
 	CloudflareR2Bucket          string // R2 bucket name
 	CloudflareR2PublicURL       string // public base URL, e.g. https://pub-xxx.r2.dev
+
+	// Video studio. Defaults are sane for a localhost dev setup; in prod
+	// these should come from env so the operator can swap providers / keys.
+	VideoPollIntervalSeconds int    // poll cadence for in-flight Seedance tasks; default 10
+	VideoSeedanceBaseURL     string // e.g. https://ark.cn-beijing.volces.com/api/v3
+	VideoSeedanceModel       string // e.g. doubao-seedance-1-0-pro-250528
+	VideoSeedanceAPIKey      string // ARK_API_KEY equivalent; seeds a system video config on first boot
 }
