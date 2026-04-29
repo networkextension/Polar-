@@ -289,6 +289,7 @@ type VideoShot struct {
 	TaskID        string     `json:"task_id,omitempty"`
 	Status        string     `json:"status"`
 	VideoURL      string     `json:"video_url,omitempty"`
+	PosterURL     string     `json:"poster_url,omitempty"`
 	TrimStartMs   int        `json:"trim_start_ms"`
 	TrimEndMs     int        `json:"trim_end_ms"`
 	ErrorMessage  string     `json:"error_message,omitempty"`
@@ -1300,6 +1301,9 @@ CREATE TABLE IF NOT EXISTS video_shots (
 );
 CREATE INDEX IF NOT EXISTS idx_video_shots_project ON video_shots(project_id, ord);
 CREATE INDEX IF NOT EXISTS idx_video_shots_status ON video_shots(status);
+
+ALTER TABLE video_shots
+	ADD COLUMN IF NOT EXISTS poster_url TEXT NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS video_assets (
 	id BIGSERIAL PRIMARY KEY,

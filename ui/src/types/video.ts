@@ -47,6 +47,7 @@ export type VideoShot = {
   task_id?: string;
   status: "pending" | "queued" | "running" | "succeeded" | "failed";
   video_url?: string;
+  poster_url?: string;
   trim_start_ms: number;
   trim_end_ms: number;
   error_message?: string;

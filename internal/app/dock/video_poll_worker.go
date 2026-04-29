@@ -108,6 +108,15 @@ func (s *Server) pollOneVideoShot(ctx context.Context, shot *VideoShot) error {
 		if err := s.markVideoShotStatus(shot.ID, VideoShotStatusSucceeded, stored, "", now); err != nil {
 			return err
 		}
+		// Cache a poster (first-frame jpg) so the project page can show
+		// thumbnails without browsers having to range-request the MP4.
+		// Failure is non-fatal — the frontend just falls back to native
+		// preview behavior.
+		if posterURL, perr := s.generateAndStoreShotPoster(ctx, project, shot.ID); perr != nil {
+			log.Printf("poster generation skipped for shot %d: %v", shot.ID, perr)
+		} else if posterURL != "" {
+			_ = s.setVideoShotPoster(shot.ID, posterURL, time.Now())
+		}
 		s.broadcastVideoShotEvent(project, shot.ID, VideoShotStatusSucceeded, stored, "")
 		return nil
 	}
@@ -135,6 +144,36 @@ func (s *Server) pollOneVideoShot(ctx context.Context, shot *VideoShot) error {
 func videoShotFilename(ownerID string, projectID, shotID int64) string {
 	safe := strings.ReplaceAll(ownerID, "/", "_")
 	return "video_shot_" + safe + "_" + itoa64(projectID) + "_" + itoa64(shotID) + ".mp4"
+}
+
+// generateAndStoreShotPoster grabs the first ~half-second frame of the
+// already-stored shot video, hands the JPG off to the chatStorage
+// interface (so local /uploads + R2 both work), and returns the public
+// URL. Used as the <video poster="..."> on the studio page so opening
+// a 10-shot project doesn't trigger 10 range-requests against the MP4s.
+func (s *Server) generateAndStoreShotPoster(ctx context.Context, project *VideoProject, shotID int64) (string, error) {
+	if s.uploadDir == "" {
+		return "", errors.New("upload dir not configured")
+	}
+	srcName := videoShotFilename(project.OwnerUserID, project.ID, shotID)
+	srcPath := filepath.Join(s.uploadDir, srcName)
+	// downloadAndStoreVideo always lays the mp4 down at uploadDir before
+	// chatStorage.Store, so reading from there is safe whether the final
+	// URL is local or R2.
+	if _, err := os.Stat(srcPath); err != nil {
+		return "", err
+	}
+	posterName := strings.TrimSuffix(srcName, ".mp4") + "_poster.jpg"
+	posterDst := filepath.Join(s.uploadDir, posterName)
+	if err := generateVideoPoster(ctx, srcPath, posterDst); err != nil {
+		return "", err
+	}
+	publicURL, err := s.chatStorage.Store(ctx, posterDst, posterName, "image/jpeg")
+	if err != nil {
+		removeLocalFile(posterDst)
+		return "", err
+	}
+	return publicURL, nil
 }
 
 func itoa64(n int64) string {

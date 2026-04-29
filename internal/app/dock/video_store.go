@@ -221,7 +221,7 @@ func scanVideoShot(scan func(...any) error) (*VideoShot, error) {
 	var s VideoShot
 	var llmConfigID sql.NullInt64
 	var submittedAt, completedAt sql.NullTime
-	if err := scan(&s.ID, &s.ProjectID, &s.Ord, &s.Prompt, &s.Ratio, &s.Duration, &s.GenerateAudio, &s.Watermark, &llmConfigID, &s.TaskID, &s.Status, &s.VideoURL, &s.TrimStartMs, &s.TrimEndMs, &s.ErrorMessage, &submittedAt, &completedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+	if err := scan(&s.ID, &s.ProjectID, &s.Ord, &s.Prompt, &s.Ratio, &s.Duration, &s.GenerateAudio, &s.Watermark, &llmConfigID, &s.TaskID, &s.Status, &s.VideoURL, &s.PosterURL, &s.TrimStartMs, &s.TrimEndMs, &s.ErrorMessage, &submittedAt, &completedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if llmConfigID.Valid {
@@ -239,7 +239,7 @@ func scanVideoShot(scan func(...any) error) (*VideoShot, error) {
 	return &s, nil
 }
 
-const videoShotColumns = `id, project_id, ord, prompt, ratio, duration, generate_audio, watermark, llm_config_id, task_id, status, video_url, trim_start_ms, trim_end_ms, error_message, submitted_at, completed_at, created_at, updated_at`
+const videoShotColumns = `id, project_id, ord, prompt, ratio, duration, generate_audio, watermark, llm_config_id, task_id, status, video_url, poster_url, trim_start_ms, trim_end_ms, error_message, submitted_at, completed_at, created_at, updated_at`
 
 func (s *Server) listVideoShotsForProject(projectID int64) ([]VideoShot, error) {
 	rows, err := s.db.Query(
@@ -406,6 +406,18 @@ func (s *Server) updateVideoShotFields(projectID, id int64, in UpdateVideoShotIn
 		return nil, err
 	}
 	return shot, nil
+}
+
+// setVideoShotPoster persists the cached poster URL so the frontend can
+// render <video poster="..."> without forcing the browser to scan the
+// MP4. Empty values are tolerated (we fail gracefully if ffmpeg can't
+// produce a frame for some reason).
+func (s *Server) setVideoShotPoster(id int64, posterURL string, now time.Time) error {
+	_, err := s.db.Exec(
+		`UPDATE video_shots SET poster_url = $2, updated_at = $3 WHERE id = $1`,
+		id, posterURL, now,
+	)
+	return err
 }
 
 // markVideoShotSubmitted flips a shot to 'queued' with a fresh task_id and

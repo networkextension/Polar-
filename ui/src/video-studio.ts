@@ -162,8 +162,12 @@ function renderShotList(): void {
       const errorBlock = shot.error_message
         ? `<div class="video-shot-error">${escapeHtml(shot.error_message)}</div>`
         : "";
+      // preload="none" + poster avoids browsers fetching MP4 bytes until
+      // the user actually presses play. The cached poster is generated
+      // server-side via ffmpeg right after the shot lands in storage.
+      const posterAttr = shot.poster_url ? ` poster="${escapeHtml(shot.poster_url)}"` : "";
       const playerBlock = shot.video_url
-        ? `<video class="video-shot-preview" src="${escapeHtml(shot.video_url)}" controls preload="metadata"></video>`
+        ? `<video class="video-shot-preview" src="${escapeHtml(shot.video_url)}" controls preload="none"${posterAttr}></video>`
         : `<div class="video-shot-placeholder">${escapeHtml(t("video.notReady") || "Not ready yet")}</div>`;
       const submitable = shot.status === "pending" || shot.status === "failed";
       const submitLabel = shot.status === "failed"
