@@ -225,18 +225,26 @@ func runFFmpegRender(ctx context.Context, shots []VideoShot, shotPaths []string,
 	}
 	filter.WriteString(fmt.Sprintf("concat=n=%d:v=1:a=0[cv];", len(shots)))
 
+	// Audio sub-graph. The video concat duration is the source of truth
+	// for the final clip length; audio is decoration. We append `apad`
+	// (infinite silence padding) to the audio output and rely on
+	// `-shortest` at the output stage to cut off when the video ends.
+	// Effects:
+	//   BGM longer than video → -shortest clips audio at video end
+	//   BGM shorter than video → apad supplies silence to the gap
+	//   so the last shot doesn't stretch and the video ends on time.
 	finalAudioLabel := ""
 	switch {
 	case bgmIdx >= 0 && voiceIdx >= 0:
 		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[bgm];", bgmIdx, bgmVolume))
 		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[voice];", voiceIdx, voiceVolume))
-		filter.WriteString("[bgm][voice]amix=inputs=2:duration=longest:dropout_transition=0[mixed];")
+		filter.WriteString("[bgm][voice]amix=inputs=2:duration=longest:dropout_transition=0,apad[mixed];")
 		finalAudioLabel = "[mixed]"
 	case bgmIdx >= 0:
-		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[mixed];", bgmIdx, bgmVolume))
+		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f,apad[mixed];", bgmIdx, bgmVolume))
 		finalAudioLabel = "[mixed]"
 	case voiceIdx >= 0:
-		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[mixed];", voiceIdx, voiceVolume))
+		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f,apad[mixed];", voiceIdx, voiceVolume))
 		finalAudioLabel = "[mixed]"
 	}
 	// Trim trailing semicolon for cleanliness; ffmpeg tolerates it but logs are easier to read without.
@@ -247,6 +255,12 @@ func runFFmpegRender(ctx context.Context, shots []VideoShot, shotPaths []string,
 		args = append(args, "-map", finalAudioLabel,
 			"-c:a", "aac",
 			"-b:a", "192k",
+			// -shortest cuts the output when the shortest mapped stream
+			// ends. With apad'd audio that's effectively infinite, the
+			// video concat (fixed duration) wins — long BGM is trimmed,
+			// short BGM is padded with silence, neither stretches the
+			// last shot.
+			"-shortest",
 		)
 	} else {
 		// No user-supplied audio — output a silent video. If shots had
