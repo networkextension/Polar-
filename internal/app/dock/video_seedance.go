@@ -13,10 +13,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 )
+
+// apiKeyFingerprint returns a non-secret fingerprint of an API key for log
+// output: first 4 + last 4 chars when the key is long enough, otherwise
+// "(too-short)". Use this so we never accidentally write the full secret
+// to disk via log lines.
+func apiKeyFingerprint(key string) string {
+	trimmed := strings.TrimSpace(key)
+	if len(trimmed) < 12 {
+		return "(too-short)"
+	}
+	return trimmed[:4] + "…" + trimmed[len(trimmed)-4:]
+}
 
 // SeedanceParams are the per-shot knobs the request body needs. Sourced from
 // the per-shot row, falling back to the LLMConfig.Extras blob, falling back
@@ -149,12 +162,19 @@ func submitSeedanceTask(ctx context.Context, client *http.Client, baseURL, apiKe
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, seedanceTasksEndpoint(baseURL), bytes.NewReader(body))
+	endpoint := seedanceTasksEndpoint(baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+	// Debug: log a fingerprint of the key actually being sent so the
+	// operator can confirm "I updated the key" landed in the DB. Never log
+	// the full secret — first/last 4 chars + length is enough to spot the
+	// "wrong account" / "missing prefix" mistake.
+	log.Printf("seedance submit: endpoint=%s model=%q key_len=%d key_fp=%s prompt_len=%d ratio=%s dur=%d",
+		endpoint, model, len(apiKey), apiKeyFingerprint(apiKey), len(prompt), params.Ratio, params.Duration)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
