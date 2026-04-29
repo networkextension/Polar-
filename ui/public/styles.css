@@ -3255,6 +3255,50 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
   cursor: not-allowed;
 }
 
+/* Primary variant — same slim chip footprint, but filled with the
+   accent color so the form's submit button still reads as the main
+   action without going back to the chunky 12px-padded base button. */
+.btn-chip-primary {
+  background: var(--primary, #6c7cff);
+  color: #fff;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.btn-chip-primary:hover {
+  background: color-mix(in srgb, var(--primary, #6c7cff) 88%, #000);
+  border-color: transparent;
+}
+
+/* Slim form variant — applied to the LLM Config / Bot User forms so
+   inputs / labels / buttons match the chip aesthetic. Scoped under
+   .site-settings-form so chat / posts forms keep their existing sizing. */
+.site-settings-form .form-label {
+  font-size: 11px;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.site-settings-form input,
+.site-settings-form .input,
+.site-settings-form select,
+.site-settings-form textarea {
+  font-size: 13px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+
+.site-settings-form .textarea {
+  min-height: 64px;
+}
+
+.site-settings-form .form-checkbox {
+  font-size: 12px;
+}
+
 .btn-chip.is-recording {
   background: rgba(230, 82, 44, 0.18);
   border-color: rgba(230, 82, 44, 0.5);
