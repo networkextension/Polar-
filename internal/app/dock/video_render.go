@@ -180,10 +180,12 @@ func pickAudioAssets(assets []VideoAsset) (bgm, voice *VideoAsset) {
 	return
 }
 
-// runFFmpegRender drives the ffmpeg process. The shot videos are
-// concatenated via a concat-demuxer list file; trim markers are honored
-// per-shot via input-side -ss / -to; optional BGM / voice are mixed into
-// the concatenated audio with `amix`.
+// runFFmpegRender drives the ffmpeg process. Builds two filter graphs
+// independently — video concat is always required; audio is opt-in based
+// on what the user actually attached. Reason: Seedance shots can come back
+// with no audio track, so a concat that demands a=1 from every input
+// fails the whole render. Splitting the graphs lets a silent shot feed
+// only its video, while BGM / voice supply audio if present.
 func runFFmpegRender(ctx context.Context, shots []VideoShot, shotPaths []string, bgmPath, voicePath string, bgmVolume, voiceVolume float64, output string) error {
 	if len(shots) == 0 || len(shots) != len(shotPaths) {
 		return errors.New("shots/shot paths mismatch")
@@ -214,41 +216,49 @@ func runFFmpegRender(ctx context.Context, shots []VideoShot, shotPaths []string,
 		args = append(args, "-i", voicePath)
 	}
 
-	// Build the concat filter: one [vN][aN] pair per input.
+	// Video graph: concatenate the shots' video streams only. v=1 a=0
+	// means we don't require an audio track on every input — we'll
+	// build audio separately if the user attached BGM / voice.
 	filter := strings.Builder{}
 	for i := range shots {
-		filter.WriteString(fmt.Sprintf("[%d:v:0][%d:a:0?]", i, i))
+		filter.WriteString(fmt.Sprintf("[%d:v:0]", i))
 	}
-	filter.WriteString(fmt.Sprintf("concat=n=%d:v=1:a=1[cv][ca];", len(shots)))
+	filter.WriteString(fmt.Sprintf("concat=n=%d:v=1:a=0[cv];", len(shots)))
 
-	finalAudioLabel := "[ca]"
+	finalAudioLabel := ""
 	switch {
 	case bgmIdx >= 0 && voiceIdx >= 0:
 		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[bgm];", bgmIdx, bgmVolume))
 		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[voice];", voiceIdx, voiceVolume))
-		filter.WriteString("[ca][bgm][voice]amix=inputs=3:duration=longest:dropout_transition=0[mixed];")
+		filter.WriteString("[bgm][voice]amix=inputs=2:duration=longest:dropout_transition=0[mixed];")
 		finalAudioLabel = "[mixed]"
 	case bgmIdx >= 0:
-		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[bgm];", bgmIdx, bgmVolume))
-		filter.WriteString("[ca][bgm]amix=inputs=2:duration=longest:dropout_transition=0[mixed];")
+		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[mixed];", bgmIdx, bgmVolume))
 		finalAudioLabel = "[mixed]"
 	case voiceIdx >= 0:
-		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[voice];", voiceIdx, voiceVolume))
-		filter.WriteString("[ca][voice]amix=inputs=2:duration=longest:dropout_transition=0[mixed];")
+		filter.WriteString(fmt.Sprintf("[%d:a]volume=%.3f[mixed];", voiceIdx, voiceVolume))
 		finalAudioLabel = "[mixed]"
 	}
 	// Trim trailing semicolon for cleanliness; ffmpeg tolerates it but logs are easier to read without.
 	filterStr := strings.TrimSuffix(filter.String(), ";")
 
+	args = append(args, "-filter_complex", filterStr, "-map", "[cv]")
+	if finalAudioLabel != "" {
+		args = append(args, "-map", finalAudioLabel,
+			"-c:a", "aac",
+			"-b:a", "192k",
+		)
+	} else {
+		// No user-supplied audio — output a silent video. If shots had
+		// embedded audio, it's intentionally dropped. This keeps the
+		// render predictable instead of randomly inheriting whichever
+		// shot's audio happens to exist.
+		args = append(args, "-an")
+	}
 	args = append(args,
-		"-filter_complex", filterStr,
-		"-map", "[cv]",
-		"-map", finalAudioLabel,
 		"-c:v", "libx264",
 		"-preset", "veryfast",
 		"-crf", "23",
-		"-c:a", "aac",
-		"-b:a", "192k",
 		"-movflags", "+faststart",
 		output,
 	)
@@ -257,9 +267,26 @@ func runFFmpegRender(ctx context.Context, shots []VideoShot, shotPaths []string,
 	cmd := exec.CommandContext(ctx, bin, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("ffmpeg failed: %w: %s", err, truncateBody(out, 1000))
+		// ffmpeg writes its config banner first, then the actual error at
+		// the tail of stderr. The previous head-truncation chopped off
+		// the part we needed; tailLines keeps the last ~30 lines so the
+		// real diagnostic surfaces.
+		log.Printf("ffmpeg full output for failed render:\n%s", string(out))
+		log.Printf("ffmpeg filter_complex was: %s", filterStr)
+		return fmt.Errorf("ffmpeg failed: %w: %s", err, tailLines(string(out), 30))
 	}
 	return nil
+}
+
+// tailLines returns at most n lines from the end of s. Used for ffmpeg
+// error reporting: the first ~50 lines are version + configuration noise,
+// while the actionable error sits in the last few lines.
+func tailLines(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) <= n {
+		return strings.Join(lines, "\n")
+	}
+	return strings.Join(lines[len(lines)-n:], "\n")
 }
 
 // videoFFmpegBin honors the FFMPEG_BIN env override, otherwise relies on
