@@ -36,7 +36,7 @@ import { makeDefaultAvatar } from "./lib/avatar.js";
 import { byId, query } from "./lib/dom.js";
 import { renderMarkdown } from "./lib/marked.js";
 import { base64URLToBuffer, credentialToJSON } from "./lib/passkey.js";
-import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint, resolvePresetExtras, resolvePresetProviderKind } from "./lib/llm_presets.js";
+import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, matchPresetForConfig, resolvePresetEndpoint, resolvePresetExtras, resolvePresetProviderKind } from "./lib/llm_presets.js";
 import { hydrateSiteBrand, renderSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme, applyTheme, ThemeName } from "./lib/theme.js";
 import { t, getLang, setLang, applyI18n } from "./lib/i18n.js";
@@ -1147,7 +1147,7 @@ llmConfigList.addEventListener("click", async (event) => {
   const action = button.dataset.action;
   if (action === "edit") {
     editingLLMConfigId = config.id;
-    const presetID = matchPresetByBaseURL(config.base_url) || LLM_PROVIDER_PRESETS[0].id;
+    const presetID = matchPresetForConfig(config) || LLM_PROVIDER_PRESETS[0].id;
     applyLLMProviderPreset(presetID, true);
     llmConfigNameInput.value = config.name;
     llmConfigBaseUrlInput.value = config.base_url;

@@ -138,10 +138,26 @@ export function matchPresetByBaseURL(baseURL: string): string | null {
   if (text.includes("api.openai.com")) return "openai";
   if (text.includes("api.x.ai")) return "xai";
   if (text.includes("api.deepseek.com")) return "deepseek";
-  if (text.includes("volces.com")) return "doubao";
+  // Volces hosts both Doubao text chat (/chat/completions) and Seedance
+  // video (/contents/generations/tasks, base ends at /api/v3). Match the
+  // path tail before defaulting to text so Seedance edits don't get
+  // rewritten as Doubao text on save.
+  if (text.includes("volces.com")) {
+    if (text.includes("/chat/completions")) return "doubao";
+    return "seedance";
+  }
   if (text.includes("dashscope.aliyuncs.com")) return "qwen";
   if (text.includes("api.moonshot.cn")) return "moonshot";
   if (text.includes("xiaomimimo.com")) return "xiaomimimo";
   return null;
+}
+
+// matchPresetForConfig prefers the config's persisted provider_kind over
+// URL guessing. Authoritative when present — solves the case where two
+// presets share a host (e.g. Doubao text chat vs Seedance video both on
+// ark.cn-beijing.volces.com).
+export function matchPresetForConfig(config: { base_url?: string; provider_kind?: string }): string | null {
+  if (config.provider_kind === "video.seedance") return "seedance";
+  return matchPresetByBaseURL(config.base_url || "");
 }
 

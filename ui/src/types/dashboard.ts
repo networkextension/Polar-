@@ -151,6 +151,8 @@ export type LLMConfig = {
   model: string;
   system_prompt: string;
   has_api_key: boolean;
+  provider_kind?: string;
+  extras?: unknown;
   created_at: string;
   updated_at: string;
 };

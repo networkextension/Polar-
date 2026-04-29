@@ -12,7 +12,7 @@ import {
 } from "./api/dashboard.js";
 import { logout, fetchCurrentUser } from "./api/session.js";
 import { byId } from "./lib/dom.js";
-import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, resolvePresetEndpoint, resolvePresetExtras, resolvePresetProviderKind } from "./lib/llm_presets.js";
+import { LLM_PROVIDER_PRESETS, getPresetByID, matchPresetByBaseURL, matchPresetForConfig, resolvePresetEndpoint, resolvePresetExtras, resolvePresetProviderKind } from "./lib/llm_presets.js";
 import { hydrateSiteBrand, renderSidebarFoot } from "./lib/site.js";
 import { bindThemeSync, initStoredTheme } from "./lib/theme.js";
 import { t } from "./lib/i18n.js";
@@ -319,7 +319,7 @@ llmConfigList.addEventListener("click", async (event) => {
   const action = button.dataset.action;
   if (action === "edit") {
     editingLLMConfigId = config.id;
-    const presetID = matchPresetByBaseURL(config.base_url) || LLM_PROVIDER_PRESETS[0].id;
+    const presetID = matchPresetForConfig(config) || LLM_PROVIDER_PRESETS[0].id;
     applyLLMProviderPreset(presetID, true);
     llmConfigNameInput.value = config.name;
     llmConfigBaseUrlInput.value = config.base_url;
