@@ -108,13 +108,17 @@ type seedanceSubmitRequest struct {
 }
 
 // seedanceContentEntry is a single entry in the multimodal content array.
-// type="text" carries Text; type="image_url" carries ImageURL (used for
-// character-reference / first-frame conditioning so multi-shot sequences
-// keep the same character).
+// type="text" carries Text; type="image_url" carries an ImageURL object
+// (Seedance follows the OpenAI-compatible shape: { url: "..." }, not a
+// flat string — Volces returns 400 InvalidParameter on the flat form).
 type seedanceContentEntry struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
+	Type     string                `json:"type"`
+	Text     string                `json:"text,omitempty"`
+	ImageURL *seedanceImageURLSpec `json:"image_url,omitempty"`
+}
+
+type seedanceImageURLSpec struct {
+	URL string `json:"url"`
 }
 
 type seedanceSubmitResponse struct {
@@ -163,7 +167,10 @@ func submitSeedanceTask(ctx context.Context, client *http.Client, baseURL, apiKe
 		// Prepend the reference image first (Seedance expects image_url
 		// before text in the content array) and lightly nudge the prompt
 		// so the model knows to lock onto the referenced character.
-		content = append(content, seedanceContentEntry{Type: "image_url", ImageURL: ref})
+		content = append(content, seedanceContentEntry{
+			Type:     "image_url",
+			ImageURL: &seedanceImageURLSpec{URL: ref},
+		})
 		finalPrompt = "基于参考图人物保持外貌一致；" + prompt
 	}
 	content = append(content, seedanceContentEntry{Type: "text", Text: finalPrompt})
