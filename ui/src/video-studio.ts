@@ -51,6 +51,12 @@ const submitAllBtn = byId<HTMLButtonElement>("videoSubmitAllBtn");
 const renderBtn = byId<HTMLButtonElement>("videoRenderBtn");
 const deleteProjectBtn = byId<HTMLButtonElement>("videoDeleteProjectBtn");
 const addShotBtn = byId<HTMLButtonElement>("videoAddShotBtn");
+const bulkImportBtn = byId<HTMLButtonElement>("videoBulkImportBtn");
+const bulkImportPanel = byId<HTMLElement>("videoBulkImportPanel");
+const bulkImportText = byId<HTMLTextAreaElement>("videoBulkImportText");
+const bulkImportPreview = byId<HTMLElement>("videoBulkImportPreview");
+const bulkImportCancelBtn = byId<HTMLButtonElement>("videoBulkImportCancelBtn");
+const bulkImportConfirmBtn = byId<HTMLButtonElement>("videoBulkImportConfirmBtn");
 const shotListEl = byId<HTMLElement>("videoShotList");
 const bgmInput = byId<HTMLInputElement>("videoBgmInput");
 const voiceInput = byId<HTMLInputElement>("videoVoiceInput");
@@ -337,6 +343,78 @@ addShotBtn.addEventListener("click", async () => {
   if (!response.ok || !data.shot) {
     alert(data.error || "Failed to add shot");
     return;
+  }
+  await refreshActiveProject();
+});
+
+// Bulk-import: split a pasted script on blank lines, create one shot per
+// paragraph. Mirrors the user's original openclaw.sh PROMPTS=( ... ) array.
+function parseBulkScript(raw: string): string[] {
+  return raw
+    .split(/\r?\n\s*\r?\n/) // blank-line separator (one or more)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+}
+
+function refreshBulkPreview(): void {
+  const prompts = parseBulkScript(bulkImportText.value);
+  if (prompts.length === 0) {
+    bulkImportPreview.textContent = "";
+    bulkImportConfirmBtn.disabled = true;
+    return;
+  }
+  const tpl = t("video.bulkImportPreview") || "{{count}} shots will be created";
+  bulkImportPreview.textContent = tpl.replace("{{count}}", String(prompts.length));
+  bulkImportConfirmBtn.disabled = false;
+}
+
+bulkImportBtn.addEventListener("click", () => {
+  if (!activeProject) return;
+  bulkImportPanel.hidden = false;
+  bulkImportText.value = "";
+  refreshBulkPreview();
+  bulkImportText.focus();
+});
+
+bulkImportCancelBtn.addEventListener("click", () => {
+  bulkImportPanel.hidden = true;
+  bulkImportText.value = "";
+});
+
+bulkImportText.addEventListener("input", refreshBulkPreview);
+
+bulkImportConfirmBtn.addEventListener("click", async () => {
+  if (!activeProject) return;
+  const prompts = parseBulkScript(bulkImportText.value);
+  if (prompts.length === 0) return;
+  bulkImportConfirmBtn.disabled = true;
+  bulkImportCancelBtn.disabled = true;
+  let createdCount = 0;
+  let failedCount = 0;
+  // Create sequentially so the server-side ord assignment stays correct
+  // (each createVideoShot reads the current max+1). Concurrent creates
+  // could race and produce duplicate ord values.
+  for (const prompt of prompts) {
+    try {
+      const { response, data } = await createVideoShot(activeProject.id, { prompt });
+      if (!response.ok || !data.shot) {
+        failedCount++;
+        // eslint-disable-next-line no-console
+        console.warn("bulk import: failed to create shot", data.error);
+        continue;
+      }
+      createdCount++;
+    } catch {
+      failedCount++;
+    }
+  }
+  bulkImportConfirmBtn.disabled = false;
+  bulkImportCancelBtn.disabled = false;
+  bulkImportPanel.hidden = true;
+  bulkImportText.value = "";
+  if (failedCount > 0) {
+    const tpl = t("video.bulkImportPartial") || "Imported {{ok}} of {{total}} shots ({{fail}} failed)";
+    alert(tpl.replace("{{ok}}", String(createdCount)).replace("{{total}}", String(prompts.length)).replace("{{fail}}", String(failedCount)));
   }
   await refreshActiveProject();
 });

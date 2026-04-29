@@ -98,7 +98,22 @@
                 <section class="video-studio-section">
                   <div class="video-studio-section-head">
                     <span class="badge" data-i18n="video.shots">Shots</span>
-                    <button id="videoAddShotBtn" class="btn-chip" type="button" data-i18n="video.addShot">Add shot</button>
+                    <div class="video-studio-section-actions">
+                      <button id="videoBulkImportBtn" class="btn-chip" type="button" data-i18n="video.bulkImport">Bulk import</button>
+                      <button id="videoAddShotBtn" class="btn-chip" type="button" data-i18n="video.addShot">Add shot</button>
+                    </div>
+                  </div>
+                  <div id="videoBulkImportPanel" class="video-bulk-import" hidden>
+                    <p class="video-bulk-hint" data-i18n="video.bulkImportHint">
+                      Paste your full script — one shot per paragraph, separated by blank lines.
+                      Each paragraph becomes a new shot in order.
+                    </p>
+                    <textarea id="videoBulkImportText" class="input video-bulk-textarea" rows="10" data-i18n-placeholder="video.bulkImportPlaceholder" placeholder="Shot 1 prompt...&#10;&#10;Shot 2 prompt...&#10;&#10;Shot 3 prompt..."></textarea>
+                    <div class="video-bulk-actions">
+                      <span id="videoBulkImportPreview" class="video-bulk-preview"></span>
+                      <button id="videoBulkImportCancelBtn" class="btn-chip" type="button" data-i18n="common.cancel">Cancel</button>
+                      <button id="videoBulkImportConfirmBtn" class="btn-chip" type="button" data-i18n="video.bulkImportConfirm">Import shots</button>
+                    </div>
                   </div>
                   <div id="videoShotList" class="video-shot-list"></div>
                 </section>

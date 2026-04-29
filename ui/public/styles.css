@@ -3428,6 +3428,51 @@ body.lp-page { background: var(--page-bg); padding: 0; display: block; }
   gap: 8px;
 }
 
+.video-studio-section-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.video-bulk-import {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.video-bulk-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.video-bulk-textarea {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.video-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.video-bulk-preview {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .video-shot-list {
   display: flex;
   flex-direction: column;
