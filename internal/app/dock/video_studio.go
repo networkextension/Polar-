@@ -8,9 +8,12 @@ package dock
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -379,6 +382,63 @@ func (s *Server) handleVideoShotUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"shot": shot})
 }
 
+// inlineCharacterReference reads a stored character-reference image and
+// returns it as a "data:<mime>;base64,..." URL so the Seedance request
+// body carries the bytes directly. Why not just send the public URL?
+// Because the storage URL might be:
+//   - a local /uploads/<file> path (Seedance servers can't reach localhost)
+//   - a private R2 bucket (no public access by default)
+// Inlining sidesteps both problems at the cost of ~33% body inflation,
+// which is fine for a single sub-MB PNG per request.
+func (s *Server) inlineCharacterReference(ctx context.Context, asset VideoAsset) (string, error) {
+	mime := strings.TrimSpace(asset.MimeType)
+	if mime == "" {
+		mime = "image/png"
+	}
+	bytesData, err := s.readAssetBytes(ctx, asset.URL)
+	if err != nil {
+		return "", err
+	}
+	if len(bytesData) == 0 {
+		return "", fmt.Errorf("character reference is empty: %s", asset.URL)
+	}
+	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(bytesData), nil
+}
+
+// readAssetBytes resolves an asset's stored URL to raw bytes. Local
+// /uploads/<file> paths are read straight off disk; remote http(s) URLs
+// are downloaded with a small timeout. Same resolver semantics as the
+// render worker's downloadOrCopy, but yielding bytes instead of a file.
+func (s *Server) readAssetBytes(ctx context.Context, storedURL string) ([]byte, error) {
+	parsed, err := url.Parse(storedURL)
+	if err == nil && parsed.Scheme == "" && strings.HasPrefix(parsed.Path, "/uploads/") {
+		filename := strings.TrimPrefix(parsed.Path, "/uploads/")
+		return os.ReadFile(filepath.Join(s.uploadDir, filename))
+	}
+	if err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") {
+		req, rerr := http.NewRequestWithContext(ctx, http.MethodGet, storedURL, nil)
+		if rerr != nil {
+			return nil, rerr
+		}
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, dlErr := client.Do(req)
+		if dlErr != nil {
+			return nil, dlErr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return nil, fmt.Errorf("download asset http %d", resp.StatusCode)
+		}
+		return io.ReadAll(resp.Body)
+	}
+	if !strings.Contains(storedURL, "://") {
+		filename := strings.TrimPrefix(storedURL, "/")
+		filename = strings.TrimPrefix(filename, "uploads/")
+		return os.ReadFile(filepath.Join(s.uploadDir, filename))
+	}
+	return nil, fmt.Errorf("unsupported url scheme: %s", storedURL)
+}
+
 // extractCharacterFrameAsset downloads the shot's video into a temp dir,
 // runs ffmpeg to grab one PNG frame at the requested timestamp, hands the
 // PNG off to the existing Storage interface (local /uploads or R2), and
@@ -617,16 +677,23 @@ func (s *Server) submitShotToProvider(userID string, project *VideoProject, shot
 	// Look up the most recent character_reference asset for this project
 	// so the provider gets a consistent first-frame across shots. Latest
 	// wins — re-capturing implicitly overrides the older reference.
-	characterRefURL := ""
+	// We always inline as a data: URL — the stored URL might be a local
+	// /uploads/ path or a private R2 bucket, neither of which Volces can
+	// reach. data: URLs make the call deployment-agnostic.
+	characterRefDataURL := ""
 	if assets, err := s.listVideoAssetsForProject(project.ID); err == nil {
 		for _, a := range assets {
 			if a.Kind == VideoAssetKindCharacterRef && a.URL != "" {
-				characterRefURL = a.URL
-				break // listVideoAssetsForProject orders DESC by created_at, first match is latest
+				inlined, ierr := s.inlineCharacterReference(s.videoProviderCtx, a)
+				if ierr != nil {
+					return fmt.Errorf("inline character reference: %w", ierr)
+				}
+				characterRefDataURL = inlined
+				break // assets list is DESC by created_at, first match is latest
 			}
 		}
 	}
-	taskID, err := s.videoProvider.submitVideoTask(s.videoProviderCtx, cfg, apiKey, shot.Prompt, characterRefURL, override)
+	taskID, err := s.videoProvider.submitVideoTask(s.videoProviderCtx, cfg, apiKey, shot.Prompt, characterRefDataURL, override)
 	if err != nil {
 		return err
 	}
