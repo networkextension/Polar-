@@ -239,6 +239,7 @@ type LLMConfig struct {
 	BaseURL      string          `json:"base_url"`
 	Model        string          `json:"model"`
 	SystemPrompt string          `json:"system_prompt"`
+	Streaming    bool            `json:"streaming"`
 	HasAPIKey    bool            `json:"has_api_key"`
 	ProviderKind string          `json:"provider_kind,omitempty"`
 	Extras       json.RawMessage `json:"extras,omitempty"`
@@ -520,6 +521,9 @@ type ChatMessage struct {
 	MarkdownEntryID *int64                 `json:"markdown_entry_id,omitempty"`
 	MarkdownTitle   string                 `json:"markdown_title,omitempty"`
 	LatencyMs       *int64                 `json:"latency_ms,omitempty"`
+	Streaming       bool                   `json:"streaming,omitempty"`
+	Seq             int64                  `json:"seq,omitempty"`
+	UpdatedAt       *time.Time             `json:"updated_at,omitempty"`
 	Attachment      *ChatMessageAttachment `json:"attachment,omitempty"`
 	CreatedAt       time.Time              `json:"created_at"`
 	DeletedAt       *time.Time             `json:"deleted_at,omitempty"`
@@ -904,6 +908,8 @@ ALTER TABLE llm_configs
 	ADD COLUMN IF NOT EXISTS share_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE llm_configs
 	ADD COLUMN IF NOT EXISTS shared BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE llm_configs
+	ADD COLUMN IF NOT EXISTS streaming BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS packtunnel_profiles (
 	id TEXT PRIMARY KEY,
@@ -1129,6 +1135,15 @@ ALTER TABLE chat_messages
 
 ALTER TABLE chat_messages
 	ADD COLUMN IF NOT EXISTS latency_ms INTEGER;
+
+ALTER TABLE chat_messages
+	ADD COLUMN IF NOT EXISTS streaming BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE chat_messages
+	ADD COLUMN IF NOT EXISTS seq BIGINT NOT NULL DEFAULT 0;
+
+ALTER TABLE chat_messages
+	ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS chat_reads (
 	thread_id BIGINT NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
@@ -1568,7 +1583,7 @@ func (s *Server) getUserByUsername(username string) (*User, error) {
 
 func (s *Server) listLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
 	rows, err := s.db.Query(
-		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE owner_user_id = $1
 		  ORDER BY updated_at DESC, id DESC`,
@@ -1582,7 +1597,7 @@ func (s *Server) listLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
 	items := make([]LLMConfig, 0)
 	for rows.Next() {
 		var item LLMConfig
-		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -1594,12 +1609,12 @@ func (s *Server) getLLMConfigForOwner(ownerUserID string, id int64) (*LLMConfig,
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
-		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE id = $1 AND owner_user_id = $2`,
 		id,
 		ownerUserID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", nil
@@ -1613,12 +1628,12 @@ func (s *Server) getLLMConfigForBot(botUserID string) (*LLMConfig, string, error
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
-		`SELECT c.id, c.owner_user_id, c.share_id, c.shared, c.name, c.base_url, c.model, c.api_key, c.system_prompt, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
+		`SELECT c.id, c.owner_user_id, c.share_id, c.shared, c.name, c.base_url, c.model, c.api_key, c.system_prompt, c.streaming, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
 		   FROM bot_users b
 		   JOIN llm_configs c ON c.id = b.llm_config_id
 		  WHERE b.bot_user_id = $1`,
 		botUserID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", nil
@@ -1636,14 +1651,14 @@ func (s *Server) getAvailableLLMConfigWithAPIKey(ownerUserID string, id int64) (
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
-		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE id = $1
 		    AND (owner_user_id = $2 OR shared = TRUE)
 		    AND (provider_kind = 'text' OR provider_kind = '' OR provider_kind IS NULL)`,
 		id,
 		ownerUserID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", nil
@@ -1653,37 +1668,38 @@ func (s *Server) getAvailableLLMConfigWithAPIKey(ownerUserID string, id int64) (
 	return &item, apiKey, nil
 }
 
-func (s *Server) createLLMConfig(ownerUserID, name, baseURL, model, apiKey, systemPrompt, shareID string, shared bool, now time.Time) (*LLMConfig, error) {
+func (s *Server) createLLMConfig(ownerUserID, name, baseURL, model, apiKey, systemPrompt, shareID string, shared, streaming bool, now time.Time) (*LLMConfig, error) {
 	var item LLMConfig
 	err := s.db.QueryRow(
-		`INSERT INTO llm_configs (owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-		 RETURNING id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`,
-		ownerUserID, shareID, shared, name, baseURL, model, apiKey, systemPrompt, now,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+		`INSERT INTO llm_configs (owner_user_id, share_id, shared, name, base_url, model, api_key, system_prompt, streaming, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+		 RETURNING id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at`,
+		ownerUserID, shareID, shared, name, baseURL, model, apiKey, systemPrompt, streaming, now,
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &item, nil
 }
 
-func (s *Server) updateLLMConfig(ownerUserID string, id int64, name, baseURL, model, apiKey, systemPrompt string, shared, replaceAPIKey bool, now time.Time) (*LLMConfig, error) {
+func (s *Server) updateLLMConfig(ownerUserID string, id int64, name, baseURL, model, apiKey, systemPrompt string, shared, streaming, replaceAPIKey bool, now time.Time) (*LLMConfig, error) {
 	query := `UPDATE llm_configs
 	             SET name = $3,
 	                 base_url = $4,
 	                 model = $5,
 	                 system_prompt = $6,
 	                 shared = $7,
-	                 updated_at = $8`
-	args := []any{id, ownerUserID, name, baseURL, model, systemPrompt, shared, now}
+	                 streaming = $8,
+	                 updated_at = $9`
+	args := []any{id, ownerUserID, name, baseURL, model, systemPrompt, shared, streaming, now}
 	if replaceAPIKey {
-		query += `, api_key = $9`
+		query += `, api_key = $10`
 		args = append(args, apiKey)
 	}
 	query += ` WHERE id = $1 AND owner_user_id = $2
-	           RETURNING id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at`
+	           RETURNING id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at`
 	var item LLMConfig
-	err := s.db.QueryRow(query, args...).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	err := s.db.QueryRow(query, args...).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -1712,7 +1728,7 @@ func (s *Server) deleteLLMConfig(ownerUserID string, id int64) (bool, error) {
 // existing rows pre-migration keep working.
 func (s *Server) listAvailableLLMConfigs(ownerUserID string) ([]LLMConfig, error) {
 	rows, err := s.db.Query(
-		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE (owner_user_id = $1 OR shared = TRUE)
 		    AND (provider_kind = 'text' OR provider_kind = '' OR provider_kind IS NULL)
@@ -1726,7 +1742,7 @@ func (s *Server) listAvailableLLMConfigs(ownerUserID string) ([]LLMConfig, error
 	items := make([]LLMConfig, 0)
 	for rows.Next() {
 		var item LLMConfig
-		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -1737,11 +1753,11 @@ func (s *Server) listAvailableLLMConfigs(ownerUserID string) ([]LLMConfig, error
 func (s *Server) getLLMConfigByShareID(shareID string) (*LLMConfig, error) {
 	var item LLMConfig
 	err := s.db.QueryRow(
-		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, (api_key <> '') AS has_api_key, created_at, updated_at
+		`SELECT id, owner_user_id, share_id, shared, name, base_url, model, system_prompt, streaming, (api_key <> '') AS has_api_key, created_at, updated_at
 		   FROM llm_configs
 		  WHERE share_id = $1 AND share_id <> ''`,
 		shareID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.ShareID, &item.Shared, &item.Name, &item.BaseURL, &item.Model, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -2332,7 +2348,7 @@ func (s *Server) getLLMConfigForThread(chatThreadID, llmThreadID int64, botUserI
 	var item LLMConfig
 	var apiKey string
 	err := s.db.QueryRow(
-		`SELECT c.id, c.owner_user_id, c.name, c.base_url, c.model, c.api_key, c.system_prompt, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
+		`SELECT c.id, c.owner_user_id, c.name, c.base_url, c.model, c.api_key, c.system_prompt, c.streaming, (c.api_key <> '') AS has_api_key, c.created_at, c.updated_at
 		   FROM llm_threads t
 		   LEFT JOIN bot_users b ON b.bot_user_id = t.bot_user_id
 		   JOIN llm_configs c ON c.id = COALESCE(t.llm_config_id, b.llm_config_id)
@@ -2340,7 +2356,7 @@ func (s *Server) getLLMConfigForThread(chatThreadID, llmThreadID int64, botUserI
 		llmThreadID,
 		chatThreadID,
 		botUserID,
-	).Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.OwnerUserID, &item.Name, &item.BaseURL, &item.Model, &apiKey, &item.SystemPrompt, &item.Streaming, &item.HasAPIKey, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", nil
@@ -5271,7 +5287,7 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 	if offset < 0 {
 		offset = 0
 	}
-	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.streaming, m.seq, m.updated_at, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 		   FROM chat_messages m
 		   JOIN users u ON u.id = m.sender_id
 		  WHERE m.thread_id = $1`
@@ -5295,6 +5311,7 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 		var llmThreadIDValue sql.NullInt64
 		var markdownEntryID sql.NullInt64
 		var latencyMs sql.NullInt64
+		var updatedAt sql.NullTime
 		var attachmentJSON sql.NullString
 		var deletedAt sql.NullTime
 		var deletedBy sql.NullString
@@ -5311,6 +5328,9 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 			&markdownEntryID,
 			&msg.MarkdownTitle,
 			&latencyMs,
+			&msg.Streaming,
+			&msg.Seq,
+			&updatedAt,
 			&attachmentJSON,
 			&msg.CreatedAt,
 			&deletedAt,
@@ -5331,6 +5351,9 @@ func (s *Server) listChatMessages(threadID int64, llmThreadID *int64, limit, off
 		}
 		if latencyMs.Valid {
 			msg.LatencyMs = &latencyMs.Int64
+		}
+		if updatedAt.Valid {
+			msg.UpdatedAt = &updatedAt.Time
 		}
 		if deletedBy.Valid {
 			msg.DeletedBy = deletedBy.String
@@ -5709,11 +5732,11 @@ func buildLLMThreadTitle(content string, fallback string) string {
 }
 
 func (s *Server) createChatMessage(threadID int64, llmThreadID *int64, senderID, content string, createdAt time.Time) (int64, error) {
-	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", nil, createdAt)
+	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", nil, false, createdAt)
 }
 
 func (s *Server) createChatMessageWithMetadata(threadID int64, llmThreadID *int64, senderID, messageType, content string, markdownEntryID *int64, markdownTitle string, latencyMs *int64, createdAt time.Time) (int64, error) {
-	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, messageType, false, content, markdownEntryID, markdownTitle, latencyMs, createdAt)
+	return s.createChatMessageWithOptions(threadID, llmThreadID, senderID, messageType, false, content, markdownEntryID, markdownTitle, latencyMs, false, createdAt)
 }
 
 func (s *Server) createAttachmentChatMessage(threadID int64, senderID, preview string, att ChatMessageAttachment, createdAt time.Time) (int64, error) {
@@ -5764,7 +5787,7 @@ func (s *Server) createAttachmentChatMessage(threadID int64, senderID, preview s
 	return id, nil
 }
 
-func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64, senderID, messageType string, failed bool, content string, markdownEntryID *int64, markdownTitle string, latencyMs *int64, createdAt time.Time) (int64, error) {
+func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64, senderID, messageType string, failed bool, content string, markdownEntryID *int64, markdownTitle string, latencyMs *int64, streaming bool, createdAt time.Time) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
@@ -5777,8 +5800,8 @@ func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64
 
 	var id int64
 	err = tx.QueryRow(
-		`INSERT INTO chat_messages (thread_id, llm_thread_id, sender_id, message_type, failed, content, markdown_entry_id, markdown_title, latency_ms, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`INSERT INTO chat_messages (thread_id, llm_thread_id, sender_id, message_type, failed, content, markdown_entry_id, markdown_title, latency_ms, streaming, seq, updated_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0, $11, $11)
 		 RETURNING id`,
 		threadID,
 		llmThreadID,
@@ -5789,6 +5812,7 @@ func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64
 		markdownEntryID,
 		markdownTitle,
 		latencyMs,
+		streaming,
 		createdAt,
 	).Scan(&id)
 	if err != nil {
@@ -5842,16 +5866,65 @@ func (s *Server) createChatMessageWithOptions(threadID int64, llmThreadID *int64
 	return id, nil
 }
 
+// updateChatMessageContent overwrites the content of a streaming chat
+// message and bumps its seq + updated_at. The compound guard prevents
+// stale chunks from clobbering a finalized row or one the user has
+// revoked. Returns true if a row was updated.
+func (s *Server) updateChatMessageContent(messageID int64, content string) (bool, error) {
+	res, err := s.db.Exec(
+		`UPDATE chat_messages
+		    SET content = $1,
+		        seq = seq + 1,
+		        updated_at = NOW()
+		  WHERE id = $2 AND streaming = TRUE AND deleted_at IS NULL`,
+		content,
+		messageID,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+// finalizeChatMessage flips streaming=false on a placeholder row and
+// commits the final content + optional markdown link + latency. Idempotent.
+func (s *Server) finalizeChatMessage(messageID int64, content string, markdownEntryID *int64, markdownTitle string, latencyMs *int64, failed bool) error {
+	_, err := s.db.Exec(
+		`UPDATE chat_messages
+		    SET content = $1,
+		        markdown_entry_id = $2,
+		        markdown_title = $3,
+		        latency_ms = $4,
+		        failed = $5,
+		        streaming = FALSE,
+		        seq = seq + 1,
+		        updated_at = NOW()
+		  WHERE id = $6 AND deleted_at IS NULL`,
+		content,
+		markdownEntryID,
+		markdownTitle,
+		latencyMs,
+		failed,
+		messageID,
+	)
+	return err
+}
+
 func (s *Server) getChatMessageByID(messageID int64) (*ChatMessage, error) {
 	var msg ChatMessage
 	var llmThreadID sql.NullInt64
 	var markdownEntryID sql.NullInt64
 	var latencyMs sql.NullInt64
+	var updatedAt sql.NullTime
 	var deletedAt sql.NullTime
 	var deletedBy sql.NullString
 	var attachmentJSON sql.NullString
 	err := s.db.QueryRow(
-		`SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+		`SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.streaming, m.seq, m.updated_at, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 		   FROM chat_messages m
 		   JOIN users u ON u.id = m.sender_id
 		  WHERE m.id = $1`,
@@ -5869,6 +5942,9 @@ func (s *Server) getChatMessageByID(messageID int64) (*ChatMessage, error) {
 		&markdownEntryID,
 		&msg.MarkdownTitle,
 		&latencyMs,
+		&msg.Streaming,
+		&msg.Seq,
+		&updatedAt,
 		&attachmentJSON,
 		&msg.CreatedAt,
 		&deletedAt,
@@ -5894,6 +5970,9 @@ func (s *Server) getChatMessageByID(messageID int64) (*ChatMessage, error) {
 	if latencyMs.Valid {
 		msg.LatencyMs = &latencyMs.Int64
 	}
+	if updatedAt.Valid {
+		msg.UpdatedAt = &updatedAt.Time
+	}
 	if deletedBy.Valid {
 		msg.DeletedBy = deletedBy.String
 	}
@@ -5910,7 +5989,7 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 	if limit <= 0 {
 		limit = 10
 	}
-	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.streaming, m.seq, m.updated_at, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 		   FROM chat_messages m
 		   JOIN users u ON u.id = m.sender_id
 		  WHERE m.thread_id = $1`
@@ -5934,6 +6013,7 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 		var llmThreadIDValue sql.NullInt64
 		var markdownEntryID sql.NullInt64
 		var latencyMs sql.NullInt64
+		var updatedAt sql.NullTime
 		var attachmentJSON sql.NullString
 		var deletedAt sql.NullTime
 		var deletedBy sql.NullString
@@ -5950,6 +6030,9 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 			&markdownEntryID,
 			&msg.MarkdownTitle,
 			&latencyMs,
+			&msg.Streaming,
+			&msg.Seq,
+			&updatedAt,
 			&attachmentJSON,
 			&msg.CreatedAt,
 			&deletedAt,
@@ -5969,6 +6052,9 @@ func (s *Server) listRecentChatMessages(threadID int64, llmThreadID *int64, limi
 		}
 		if latencyMs.Valid {
 			msg.LatencyMs = &latencyMs.Int64
+		}
+		if updatedAt.Valid {
+			msg.UpdatedAt = &updatedAt.Time
 		}
 		if deletedBy.Valid {
 			msg.DeletedBy = deletedBy.String
@@ -5995,7 +6081,7 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 		return nil, nil
 	}
 
-	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.attachment, m.created_at, m.deleted_at, m.deleted_by
+	query := `SELECT m.id, m.thread_id, m.llm_thread_id, m.sender_id, u.username, u.icon_url, m.message_type, m.failed, m.content, m.markdown_entry_id, m.markdown_title, m.latency_ms, m.streaming, m.seq, m.updated_at, m.attachment, m.created_at, m.deleted_at, m.deleted_by
 	   FROM chat_messages m
 	   JOIN users u ON u.id = m.sender_id
 	  WHERE m.thread_id = $1
@@ -6016,6 +6102,7 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 	var llmThreadID sql.NullInt64
 	var markdownEntryID sql.NullInt64
 	var latencyMs sql.NullInt64
+	var updatedAt sql.NullTime
 	var attachmentJSON sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy sql.NullString
@@ -6032,6 +6119,9 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 		&markdownEntryID,
 		&msg.MarkdownTitle,
 		&latencyMs,
+		&msg.Streaming,
+		&msg.Seq,
+		&updatedAt,
 		&attachmentJSON,
 		&msg.CreatedAt,
 		&deletedAt,
@@ -6051,6 +6141,9 @@ func (s *Server) findRetrySourceMessage(threadID int64, targetMessage *ChatMessa
 	}
 	if latencyMs.Valid {
 		msg.LatencyMs = &latencyMs.Int64
+	}
+	if updatedAt.Valid {
+		msg.UpdatedAt = &updatedAt.Time
 	}
 	if deletedAt.Valid {
 		msg.DeletedAt = &deletedAt.Time

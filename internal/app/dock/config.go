@@ -52,6 +52,7 @@ type Config struct {
 	AIAgentBaseURL      string
 	AIAgentModel        string
 	AIAgentSystemPrompt string
+	AIAgentStreaming    bool
 	ApplePushTopic      string
 	ApplePushTopicDev   string
 	ApplePushTopicProd  string

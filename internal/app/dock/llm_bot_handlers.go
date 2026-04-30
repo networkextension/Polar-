@@ -59,8 +59,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
 		Shared       bool   `json:"shared"`
-		// Optional discriminator + extras blob. Empty values get the
-		// 'text' / '{}' DB defaults so existing clients keep working.
+		Streaming    *bool  `json:"streaming,omitempty"`
 		ProviderKind string `json:"provider_kind"`
 		Extras       string `json:"extras"`
 	}
@@ -76,6 +75,10 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		return
 	}
 	now := time.Now()
+	streaming := true
+	if req.Streaming != nil {
+		streaming = *req.Streaming
+	}
 	item, err := s.createLLMConfig(
 		userIDStr,
 		name,
@@ -85,6 +88,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		strings.TrimSpace(req.SystemPrompt),
 		generateSessionID()[:24],
 		req.Shared,
+		streaming,
 		now,
 	)
 	if err != nil {
@@ -121,6 +125,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
 		Shared       bool   `json:"shared"`
+		Streaming    bool   `json:"streaming"`
 		UpdateAPIKey bool   `json:"update_api_key"`
 		ProviderKind string `json:"provider_kind"`
 		Extras       string `json:"extras"`
@@ -145,6 +150,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		strings.TrimSpace(req.APIKey),
 		strings.TrimSpace(req.SystemPrompt),
 		req.Shared,
+		req.Streaming,
 		req.UpdateAPIKey,
 		now,
 	)

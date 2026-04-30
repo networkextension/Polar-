@@ -872,7 +872,7 @@ func (s *Server) sendChatMessage(threadID int64, llmThreadID *int64, senderID, s
 }
 
 func (s *Server) sendFailedBotMessage(threadID int64, llmThreadID *int64, senderID, senderName, content string, latencyMs *int64, now time.Time) (int64, error) {
-	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", true, content, nil, "", latencyMs, now)
+	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", true, content, nil, "", latencyMs, false, now)
 	if err != nil {
 		return 0, err
 	}
@@ -880,11 +880,33 @@ func (s *Server) sendFailedBotMessage(threadID int64, llmThreadID *int64, sender
 }
 
 func (s *Server) sendBotChatMessage(threadID int64, llmThreadID *int64, senderID, senderName, content string, latencyMs *int64, now time.Time) (int64, error) {
-	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", latencyMs, now)
+	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "text", false, content, nil, "", latencyMs, false, now)
 	if err != nil {
 		return 0, err
 	}
 	return s.broadcastChatMessageByID(threadID, msgID, senderID, senderName)
+}
+
+// sendStreamingPlaceholder creates an empty shared_markdown row with
+// streaming=true and broadcasts it. Used by the AI agent at the start of a
+// streaming generation so the UI can show a "thinking…" bubble immediately.
+// The broadcast is marked silent so push-notification dedupe doesn't burn the
+// 24h key on the empty placeholder; the finalize republish is what triggers
+// the actual push delivery for the completed reply.
+func (s *Server) sendStreamingPlaceholder(threadID int64, llmThreadID *int64, senderID, senderName string, now time.Time) (int64, error) {
+	_ = senderName
+	msgID, err := s.createChatMessageWithOptions(threadID, llmThreadID, senderID, "shared_markdown", false, "", nil, "", nil, true, now)
+	if err != nil {
+		return 0, err
+	}
+	s.publishChatInternalEvent(chatInternalEvent{
+		Event:     chatEventMessageCreated,
+		ChatID:    threadID,
+		MessageID: msgID,
+		SenderID:  senderID,
+		Silent:    true,
+	})
+	return msgID, nil
 }
 
 func (s *Server) sendSharedMarkdownMessage(threadID int64, llmThreadID *int64, senderID, senderName string, markdownEntryID int64, markdownTitle, preview string, latencyMs *int64, now time.Time) (int64, error) {
@@ -1030,6 +1052,11 @@ func (s *Server) handleChatDelete(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "消息不存在或已撤回"})
 		return
 	}
+	// If the revoked row is a streaming AI placeholder, abort the upstream
+	// LLM HTTP call so we don't keep generating tokens for a deleted bubble.
+	if s.aiAgent != nil {
+		s.aiAgent.cancelStream(messageID)
+	}
 	if s.wsHub != nil {
 		deletedAt := time.Now()
 		s.publishChatInternalEvent(chatInternalEvent{
@@ -1042,6 +1069,51 @@ func (s *Server) handleChatDelete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "已撤回"})
+}
+
+// handleChatMessageDetail returns a single chat message by id within the
+// authenticated user's thread. Used by the frontend reload-recovery path to
+// catch the case where a streaming reply finalized while the page was
+// reloading and the WS missed the final create event.
+func (s *Server) handleChatMessageDetail(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	userIDStr, ok := userID.(string)
+	if !ok || userIDStr == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+
+	threadID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || threadID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的会话"})
+		return
+	}
+	participant, err := s.isChatParticipant(threadID, userIDStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if !participant {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该会话"})
+		return
+	}
+
+	messageID, err := strconv.ParseInt(c.Param("messageId"), 10, 64)
+	if err != nil || messageID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的消息"})
+		return
+	}
+
+	message, err := s.getChatMessageByID(messageID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if message == nil || message.ThreadID != threadID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "消息不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": message})
 }
 
 const (
