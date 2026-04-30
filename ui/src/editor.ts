@@ -26,6 +26,12 @@ const assistDiffBtn = byId<HTMLButtonElement>("assistDiffBtn");
 const assistStatus = byId<HTMLElement>("assistStatus");
 const assistPreview = byId<HTMLElement>("assistPreview");
 const assistDiff = byId<HTMLElement>("assistDiff");
+const assistDrawer = byId<HTMLElement>("assistDrawer");
+const assistDrawerClose = byId<HTMLButtonElement>("assistDrawerClose");
+const assistToggleBtn = byId<HTMLButtonElement>("assistToggleBtn");
+const previewModal = byId<HTMLElement>("previewModal");
+const previewModalClose = byId<HTMLButtonElement>("previewModalClose");
+const previewToggleBtn = byId<HTMLButtonElement>("previewToggleBtn");
 const entryId = new URLSearchParams(window.location.search).get("id");
 
 let canEdit = true;
@@ -211,6 +217,48 @@ async function loadEntry(): Promise<void> {
 
 contentInput.addEventListener("input", renderPreview);
 publicToggle.addEventListener("change", updatePublicHint);
+
+// Drawer + modal open/close. The drawer slides in from the right; the
+// modal centers over the page with a backdrop. Both close on ESC and
+// the modal also closes on backdrop click. Keeping focus on editing
+// is the whole point — these surfaces are opt-in.
+function setAssistDrawerOpen(open: boolean): void {
+  assistDrawer.hidden = !open;
+  assistDrawer.classList.toggle("is-open", open);
+  assistToggleBtn.classList.toggle("is-active", open);
+}
+function setPreviewModalOpen(open: boolean): void {
+  previewModal.hidden = !open;
+  previewModal.classList.toggle("is-open", open);
+  previewToggleBtn.classList.toggle("is-active", open);
+  if (open) {
+    // Render fresh on open so changes since last preview show.
+    renderPreview();
+  }
+}
+assistToggleBtn.addEventListener("click", () => {
+  setAssistDrawerOpen(assistDrawer.hidden);
+});
+assistDrawerClose.addEventListener("click", () => setAssistDrawerOpen(false));
+previewToggleBtn.addEventListener("click", () => {
+  setPreviewModalOpen(previewModal.hidden);
+});
+previewModalClose.addEventListener("click", () => setPreviewModalOpen(false));
+previewModal.addEventListener("click", (event) => {
+  if ((event.target as HTMLElement).dataset.modalClose !== undefined) {
+    setPreviewModalOpen(false);
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (!previewModal.hidden) {
+    setPreviewModalOpen(false);
+    return;
+  }
+  if (!assistDrawer.hidden) {
+    setAssistDrawerOpen(false);
+  }
+});
 assistRunBtn.addEventListener("click", async () => {
   if (!canEdit) {
     return;

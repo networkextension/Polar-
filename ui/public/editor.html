@@ -62,7 +62,9 @@
           <span class="lp-topbar-title" data-i18n="editor.heading">Markdown Editor</span>
           <div class="lp-topbar-end">
             <span id="welcomeText" class="lp-mode-badge" data-i18n="editor.newEntry">New entry</span>
-            <button id="saveBtn" class="lp-topbar-back" type="button" data-i18n="editor.save">Save</button>
+            <button id="previewToggleBtn" class="btn-chip" type="button" data-i18n="editor.previewToggle">Preview</button>
+            <button id="assistToggleBtn" class="btn-chip" type="button" data-i18n="editor.assistToggle">AI Polish</button>
+            <button id="saveBtn" class="btn-chip btn-chip-primary" type="button" data-i18n="editor.save">Save</button>
             <button id="backBtn" class="lp-topbar-back" type="button" data-i18n="editor.backToDashboard">Dashboard</button>
           </div>
         </div>
@@ -70,7 +72,7 @@
         <div class="lp-content">
           <div id="alert" class="alert"></div>
 
-          <div class="lp-section">
+          <div class="lp-section editor-focus">
             <div class="toolbar">
               <input id="titleInput" type="text" data-i18n-placeholder="editor.titlePlaceholder" placeholder="Title" />
             </div>
@@ -81,34 +83,51 @@
               </label>
               <div id="publicHint" class="status-text" data-i18n="editor.publicByDefault">Visible only to you by default.</div>
             </div>
-            <div class="editor-options">
-              <div class="badge">Bot 润色助手</div>
-              <div class="toolbar" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-                <select id="assistBotSelect" class="input"></select>
-                <select id="assistLLMSelect" class="input"></select>
-              </div>
-              <textarea id="assistInstructionInput" class="input textarea" rows="3" placeholder="可选：写本次润色要求，例如“更专业、更简洁、保留原观点”"></textarea>
-              <div class="toolbar" style="display:flex; gap:8px;">
-                <button id="assistRunBtn" class="btn-inline btn-secondary" type="button">润色正文</button>
-                <button id="assistApplyBtn" class="btn-inline btn-secondary" type="button" disabled>应用到正文</button>
-                <button id="assistDiffBtn" class="btn-inline btn-secondary" type="button" disabled>查看差异</button>
-              </div>
-              <div id="assistStatus" class="status-text"></div>
-              <div class="badge">润色结果预览</div>
-              <div id="assistPreview" class="content-box">暂无润色结果</div>
-              <div id="assistDiff" class="content-box" hidden>暂无差异结果</div>
-            </div>
-            <div class="grid">
-              <div>
-                <textarea id="contentInput" data-i18n-placeholder="editor.contentPlaceholder" placeholder="Enter Markdown content here..."></textarea>
-              </div>
-              <div>
-                <div class="badge" data-i18n="editor.previewBadge">Preview (original)</div>
-                <div id="preview" class="content-box" data-i18n="editor.noContent">No content</div>
-              </div>
+            <div class="editor-main">
+              <textarea id="contentInput" data-i18n-placeholder="editor.contentPlaceholder" placeholder="Enter Markdown content here..."></textarea>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- AI Polish drawer. Hidden by default; opened from the topbar
+         "AI Polish" button. Slides in from the right so the user can
+         keep editing while polishing runs and apply / diff in place. -->
+    <aside id="assistDrawer" class="editor-drawer" hidden>
+      <header class="editor-drawer-head">
+        <span class="badge" data-i18n="editor.assistTitle">Bot polish</span>
+        <button id="assistDrawerClose" class="editor-drawer-close" type="button" aria-label="Close">×</button>
+      </header>
+      <div class="editor-drawer-body">
+        <label class="form-label" for="assistBotSelect" data-i18n="editor.assistBot">Bot</label>
+        <select id="assistBotSelect" class="input"></select>
+        <label class="form-label" for="assistLLMSelect" data-i18n="editor.assistLLM">Model (optional)</label>
+        <select id="assistLLMSelect" class="input"></select>
+        <label class="form-label" for="assistInstructionInput" data-i18n="editor.assistInstruction">Instruction (optional)</label>
+        <textarea id="assistInstructionInput" class="input textarea" rows="3" data-i18n-placeholder="editor.assistInstructionPlaceholder" placeholder="可选：写本次润色要求，例如“更专业、更简洁、保留原观点”"></textarea>
+        <div class="editor-drawer-actions">
+          <button id="assistRunBtn" class="btn-chip btn-chip-primary" type="button" data-i18n="editor.assistRun">Polish</button>
+          <button id="assistApplyBtn" class="btn-chip" type="button" disabled data-i18n="editor.assistApply">Apply</button>
+          <button id="assistDiffBtn" class="btn-chip" type="button" disabled data-i18n="editor.assistDiff">Diff</button>
+        </div>
+        <div id="assistStatus" class="status-text"></div>
+        <div class="form-label" data-i18n="editor.assistResult">Polished result</div>
+        <div id="assistPreview" class="content-box" data-i18n="editor.assistNoResult">No polished result yet</div>
+        <div id="assistDiff" class="content-box" hidden data-i18n="editor.assistNoDiff">No diff yet</div>
+      </div>
+    </aside>
+
+    <!-- Preview modal. Hidden by default; opened from the topbar
+         "Preview" button. ESC or click on the backdrop closes. -->
+    <div id="previewModal" class="editor-modal" hidden>
+      <div class="editor-modal-backdrop" data-modal-close></div>
+      <div class="editor-modal-card" role="dialog" aria-modal="true">
+        <header class="editor-modal-head">
+          <span class="badge" data-i18n="editor.previewBadge">Preview</span>
+          <button id="previewModalClose" class="editor-drawer-close" type="button" aria-label="Close">×</button>
+        </header>
+        <div id="preview" class="content-box editor-modal-body markdown-body" data-i18n="editor.noContent">No content</div>
       </div>
     </div>
 

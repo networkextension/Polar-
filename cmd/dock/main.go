@@ -27,6 +27,17 @@ func main() {
 		smtpPort = parsed
 	}
 
+	// Video studio: poll cadence for in-flight Seedance jobs. 10s matches
+	// the bash `poll_results.sh` POLL_INTERVAL=15 with a slight tighten.
+	videoPollInterval := 10
+	if value := os.Getenv("VIDEO_POLL_INTERVAL"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			log.Fatalf("invalid VIDEO_POLL_INTERVAL: %v", err)
+		}
+		videoPollInterval = parsed
+	}
+
 	cfg := dock.Config{
 		Addr:                envOrDefault("ADDR", dock.DefaultAddr),
 		PostgresDSN:         envOrDefault("POSTGRES_DSN", dock.DefaultPostgresDSN),
@@ -68,6 +79,12 @@ func main() {
 		CloudflareR2SecretAccessKey: os.Getenv("CF_R2_SECRET_ACCESS_KEY"),
 		CloudflareR2Bucket:          os.Getenv("CF_R2_BUCKET"),
 		CloudflareR2PublicURL:       os.Getenv("CF_R2_PUBLIC_URL"),
+
+		// Video studio
+		VideoPollIntervalSeconds: videoPollInterval,
+		VideoSeedanceBaseURL:     envOrDefault("VIDEO_SEEDANCE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+		VideoSeedanceModel:       envOrDefault("VIDEO_SEEDANCE_MODEL", "doubao-seedance-1-0-pro-250528"),
+		VideoSeedanceAPIKey:      os.Getenv("VIDEO_SEEDANCE_API_KEY"),
 	}
 
 	server, err := dock.NewServer(cfg)
