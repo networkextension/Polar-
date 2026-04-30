@@ -1,6 +1,7 @@
 import { request, requestJson } from "./http.js";
 import type {
   ChatListResponse,
+  ChatMessage,
   SharedMarkdownResponse,
   ChatMessagesResponse,
   StartChatResponse,
@@ -82,6 +83,13 @@ export async function fetchChatLLMConfigs() {
 
 export async function fetchSharedMarkdown(threadId: string, messageId: string) {
   return requestJson<SharedMarkdownResponse>(`/api/chats/${threadId}/messages/${messageId}/markdown`);
+}
+
+// Fetch a single chat message by id. Used by the streaming reload-recovery
+// path: if we land on a thread with a streaming row whose updated_at is stale,
+// we re-pull it once to catch a finalize that happened mid-reload.
+export async function fetchChatMessage(threadId: string, messageId: string) {
+  return requestJson<{ message?: ChatMessage; error?: string }>(`/api/chats/${threadId}/messages/${messageId}`);
 }
 
 export async function revokeMessage(threadId: string, messageId: string) {

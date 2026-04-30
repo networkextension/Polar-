@@ -2,6 +2,7 @@ package dock
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -109,13 +110,19 @@ func (h *wsHub) run() {
 		case msg := <-h.broadcast:
 			for _, userID := range msg.userIDs {
 				group := h.clients[userID]
+				delivered := 0
 				for client := range group {
 					select {
 					case client.send <- msg.payload:
+						delivered++
 					default:
+						log.Printf("ws hub send overflow, dropping client user=%s conn=%s buffer=%d/%d", client.userID, client.connID, len(client.send), cap(client.send))
 						close(client.send)
 						delete(group, client)
 					}
+				}
+				if len(group) == 0 && delivered == 0 {
+					log.Printf("ws broadcast: no live clients for user=%s (chat broadcast lost)", userID)
 				}
 			}
 		}
@@ -230,15 +237,18 @@ func (c *wsClient) writePump() {
 		case message, ok := <-c.send:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 			if !ok {
+				log.Printf("ws writePump: send channel closed, sending close frame user=%s conn=%s", c.userID, c.connID)
 				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				log.Printf("ws writePump: WriteMessage failed user=%s conn=%s err=%v", c.userID, c.connID, err)
 				return
 			}
 		case <-ticker.C:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("ws writePump: ping failed user=%s conn=%s err=%v", c.userID, c.connID, err)
 				return
 			}
 		}

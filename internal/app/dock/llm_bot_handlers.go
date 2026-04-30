@@ -59,6 +59,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
 		Shared       bool   `json:"shared"`
+		Streaming    *bool  `json:"streaming,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
@@ -71,6 +72,13 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "名称、Base URL 和 Model 不能为空"})
 		return
 	}
+	// Default streaming=true for new configs so the eval bundle ships with
+	// streaming on out of the box. Omitting the field in the request keeps
+	// this default; sending false explicitly opts out.
+	streaming := true
+	if req.Streaming != nil {
+		streaming = *req.Streaming
+	}
 	item, err := s.createLLMConfig(
 		userIDStr,
 		name,
@@ -80,6 +88,7 @@ func (s *Server) handleLLMConfigCreate(c *gin.Context) {
 		strings.TrimSpace(req.SystemPrompt),
 		generateSessionID()[:24],
 		req.Shared,
+		streaming,
 		time.Now(),
 	)
 	if err != nil {
@@ -104,6 +113,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		APIKey       string `json:"api_key"`
 		SystemPrompt string `json:"system_prompt"`
 		Shared       bool   `json:"shared"`
+		Streaming    bool   `json:"streaming"`
 		UpdateAPIKey bool   `json:"update_api_key"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -125,6 +135,7 @@ func (s *Server) handleLLMConfigUpdate(c *gin.Context) {
 		strings.TrimSpace(req.APIKey),
 		strings.TrimSpace(req.SystemPrompt),
 		req.Shared,
+		req.Streaming,
 		req.UpdateAPIKey,
 		time.Now(),
 	)

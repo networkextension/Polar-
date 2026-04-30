@@ -45,6 +45,9 @@ export type ChatMessage = {
   markdown_entry_id?: number;
   markdown_title?: string;
   latency_ms?: number;
+  streaming?: boolean;
+  seq?: number;
+  updated_at?: string;
   attachment?: ChatMessageAttachment;
   deleted?: boolean;
   created_at: string;
@@ -81,6 +84,7 @@ export type ChatLLMConfig = {
   name: string;
   model: string;
   shared: boolean;
+  streaming?: boolean;
 };
 
 export type LLMThreadListResponse = {

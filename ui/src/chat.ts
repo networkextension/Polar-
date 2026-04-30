@@ -1,4 +1,4 @@
-import { createLLMThread, fetchChatLLMConfigs, fetchChats, fetchLLMThreads, fetchMessages, fetchSharedMarkdown, retryMessage, revokeMessage as revokeChatMessage, sendAttachment, sendMessage, startChat, switchLLMThreadConfig, updateLLMThread } from "./api/chat.js";
+import { createLLMThread, fetchChatLLMConfigs, fetchChatMessage, fetchChats, fetchLLMThreads, fetchMessages, fetchSharedMarkdown, retryMessage, revokeMessage as revokeChatMessage, sendAttachment, sendMessage, startChat, switchLLMThreadConfig, updateLLMThread } from "./api/chat.js";
 import { fetchBotUsers } from "./api/dashboard.js";
 import { requestJson } from "./api/http.js";
 import { fetchCurrentUser, logout } from "./api/session.js";
@@ -17,7 +17,7 @@ const chatTitle = byId<HTMLElement>("chatTitle");
 const chatSubtitle = byId<HTMLElement>("chatSubtitle");
 const messageList = byId<HTMLElement>("messageList");
 const messageForm = byId<HTMLFormElement>("messageForm");
-const messageInput = byId<HTMLInputElement>("messageInput");
+const messageInput = byId<HTMLTextAreaElement>("messageInput");
 const chatRefreshBtn = byId<HTMLButtonElement>("chatRefreshBtn");
 const chatNewTopicBtn = byId<HTMLButtonElement>("chatNewTopicBtn");
 const chatRenameTopicBtn = byId<HTMLButtonElement>("chatRenameTopicBtn");
@@ -54,6 +54,75 @@ const sharedMarkdownLoading = new Set<string>();
 const messageCacheMap = new Map<string, ChatMessage[]>();
 const MSG_PAGE_SIZE = 50;
 let visibleOlderCount = 0;
+
+// Local-only thumb feedback state, persisted in localStorage so it survives
+// reloads. No backend wiring yet — this is a pure UI gesture for now (feeds
+// future analytics / fine-tuning loops).
+const FEEDBACK_STORAGE_KEY = "polar_chat_feedback_v1";
+
+// Last-active thread, persisted across reloads so the page restores the chat
+// the user was looking at instead of jumping to chats[0].
+const ACTIVE_THREAD_STORAGE_KEY = "polar_chat_active_thread_v1";
+function loadStoredActiveThread(): string | null {
+  try {
+    return window.localStorage.getItem(ACTIVE_THREAD_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+function persistActiveThread(threadId: string | null): void {
+  try {
+    if (threadId) {
+      window.localStorage.setItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
+    } else {
+      window.localStorage.removeItem(ACTIVE_THREAD_STORAGE_KEY);
+    }
+  } catch {
+    // localStorage may be disabled (private mode); silently degrade.
+  }
+}
+type Feedback = { up: Set<string>; down: Set<string> };
+const feedback: Feedback = loadFeedback();
+function loadFeedback(): Feedback {
+  try {
+    const raw = window.localStorage.getItem(FEEDBACK_STORAGE_KEY);
+    if (!raw) return { up: new Set(), down: new Set() };
+    const parsed = JSON.parse(raw) as { up?: string[]; down?: string[] };
+    return { up: new Set(parsed.up || []), down: new Set(parsed.down || []) };
+  } catch {
+    return { up: new Set(), down: new Set() };
+  }
+}
+function persistFeedback(): void {
+  try {
+    window.localStorage.setItem(
+      FEEDBACK_STORAGE_KEY,
+      JSON.stringify({ up: [...feedback.up], down: [...feedback.down] }),
+    );
+  } catch {
+    // localStorage may be disabled (private mode); silently degrade.
+  }
+}
+
+// Inline SVG icons. 16x16, currentColor stroke. Modeled on the Lucide /
+// Tabler line-art set: light, recognizable, color-inheriting so we don't
+// need light/dark variants.
+const ICON_COPY =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const ICON_THUMB_UP =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3z"/><path d="M7 11l4-7a2 2 0 0 1 3.7 1l-1 5h5a2 2 0 0 1 2 2.3l-1.4 7A2 2 0 0 1 17.3 20H7"/></svg>';
+const ICON_THUMB_DOWN =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 13V4h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3z"/><path d="M17 13l-4 7a2 2 0 0 1-3.7-1l1-5H5.3A2 2 0 0 1 3.3 11.7L4.7 4.7A2 2 0 0 1 6.7 4H17"/></svg>';
+const ICON_REGENERATE =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>';
+const ICON_EXPAND =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+const ICON_COLLAPSE =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"/></svg>';
+const ICON_SHARE =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+const ICON_FAVORITE =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
 
 type QuickStartTarget = {
   user_id: string;
@@ -108,6 +177,58 @@ function stripLeadingHeading(markdown: string, title: string): string {
     return newlineIdx >= 0 ? trimmed.slice(newlineIdx + 1).trimStart() : "";
   }
   return markdown;
+}
+
+// closeOpenFences: while a bot reply is streaming a code block, the closing
+// ``` may not have arrived yet. Counting fences and appending a temporary
+// closer keeps `renderMarkdown` from rendering the in-progress code as plain
+// text. We only fix odd fence counts; tables / lists are left as-is.
+function closeOpenFences(text: string): string {
+  if (!text) return "";
+  const matches = text.match(/```/g);
+  if (matches && matches.length % 2 === 1) {
+    return text + "\n```";
+  }
+  return text;
+}
+
+// buildBotActionBar renders the icon row that sits below a bot reply.
+// Layout (left to right): copy, like, dislike, regenerate, [expand], [share],
+// [favorite]. Bracketed entries only appear for shared_markdown messages,
+// which is the only message type that has a saved Markdown doc to expand
+// or share. Like/dislike track only in localStorage for now.
+function buildBotActionBar(opts: {
+  messageId: string;
+  isFailed: boolean;
+  isSharedMarkdown: boolean;
+  isExpanded: boolean;
+  liked: boolean;
+  disliked: boolean;
+}): string {
+  const id = opts.messageId;
+  const buttons: string[] = [];
+  buttons.push(iconButton("message-copy", id, t("chat.copy"), ICON_COPY));
+  buttons.push(iconButton("message-like", id, t("chat.like"), ICON_THUMB_UP, opts.liked));
+  buttons.push(iconButton("message-dislike", id, t("chat.dislike"), ICON_THUMB_DOWN, opts.disliked));
+  buttons.push(iconButton("message-retry", id, opts.isFailed ? t("chat.retry") : t("chat.regenerate"), ICON_REGENERATE));
+  if (opts.isSharedMarkdown) {
+    buttons.push(
+      iconButton(
+        "message-expand",
+        id,
+        opts.isExpanded ? t("chat.collapse") : t("chat.expand"),
+        opts.isExpanded ? ICON_COLLAPSE : ICON_EXPAND,
+      ),
+    );
+    buttons.push(iconButton("message-public-share", id, t("chat.sharePublicly"), ICON_SHARE));
+    buttons.push(iconButton("message-favorite", id, t("chat.favorite"), ICON_FAVORITE));
+  }
+  return `<div class="message-action-bar">${buttons.join("")}</div>`;
+}
+
+function iconButton(cls: string, id: string, label: string, svg: string, active = false): string {
+  const activeCls = active ? " is-active" : "";
+  return `<button class="message-action-icon ${cls}${activeCls}" data-id="${id}" type="button" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${svg}</button>`;
 }
 
 function formatFileSize(bytes: number): string {
@@ -327,11 +448,63 @@ function updateActiveMessageLoadedAt(messages: ChatMessage[]): void {
   activeMessageLoadedAt = getMessageMarker(latest);
 }
 
-function appendMessageIfNeeded(message: ChatMessage): boolean {
-  if (!message || activeMessages.some((item) => item.id === message.id)) {
+// scheduleRenderMessages coalesces streaming-driven re-renders to ~one paint
+// per animation frame. WS chunks can arrive faster than the browser's frame
+// rate; without throttling we'd rebuild the entire messageList innerHTML on
+// each chunk and scroll/select state would thrash. Direct user actions still
+// call renderMessages() unconditionally.
+let pendingRenderFrame: number | null = null;
+let pendingRenderScroll = false;
+function scheduleRenderMessages(scrollToBottom = true): void {
+  if (scrollToBottom) {
+    pendingRenderScroll = true;
+  }
+  if (pendingRenderFrame !== null) return;
+  pendingRenderFrame = window.requestAnimationFrame(() => {
+    pendingRenderFrame = null;
+    const scroll = pendingRenderScroll;
+    pendingRenderScroll = false;
+    renderMessages(activeMessages, scroll);
+  });
+}
+
+// upsertMessage replaces any existing message with the same id (used for
+// streaming updates where the same message arrives multiple times with
+// growing content), or appends a new one. Out-of-order chunks are dropped
+// using the seq counter — incoming.seq < existing.seq means a stale event
+// raced past us.
+function upsertMessage(message: ChatMessage): boolean {
+  if (!message) return false;
+  const index = activeMessages.findIndex((item) => item.id === message.id);
+  if (index === -1) {
+    activeMessages = [...activeMessages, message];
+    updateActiveMessageLoadedAt(activeMessages);
+    return true;
+  }
+  const existing = activeMessages[index];
+  const incomingSeq = typeof message.seq === "number" ? message.seq : 0;
+  const existingSeq = typeof existing.seq === "number" ? existing.seq : 0;
+  if (incomingSeq > 0 && incomingSeq < existingSeq) {
     return false;
   }
-  activeMessages = [...activeMessages, message];
+  // When a streaming row finalizes (streaming=true → false with markdown
+  // attached), the WS payload swaps full content for a 120-char preview. The
+  // user just watched the full text type out — collapsing it behind an
+  // "expand" button feels like the UI is taking back what it just gave them.
+  // Snapshot the last streamed content into the expanded cache and pre-mark
+  // the message as expanded so the card opens with the streamed body intact.
+  const wasStreaming = existing.streaming === true;
+  const justFinalized = wasStreaming && message.streaming !== true && Boolean(message.markdown_entry_id);
+  if (justFinalized) {
+    const streamedBody = existing.content || "";
+    if (streamedBody) {
+      sharedMarkdownContentCache.set(String(message.id), streamedBody);
+    }
+    expandedMarkdownMessages.add(String(message.id));
+  }
+  const next = activeMessages.slice();
+  next[index] = message;
+  activeMessages = next;
   updateActiveMessageLoadedAt(activeMessages);
   return true;
 }
@@ -503,7 +676,7 @@ function renderQuickStart(targets: QuickStartTarget[], llmOptions: QuickStartLLM
     <div class="chat-quick-start-list" style="display:grid; gap:8px;">
       <select id="quickStartBotSelect" class="input">${botOptionsHTML}</select>
       <select id="quickStartLLMSelect" class="input">${llmOptionsHTML}</select>
-      <button id="quickStartStartBtn" class="btn-inline btn-secondary" type="button" ${canStart ? "" : "disabled"}>
+      <button id="quickStartStartBtn" class="btn-chip" type="button" ${canStart ? "" : "disabled"}>
         ${canStart ? "开始聊天" : "暂无可用 LLM，无法开始"}
       </button>
     </div>
@@ -609,35 +782,36 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
       const isSystem = msg.sender_id === "system";
       const isBotReply = !isMine && (msg.sender_id === "system" || msg.sender_id.startsWith("bot_"));
       const isFailedBotReply = isBotReply && Boolean(msg.failed) && !msg.deleted;
-      const isSharedMarkdown = msg.message_type === "shared_markdown" && Boolean(msg.markdown_entry_id);
+      const isStreamingBot = Boolean(msg.streaming) && !msg.deleted;
+      const isSharedMarkdown = msg.message_type === "shared_markdown" && Boolean(msg.markdown_entry_id) && !isStreamingBot;
       const isExpanded = expandedMarkdownMessages.has(String(msg.id));
       const expandedContent = sharedMarkdownContentCache.get(String(msg.id)) || "";
       const isLoadingExpanded = sharedMarkdownLoading.has(String(msg.id));
-      const retryAction = isFailedBotReply
-        ? `<button class="btn-inline btn-secondary message-retry" data-id="${msg.id}" type="button">Retry</button>`
-        : "";
       const failureBadge = isFailedBotReply
         ? `<div class="message-failure-badge">${t("chat.sendFailed")}</div>`
         : "";
-      const markdownActions = isSharedMarkdown
-        ? `
-            <div class="message-markdown-actions">
-              <button class="btn-inline btn-secondary message-expand" data-id="${msg.id}" type="button">${isExpanded ? t("chat.collapse") : t("chat.expand")}</button>
-              ${retryAction}
-              <button class="btn-inline btn-secondary message-copy" data-id="${msg.id}" type="button">${t("chat.copy")}</button>
-              <button class="btn-inline btn-secondary message-public-share" data-id="${msg.id}" type="button">${t("chat.sharePublicly")}</button>
-              <button class="btn-inline btn-secondary message-favorite" data-id="${msg.id}" type="button">${t("chat.favorite")}</button>
-            </div>
-          `
-        : "";
-      const textActions = !isSharedMarkdown && retryAction
-        ? `<div class="message-inline-actions">${retryAction}</div>`
+      // Bot reply icon action bar (ChatGPT-style). Renders below the bubble.
+      // Hidden during streaming so the in-flight bubble stays uncluttered.
+      const showBotActions = isBotReply && !msg.deleted && !isStreamingBot;
+      const liked = feedback.up.has(String(msg.id));
+      const disliked = feedback.down.has(String(msg.id));
+      const botActionBar = showBotActions
+        ? buildBotActionBar({
+            messageId: String(msg.id),
+            isFailed: isFailedBotReply,
+            isSharedMarkdown,
+            isExpanded,
+            liked,
+            disliked,
+          })
         : "";
       const isAttachment = msg.message_type === "attachment" && Boolean(msg.attachment);
       const content = msg.deleted
         ? t("chat.messageRevoked")
         : isAttachment && msg.attachment
           ? renderAttachment(msg.attachment)
+        : isStreamingBot
+          ? `<div class="message-markdown-streaming markdown-body">${renderMarkdown(closeOpenFences(msg.content || ""))}</div>`
         : isSharedMarkdown
           ? (() => {
               const title = msg.markdown_title || t("chat.aiMarkdownReply");
@@ -650,20 +824,28 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
                     ? t("chat.loadingContent")
                     : renderMarkdown(stripLeadingHeading(expandedContent, msg.markdown_title || "")))
                 : "";
+              // When the card is expanded the full body is already visible —
+              // showing the 120-char preview again is just visual noise.
+              const previewHtml = isExpanded
+                ? ""
+                : `<div class="message-markdown-preview">${escapeHtml(preview)}</div>`;
               return `
                 <div class="message-markdown-card">
                   ${titleHtml}
-                  <div class="message-markdown-preview">${escapeHtml(preview)}</div>
+                  ${previewHtml}
                   ${isExpanded ? `<div class="message-markdown-expanded markdown-body">${expandedMarkdown}</div>` : ""}
-                  ${markdownActions}
                 </div>
               `;
             })()
         : isSystem
           ? renderMarkdown(msg.content || "")
           : escapeHtml(msg.content || "");
-      const bubbleClass = msg.deleted ? "message-bubble deleted" : "message-bubble";
-      const contentClass = isSharedMarkdown
+      const bubbleClass = msg.deleted
+        ? "message-bubble deleted"
+        : isStreamingBot
+          ? "message-bubble streaming"
+          : "message-bubble";
+      const contentClass = isSharedMarkdown || isStreamingBot
         ? "message-bubble-content"
         : isSystem && !msg.deleted
           ? "message-bubble-content markdown-body"
@@ -677,11 +859,15 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
       const botModelMeta = isBotReply
         ? (activeThread?.config_model || activeThread?.config_name || "LLM")
         : "";
-      const latencyMeta = isBotReply && typeof msg.latency_ms === "number" && msg.latency_ms > 0
+      // Hide latency until the stream completes; show "streaming…" instead.
+      const latencyMeta = isBotReply && !isStreamingBot && typeof msg.latency_ms === "number" && msg.latency_ms > 0
         ? ` · ${formatLatency(msg.latency_ms)}`
         : "";
+      const streamingMeta = isStreamingBot
+        ? ` · <span class="message-meta-streaming">${t("chat.streaming") || "streaming"}<span class="message-streaming-dots"></span></span>`
+        : "";
       const messageMeta = isBotReply
-        ? `${msg.sender_username} · ${botModelMeta} · ${formatTime(msg.created_at)}${latencyMeta}${isFailedBotReply ? ` · ${t("chat.failed")}` : ""}`
+        ? `${msg.sender_username} · ${botModelMeta} · ${formatTime(msg.created_at)}${latencyMeta}${streamingMeta}${isFailedBotReply ? ` · ${t("chat.failed")}` : ""}`
         : `${msg.sender_username} · ${formatTime(msg.created_at)}`;
       if (isMine) {
         return `
@@ -691,7 +877,7 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
               <div class="message-meta">${messageMeta}</div>
             </div>
             <div class="message-row">
-              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
+              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}</div>
               ${revokeButton}
             </div>
           </div>
@@ -703,9 +889,10 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
           <div class="message-body">
             <div class="message-meta">${messageMeta}</div>
             <div class="message-row">
-              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}${textActions}</div>
+              <div class="${bubbleClass}"><div class="${contentClass}">${content}</div>${failureBadge}</div>
               ${revokeButton}
             </div>
+            ${botActionBar}
           </div>
         </div>
       `;
@@ -735,6 +922,11 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
       if (!messageId) {
         return;
       }
+      // Only failed bot replies are torn down locally on click. For a
+      // successful reply this button means "regenerate" — the original stays
+      // and a new bubble streams in alongside it via WS.
+      const target = activeMessages.find((m) => m.id === messageId);
+      const isFailedSource = Boolean(target?.failed);
       button.disabled = true;
       chatSubtitle.textContent = t("chat.retrying");
       try {
@@ -743,13 +935,45 @@ function renderMessages(messages: ChatMessage[], scrollToBottom = false): void {
           chatSubtitle.textContent = data.error || t("chat.retryFailed");
           return;
         }
-        if (removeMessageIfNeeded(messageId)) {
+        if (isFailedSource && removeMessageIfNeeded(messageId)) {
           renderMessages(activeMessages);
         }
         chatSubtitle.textContent = data.message || t("chat.retrySuccess");
       } finally {
         button.disabled = false;
       }
+    });
+  });
+  messageList.querySelectorAll<HTMLButtonElement>(".message-like").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.id;
+      if (!id) return;
+      if (feedback.up.has(id)) {
+        feedback.up.delete(id);
+      } else {
+        feedback.up.add(id);
+        feedback.down.delete(id);
+      }
+      persistFeedback();
+      button.classList.toggle("is-active", feedback.up.has(id));
+      const dislikeButton = messageList.querySelector<HTMLButtonElement>(`.message-dislike[data-id="${id}"]`);
+      dislikeButton?.classList.remove("is-active");
+    });
+  });
+  messageList.querySelectorAll<HTMLButtonElement>(".message-dislike").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.id;
+      if (!id) return;
+      if (feedback.down.has(id)) {
+        feedback.down.delete(id);
+      } else {
+        feedback.down.add(id);
+        feedback.up.delete(id);
+      }
+      persistFeedback();
+      button.classList.toggle("is-active", feedback.down.has(id));
+      const likeButton = messageList.querySelector<HTMLButtonElement>(`.message-like[data-id="${id}"]`);
+      likeButton?.classList.remove("is-active");
     });
   });
   messageList.querySelectorAll<HTMLButtonElement>(".message-copy").forEach((button) => {
@@ -910,10 +1134,46 @@ async function loadMessages(threadId: string): Promise<void> {
     renderLLMThreadBar();
   }
   renderMessages(data.messages || [], true);
+  reconcileStaleStreamingMessages(threadId, data.messages || []);
+}
+
+// Reload-recovery: a streaming row whose updated_at is older than 5s likely
+// finalized while the page was reloading and the WS handler missed the final
+// event. Re-fetch each such message once and upsert it. Bounded to a few
+// fetches per thread; cheap insurance.
+async function reconcileStaleStreamingMessages(threadId: string, messages: ChatMessage[]): Promise<void> {
+  const now = Date.now();
+  const stale = messages.filter((msg) => {
+    if (!msg.streaming) return false;
+    if (!msg.updated_at) return true;
+    return now - new Date(msg.updated_at).getTime() > 5000;
+  });
+  if (!stale.length) return;
+  await Promise.all(
+    stale.map(async (msg) => {
+      try {
+        const { response, data } = await fetchChatMessage(threadId, msg.id);
+        if (!response.ok || !data.message) return;
+        if (activeThreadId !== threadId) return;
+        if (upsertMessage(data.message)) {
+          scheduleRenderMessages();
+        }
+      } catch {
+        // network blip — WS will catch up.
+      }
+    }),
+  );
+}
+
+function hasActiveStreamingMessage(): boolean {
+  return activeMessages.some((msg) => msg.streaming === true && !msg.deleted);
 }
 
 async function refreshActiveMessagesIfNeeded(threadId: string, force = false): Promise<void> {
-  if (force || shouldRefreshActiveMessages(threadId)) {
+  // While a row is mid-stream, chat_threads.last_message_at hasn't changed,
+  // so the normal staleness check returns false. Force refresh so polling
+  // (when WS is down) still pulls the growing content.
+  if (force || hasActiveStreamingMessage() || shouldRefreshActiveMessages(threadId)) {
     await loadMessages(threadId);
   }
 }
@@ -921,6 +1181,7 @@ async function refreshActiveMessagesIfNeeded(threadId: string, force = false): P
 async function openChat(chat: ChatSummary): Promise<void> {
   const previousThreadId = activeThreadId;
   activeThreadId = chat.id;
+  persistActiveThread(chat.id);
   activeChatSummary = chat;
   activeChatBlocked = false;
   activeChatBlockMessage = "";
@@ -965,12 +1226,26 @@ function startPolling(): void {
   if (pollTimer) {
     window.clearInterval(pollTimer);
   }
+  // Poll faster (1s) when a streaming bubble is active so the user sees
+  // growing content even if WS is down; otherwise the standard 5s cadence.
+  const interval = hasActiveStreamingMessage() ? 1000 : 5000;
   pollTimer = window.setInterval(async () => {
     await loadChats(activeThreadId);
     if (activeThreadId) {
       await refreshActiveMessagesIfNeeded(activeThreadId);
     }
-  }, 5000);
+    // Re-tune cadence as streaming starts/stops without reconnecting WS.
+    const desired = hasActiveStreamingMessage() ? 1000 : 5000;
+    if (desired !== interval) {
+      stopPolling();
+      startPolling();
+    }
+    // Try to reconnect WS opportunistically; if a network blip dropped it
+    // mid-stream, polling keeps the UI alive and this brings real-time back.
+    if (!wsConnected && (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING)) {
+      connectWebSocket();
+    }
+  }, interval);
 }
 
 function stopPolling(): void {
@@ -1043,8 +1318,8 @@ function connectWebSocket(): void {
       if (activeThreadId === chatId && chatId && payload.message) {
         const incomingLLMThreadId = payload.message.llm_thread_id || null;
         if ((!activeLLMThreadId && !incomingLLMThreadId) || activeLLMThreadId === incomingLLMThreadId) {
-          if (appendMessageIfNeeded(payload.message)) {
-            renderMessages(activeMessages, true);
+          if (upsertMessage(payload.message)) {
+            scheduleRenderMessages();
           }
         } else if (activeIsAIChat) {
           await loadLLMThreads(chatId, activeLLMThreadId);
@@ -1083,6 +1358,28 @@ function connectWebSocket(): void {
   });
 }
 
+// Auto-resize the textarea between 1 and ~6 lines as the user types.
+const MESSAGE_INPUT_MAX_HEIGHT = 168; // ~6 lines at 24px line-height
+function autoResizeMessageInput(): void {
+  messageInput.style.height = "auto";
+  const next = Math.min(messageInput.scrollHeight, MESSAGE_INPUT_MAX_HEIGHT);
+  messageInput.style.height = `${next}px`;
+  messageInput.style.overflowY = messageInput.scrollHeight > MESSAGE_INPUT_MAX_HEIGHT ? "auto" : "hidden";
+}
+messageInput.addEventListener("input", autoResizeMessageInput);
+
+// Enter sends, Shift+Enter inserts a newline. IME composition is left alone
+// so picking a candidate doesn't accidentally submit the half-typed message.
+messageInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  if (typeof messageForm.requestSubmit === "function") {
+    messageForm.requestSubmit();
+  } else {
+    messageForm.dispatchEvent(new Event("submit", { cancelable: true }));
+  }
+});
+
 messageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!activeThreadId) {
@@ -1110,6 +1407,7 @@ messageForm.addEventListener("submit", async (event) => {
   }
 
   messageInput.value = "";
+  autoResizeMessageInput();
   activeChatReplyRequired = Boolean(data.reply_required);
   activeChatReplyRequiredMessage = data.reply_required_message || "";
   messageInput.disabled = activeChatBlocked || activeChatReplyRequired;
@@ -1306,6 +1604,18 @@ async function init(): Promise<void> {
   }
 
   await loadChats();
+  // Restore the last-viewed thread so a page reload doesn't jump to chats[0].
+  const storedThreadId = loadStoredActiveThread();
+  if (storedThreadId) {
+    const remembered = chatCache.find((item) => item.id === storedThreadId);
+    if (remembered) {
+      await openChat(remembered);
+    } else {
+      // Stored thread no longer exists (deleted/permission revoked). Clear it
+      // so we don't keep retrying.
+      persistActiveThread(null);
+    }
+  }
   startPolling();
 }
 
@@ -1319,5 +1629,6 @@ window.addEventListener("beforeunload", () => {
 
 // Logout
 document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+  persistActiveThread(null);
   try { await logout(); } finally { window.location.replace("/login.html"); }
 });
