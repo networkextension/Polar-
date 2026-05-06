@@ -85,4 +85,10 @@ type Config struct {
 	VideoSeedanceBaseURL     string // e.g. https://ark.cn-beijing.volces.com/api/v3
 	VideoSeedanceModel       string // e.g. doubao-seedance-1-0-pro-250528
 	VideoSeedanceAPIKey      string // ARK_API_KEY equivalent; seeds a system video config on first boot
+
+	// iOS distribution: 32-byte hex AES-GCM key used to encrypt .p12
+	// passwords at rest. When unset the platform stores cert passwords
+	// in plaintext and flags it on the API response so the operator
+	// knows to set the key before going to production.
+	IOSDistResourceKey string
 }

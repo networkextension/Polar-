@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title data-i18n-title="iosdist.title">iOS 分发</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/polaris-logo.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="lp-page">
+    <div class="lp-app">
+      <aside class="lp-sidebar">
+        <a class="lp-brand" href="/dashboard.html" data-site-brand>
+          <img data-site-icon alt="" />
+          <span class="lp-brand-name" data-site-name>Polar-</span>
+        </a>
+        <nav class="lp-nav">
+          <a class="lp-nav-item" href="/dashboard.html">
+            <span class="lp-nav-icon">⊞</span><span>Dashboard</span>
+          </a>
+          <a class="lp-nav-item" href="/posts.html">
+            <span class="lp-nav-icon">◎</span><span>Posts</span>
+          </a>
+          <a class="lp-nav-item" href="/markdowns.html">
+            <span class="lp-nav-icon">◈</span><span>Markdowns</span>
+          </a>
+          <a class="lp-nav-item" href="/chat.html">
+            <span class="lp-nav-icon">◉</span><span>Chat</span>
+          </a>
+          <a class="lp-nav-item" href="/video-studio.html">
+            <span class="lp-nav-icon">▶</span><span data-i18n="nav.videoStudio">Video Studio</span>
+          </a>
+          <a class="lp-nav-item active" href="/iosdist.html">
+            <span class="lp-nav-icon">⬇</span><span data-i18n="nav.iosDist">iOS 分发</span>
+          </a>
+          <a class="lp-nav-item" href="/editor.html">
+            <span class="lp-nav-icon">✎</span><span>Editor</span>
+          </a>
+          <a class="lp-nav-item" href="/latch.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">⚙</span><span data-i18n="nav.latch">Latch</span>
+          </a>
+          <a class="lp-nav-item" href="/bots.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">◉</span><span data-i18n="nav.bots">Bot Management</span>
+          </a>
+          <a class="lp-nav-item" href="/admin.html" hidden data-admin-nav>
+            <span class="lp-nav-icon">☍</span><span data-i18n="nav.userAdmin">用户管理</span>
+          </a>
+        </nav>
+        <div class="lp-sidebar-foot">
+          <div class="lp-foot-avatar" id="lpFootAvatar">U</div>
+          <div class="lp-foot-info">
+            <div class="lp-foot-name" id="lpFootName">—</div>
+            <div class="lp-foot-role" id="lpFootRole">—</div>
+          </div>
+          <div class="lp-sidebar-foot-actions">
+            <button class="lp-foot-icon-btn" type="button" data-open-settings-center data-settings-target="personalization" title="Settings" data-i18n-tooltip="nav.settings">⚙</button>
+            <button id="logoutBtn" class="lp-foot-icon-btn" type="button" title="Log out">⏻</button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="lp-main" style="overflow:hidden;">
+        <div class="lp-topbar">
+          <span class="lp-topbar-title" data-i18n="iosdist.title">iOS 分发</span>
+          <div class="lp-topbar-end" style="display:flex; align-items:center; gap:8px;">
+            <span id="iosASCConfigStatus" class="settings-value-pill" style="font-size:12px;" title="App Store Connect API Key 是当前账号级的，配置一次对所有应用生效"></span>
+            <button id="iosASCConfigBtn" class="btn-inline btn-secondary" type="button">ASC API Key</button>
+            <button id="iosASCDeleteBtn" class="btn-inline btn-secondary" type="button" hidden>清除</button>
+            <a class="lp-topbar-back" href="/dashboard.html">Dashboard</a>
+          </div>
+        </div>
+
+        <div class="lp-content" style="padding:0; overflow:hidden; flex:1; display:flex;">
+          <div class="video-studio-layout">
+
+            <!-- Left: app list -->
+            <aside class="video-studio-projects">
+              <div class="video-studio-projects-head">
+                <span class="badge" data-i18n="iosdist.apps">应用</span>
+                <button id="iosNewAppBtn" class="btn-chip" type="button">＋ 新建应用</button>
+              </div>
+              <div id="iosAppList" class="video-studio-project-list">
+                <div class="chat-empty">加载中...</div>
+              </div>
+            </aside>
+
+            <!-- Right: app detail / version list -->
+            <section class="video-studio-detail" id="iosDetail">
+              <div class="video-studio-empty" id="iosEmpty">
+                <div class="chat-empty">从左侧选择应用，或先新建一个</div>
+              </div>
+
+              <div id="iosAppPanel" hidden style="padding:20px; display:flex; flex-direction:column; gap:16px; overflow:auto;">
+                <header style="display:flex; align-items:center; gap:16px;">
+                  <div id="iosAppIconWrap" style="position:relative; width:72px; height:72px; flex-shrink:0;">
+                    <div id="iosAppIconPlaceholder" style="width:72px; height:72px; border-radius:16px; background:linear-gradient(135deg,#e9e9ef,#cfd0d6); display:flex; align-items:center; justify-content:center; font-size:28px; color:#666;">📱</div>
+                    <img id="iosAppIcon" alt="" style="width:72px; height:72px; border-radius:16px; object-fit:cover; display:none;" />
+                    <input id="iosAppIconFile" type="file" accept="image/*" hidden />
+                    <button id="iosAppIconChangeBtn" type="button" style="position:absolute; right:-6px; bottom:-6px; width:24px; height:24px; border-radius:50%; border:1px solid var(--border,#ccc); background:#fff; cursor:pointer;" title="更换图标">✎</button>
+                  </div>
+                  <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                      <h2 id="iosAppName" style="margin:0;">应用名</h2>
+                      <span id="iosAppBundle" class="settings-value-pill"></span>
+                      <span id="iosAppIconSrcBadge" class="settings-value-pill" hidden style="opacity:0.7;"></span>
+                    </div>
+                    <div class="drawer-help" id="iosAppMeta" style="margin-top:6px;"></div>
+                  </div>
+                </header>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">公开分享页</div>
+                      <p class="settings-section-text">每个应用都有一个 App Store 风格的公开页，开关打开后任何人扫码或点链接都能看到应用、点击安装、提交测试申请（自动邀请到上面绑定的 Beta Group）。所有公开应用同时会出现在 <a href="/iosdist/plaza" target="_blank" rel="noopener">App 广场</a> 索引页。</p>
+                    </div>
+                    <label class="switch-row" style="white-space:nowrap;">
+                      <input id="iosPublicToggle" type="checkbox" />
+                      <span>对外公开</span>
+                    </label>
+                  </div>
+                  <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+                    <div id="iosPublicQR" style="background:#fff; padding:10px; border-radius:10px; box-shadow:0 2px 12px rgba(0,0,0,0.08);"></div>
+                    <div style="flex:1; min-width:280px; display:flex; flex-direction:column; gap:8px;">
+                      <code id="iosPublicURL" style="word-break:break-all; padding:10px; background:var(--lp-bg-elev,rgba(0,0,0,0.04)); border-radius:8px; font-size:12px;"></code>
+                      <div class="inline-actions">
+                        <a id="iosPublicOpenBtn" class="btn-inline btn-secondary" target="_blank" rel="noopener">在新窗口预览</a>
+                        <button id="iosPublicCopyBtn" class="btn-inline btn-secondary" type="button">复制链接</button>
+                      </div>
+                      <div id="iosPublicStatus" class="status-text"></div>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">测试申请收件箱</div>
+                      <p class="settings-section-text">公开页提交的「申请测试」记录都在这里。已 ASC 配置时会自动发出邀请邮件；状态 pending 表示尚未自动处理（缺 ASC 配置或缺 Beta Group 绑定），可在「ASC 集成」面板手动邀请。</p>
+                    </div>
+                    <button id="iosTestReqRefreshBtn" class="btn-inline btn-secondary" type="button">刷新</button>
+                  </div>
+                  <ul id="iosTestRequestList" class="meta-list"></ul>
+                </section>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">App Store Connect 测试组绑定</div>
+                      <p class="settings-section-text">把当前应用映射到 ASC 中的某个 App + 默认 Beta Group，之后用邮箱邀请测试者会自动加进这个组。<br>
+                      ASC API Key 是 <strong>账号级</strong>的（对当前平台账号下所有应用通用），在<strong>右上角</strong>「ASC API Key」按钮配置；如管理多个 Apple 开发者账号，请用不同平台账号分别登录。</p>
+                    </div>
+                  </div>
+                  <div id="iosASCNotConfiguredHint" class="status-text" hidden>尚未配置 ASC API Key，请先在右上角配置。</div>
+
+                  <div id="iosASCBindingArea" hidden style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+                    <label class="form-label">ASC App
+                      <select id="iosASCAppSelect" class="input"></select>
+                    </label>
+                    <label class="form-label">默认 Beta Group（用于邮件邀请）
+                      <select id="iosASCBetaGroupSelect" class="input"></select>
+                    </label>
+                    <div style="grid-column:1/-1;" class="inline-actions">
+                      <button id="iosASCBindingSaveBtn" class="btn-inline btn-secondary" type="button">保存绑定</button>
+                      <button id="iosASCRefreshBtn" class="btn-inline btn-secondary" type="button">刷新 ASC 列表</button>
+                      <button id="iosASCSyncMetaBtn" class="btn-inline btn-secondary" type="button" title="从 ASC 拉取 App 名 / 描述 / 图标，覆盖到本地。手动上传过的图标不会被覆盖。">从 ASC 同步元数据</button>
+                      <span id="iosASCBindingStatus" class="status-text"></span>
+                    </div>
+                  </div>
+
+                  <div id="iosASCInviteArea" hidden style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border, rgba(0,0,0,0.06));">
+                    <div class="settings-section-title" style="font-size:14px; margin-bottom:8px;">邮件邀请测试者</div>
+                    <div style="display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:8px; align-items:end;">
+                      <label class="form-label">邮箱
+                        <input id="iosInviteEmail" class="input" type="email" placeholder="tester@example.com" />
+                      </label>
+                      <label class="form-label">名字 (可选)
+                        <input id="iosInviteFirst" class="input" type="text" />
+                      </label>
+                      <label class="form-label">姓 (可选)
+                        <input id="iosInviteLast" class="input" type="text" />
+                      </label>
+                      <button id="iosInviteSendBtn" class="btn-secondary" type="button">发送邀请</button>
+                    </div>
+                    <div id="iosInviteStatus" class="status-text"></div>
+                  </div>
+                </section>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">TestFlight 邀请链接</div>
+                      <p class="settings-section-text">如果你已经在 App Store Connect 配置好 TestFlight 公测组，把邀请链接（如 https://testflight.apple.com/join/XXXXX）粘贴到这里。OTA 不可装的 App Store 类型版本会优先引导用户走 TestFlight。</p>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:8px; align-items:center;">
+                    <input id="iosTestFlightURLInput" class="input" type="url" style="flex:1;" placeholder="https://testflight.apple.com/join/XXXXX" />
+                    <button id="iosTestFlightSaveBtn" class="btn-inline btn-secondary" type="button">保存</button>
+                    <a id="iosTestFlightOpenBtn" class="btn-inline btn-secondary" target="_blank" rel="noopener" hidden>打开</a>
+                  </div>
+                  <div id="iosTestFlightStatus" class="status-text"></div>
+                </section>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">上传新版本</div>
+                      <p class="settings-section-text">已签名的 Ad-hoc / Enterprise IPA 直接上传即可分发；签名通道接入后再支持原始包。</p>
+                    </div>
+                  </div>
+                  <form id="iosUploadForm" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <label class="form-label" style="grid-column:1/-1;">IPA 文件
+                      <input id="iosUploadFile" class="input" type="file" accept=".ipa" required />
+                      <div class="drawer-help">服务端会自动从 Info.plist 提取 bundle id / 版本号 / 显示名等信息。bundle id 与当前应用不一致会被拒绝。</div>
+                    </label>
+                    <label class="form-label">版本号 (留空则用 IPA 内的)
+                      <input id="iosUploadVersion" class="input" type="text" placeholder="留空将自动填充" />
+                    </label>
+                    <label class="form-label">Build 号 (留空则用 IPA 内的)
+                      <input id="iosUploadBuild" class="input" type="text" placeholder="留空将自动填充" />
+                    </label>
+                    <label class="form-label" style="grid-column:1/-1;">签名类型
+                      <select id="iosUploadDistType" class="input" required>
+                        <option value="ad_hoc">Ad-hoc（指定 UDID 设备测试）</option>
+                        <option value="enterprise">Enterprise（企业证书，无设备数限制）</option>
+                        <option value="development">Development（开发证书）</option>
+                        <option value="app_store">App Store（提交 ASC，OTA 不可安装）</option>
+                      </select>
+                    </label>
+                    <label class="form-label" style="grid-column:1/-1;">更新说明 (可选)
+                      <textarea id="iosUploadNotes" class="input textarea" rows="3" placeholder="本次更新内容..."></textarea>
+                    </label>
+                    <div class="site-settings-actions" style="grid-column:1/-1;">
+                      <button id="iosUploadSubmit" class="btn-secondary" type="submit">上传</button>
+                      <span id="iosUploadStatus" class="status-text"></span>
+                    </div>
+                  </form>
+                </section>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">版本列表</div>
+                      <p class="settings-section-text">点击「生成安装链接」可获得一个限时短链 / 二维码用于设备安装。</p>
+                    </div>
+                    <button id="iosDeleteAppBtn" class="btn-inline btn-secondary" type="button">删除应用</button>
+                  </div>
+                  <ul id="iosVersionList" class="meta-list"></ul>
+                </section>
+
+                <section class="settings-section-card">
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">签名资源</div>
+                      <p class="settings-section-text">在此上传你自己的 .p12 证书与 .mobileprovision Profile，签名通道（M3）上线后会自动调用这些资源完成重签。OTA 安装链接所用的 HTTPS 站点支持免费证书（如 Let's Encrypt）。</p>
+                    </div>
+                    <div class="inline-actions">
+                      <button id="iosOpenCertModalBtn" class="btn-inline btn-secondary" type="button">＋ 上传证书</button>
+                      <button id="iosOpenProfileModalBtn" class="btn-inline btn-secondary" type="button">＋ 上传 Profile</button>
+                    </div>
+                  </div>
+                  <div id="iosResourceWarning" class="status-text" hidden style="color:#a86a00;"></div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                    <div>
+                      <div class="badge">证书 (.p12)</div>
+                      <ul id="iosCertList" class="meta-list"></ul>
+                    </div>
+                    <div>
+                      <div class="badge">Provisioning Profile</div>
+                      <ul id="iosProfileList" class="meta-list"></ul>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="settings-section-card" id="iosInstallCard" hidden>
+                  <div class="settings-section-heading">
+                    <div>
+                      <div class="settings-section-title">安装链接</div>
+                      <p class="settings-section-text">在 iPhone Safari 中打开下方链接或扫码即可安装。iOS 16.4+ 需在「设置 → 隐私与安全 → 开发者模式」中开启开发者模式。</p>
+                    </div>
+                  </div>
+                  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                    <div id="iosInstallQR" style="background:#fff; padding:12px; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,0.1);"></div>
+                    <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:280px;">
+                      <code id="iosInstallURL" style="word-break:break-all; padding:12px; background:var(--lp-bg-elev,rgba(0,0,0,0.04)); border-radius:8px; font-size:12px;"></code>
+                      <div class="inline-actions">
+                        <a id="iosInstallOpenBtn" class="btn-secondary btn-inline" target="_blank" rel="noopener">在浏览器打开</a>
+                        <button id="iosInstallCopyBtn" class="btn-inline btn-secondary" type="button">复制链接</button>
+                      </div>
+                      <div class="drawer-help" id="iosInstallExpiry"></div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- New app modal -->
+    <div id="iosAppModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>新建应用</h3>
+          <button id="iosAppModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
+        </div>
+        <form id="iosAppForm" class="modal-body">
+          <label class="form-label">应用名
+            <input id="iosAppNameInput" class="input" type="text" required placeholder="My App" />
+          </label>
+          <label class="form-label">Bundle ID
+            <input id="iosAppBundleInput" class="input" type="text" required placeholder="com.example.myapp" />
+          </label>
+          <label class="form-label">说明 (可选)
+            <textarea id="iosAppDescInput" class="input textarea" rows="3"></textarea>
+          </label>
+          <div id="iosAppFormStatus" class="status-text"></div>
+          <div class="modal-actions">
+            <button class="btn-secondary" type="submit">创建</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Cert upload modal -->
+    <div id="iosCertModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>上传证书</h3>
+          <button id="iosCertModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
+        </div>
+        <form id="iosCertForm" class="modal-body">
+          <label class="form-label">证书名称
+            <input id="iosCertName" class="input" type="text" required placeholder="生产 distribution 证书" />
+          </label>
+          <label class="form-label">证书类型
+            <select id="iosCertKind" class="input" required>
+              <option value="distribution">Distribution（App Store / Ad-hoc）</option>
+              <option value="enterprise">Enterprise</option>
+              <option value="development">Development</option>
+              <option value="adhoc">Ad-hoc 专用</option>
+            </select>
+          </label>
+          <label class="form-label">证书文件 (.p12 / .pfx / .pem / .cer)
+            <input id="iosCertFile" class="input" type="file" accept=".p12,.pfx,.pem,.cer" required />
+          </label>
+          <label class="form-label">密码（如有）
+            <input id="iosCertPassword" class="input" type="password" autocomplete="new-password" placeholder="导出 .p12 时设置的密码" />
+          </label>
+          <label class="form-label">Team ID（可选）
+            <input id="iosCertTeamID" class="input" type="text" placeholder="ABCDE12345" />
+          </label>
+          <label class="form-label">Common Name（可选）
+            <input id="iosCertCommonName" class="input" type="text" placeholder="iPhone Distribution: ..." />
+          </label>
+          <label class="form-label">备注（可选）
+            <textarea id="iosCertNotes" class="input textarea" rows="2"></textarea>
+          </label>
+          <div id="iosCertFormStatus" class="status-text"></div>
+          <div class="modal-actions">
+            <button class="btn-secondary" type="submit">上传</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Profile upload modal -->
+    <div id="iosProfileModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>上传 Provisioning Profile</h3>
+          <button id="iosProfileModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
+        </div>
+        <form id="iosProfileForm" class="modal-body">
+          <label class="form-label">Profile 名称
+            <input id="iosProfileName" class="input" type="text" required placeholder="MyApp Ad-hoc" />
+          </label>
+          <label class="form-label">Profile 类型
+            <select id="iosProfileKind" class="input" required>
+              <option value="ad_hoc">Ad-hoc</option>
+              <option value="enterprise">Enterprise</option>
+              <option value="development">Development</option>
+              <option value="app_store">App Store</option>
+            </select>
+          </label>
+          <label class="form-label">Profile 文件 (.mobileprovision)
+            <input id="iosProfileFile" class="input" type="file" accept=".mobileprovision,.provisionprofile" required />
+          </label>
+          <label class="form-label">App ID（可选，反向 DNS）
+            <input id="iosProfileAppID" class="input" type="text" placeholder="com.example.myapp 或 com.example.* (通配)" />
+          </label>
+          <label class="form-label">Team ID（可选）
+            <input id="iosProfileTeamID" class="input" type="text" placeholder="ABCDE12345" />
+          </label>
+          <label class="form-label">备注（可选）
+            <textarea id="iosProfileNotes" class="input textarea" rows="2"></textarea>
+          </label>
+          <div id="iosProfileFormStatus" class="status-text"></div>
+          <div class="modal-actions">
+            <button class="btn-secondary" type="submit">上传</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ASC config modal -->
+    <div id="iosASCModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>App Store Connect API Key</h3>
+          <button id="iosASCModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
+        </div>
+        <form id="iosASCForm" class="modal-body">
+          <p class="drawer-help">
+            在 ASC → 用户与访问 → 集成 → 团队 Key 中创建 API Key。下载 .p8 私钥（仅可下载一次）。把 Issuer ID、Key ID、.p8 文件填进来；权限至少需要「App Manager」。
+          </p>
+          <label class="form-label">Issuer ID
+            <input id="iosASCIssuerInput" class="input" type="text" required placeholder="例如 69a6de7e-..." />
+          </label>
+          <label class="form-label">Key ID
+            <input id="iosASCKeyIDInput" class="input" type="text" required placeholder="10 位字符" />
+          </label>
+          <label class="form-label">.p8 私钥文件
+            <input id="iosASCP8Input" class="input" type="file" accept=".p8" required />
+          </label>
+          <div id="iosASCFormStatus" class="status-text"></div>
+          <div class="modal-actions">
+            <button class="btn-secondary" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+    <script type="module" src="/scripts/iosdist.js"></script>
+  </body>
+</html>

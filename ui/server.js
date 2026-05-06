@@ -26,7 +26,7 @@ function getBuildHash() {
 const BUILD_HASH = getBuildHash();
 
 // Serve HTML pages with no-cache headers and inject ?v= into asset URLs.
-const HTML_PAGES = ["login", "register", "dashboard", "editor", "chat", "posts", "markdowns", "latch", "admin", "video-studio"];
+const HTML_PAGES = ["login", "register", "dashboard", "editor", "chat", "posts", "markdowns", "latch", "admin", "video-studio", "iosdist"];
 
 function serveHtml(name) {
   return (req, res) => {
@@ -87,6 +87,10 @@ function proxyRequest(req, res) {
 
 app.use("/api", proxyRequest);
 app.use("/uploads", proxyRequest);
+// iOS distribution module owns several non-/api server-rendered routes
+// (plaza, public share page, OTA manifest + install). Without this the
+// dev server returns Express's default 404.
+app.use("/iosdist", proxyRequest);
 
 const server = app.listen(PORT, () => {
   console.log(`UI running on http://localhost:${PORT}`);

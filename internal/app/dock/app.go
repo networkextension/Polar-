@@ -68,6 +68,12 @@ type Server struct {
 	videoSeedanceBaseURL string
 	videoSeedanceModel   string
 	videoSeedanceAPIKey  string
+
+	// iosdistResourceKey is the optional 32-byte AES-GCM key used to
+	// encrypt sensitive iOS distribution credentials (today: .p12
+	// passwords). nil means encryption is disabled and we'll store
+	// cleartext with a flag so the UI can warn.
+	iosdistResourceKey []byte
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -103,6 +109,18 @@ func NewServer(cfg Config) (*Server, error) {
 		}),
 	}
 	server.backgroundCtx, server.backgroundStop = context.WithCancel(context.Background())
+
+	if cfg.IOSDistResourceKey != "" {
+		key, err := decodeIOSDistResourceKey(cfg.IOSDistResourceKey)
+		if err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("invalid IOSDIST_RESOURCE_KEY: %w", err)
+		}
+		server.iosdistResourceKey = key
+		log.Printf("iosdist: resource encryption enabled (32-byte AES-GCM key)")
+	} else {
+		log.Printf("iosdist: IOSDIST_RESOURCE_KEY not set — .p12 passwords will be stored in plaintext")
+	}
 
 	workDir, err := os.Getwd()
 	if err == nil {
@@ -178,6 +196,11 @@ func NewServer(cfg Config) (*Server, error) {
 	if err := server.ensureSystemUser(); err != nil {
 		_ = db.Close()
 		return nil, err
+	}
+
+	// Backfill public slugs for legacy iosdist apps. Cheap, idempotent.
+	if err := server.backfillIOSAppSlugs(); err != nil {
+		log.Printf("iosdist: slug backfill failed: %v", err)
 	}
 
 	server.aiAgent = newAIAgent(server, cfg)
@@ -347,6 +370,19 @@ func (s *Server) registerRoutes() {
 		})
 	})
 	s.router.GET("/ws/chat", s.handleChatWS)
+
+	// iOS distribution OTA endpoints (no auth — gated by a short-lived,
+	// random install token bound to a single version). The manifest.plist
+	// must be served with content-type application/xml; see iosdist_handlers.go.
+	s.router.GET("/iosdist/install/:token", s.handleIOSInstallPage)
+	s.router.GET("/iosdist/manifest/:token", s.handleIOSInstallManifest)
+	// Public share page (App Store-style landing). Slug-keyed; visibility
+	// is gated server-side by iosdist_apps.is_public.
+	s.router.GET("/iosdist/share/:slug", s.handleIOSPublicShareHTML)
+	s.router.POST("/iosdist/share/:slug/install", s.handleIOSPublicShareInstall)
+	s.router.POST("/iosdist/share/:slug/test-request", s.handleIOSPublicShareTestRequest)
+	// Public discovery / "App 广场" — lists all apps that opted in to is_public.
+	s.router.GET("/iosdist/plaza", s.handleIOSPublicPlaza)
 
 	api := s.router.Group("/api")
 	{
@@ -525,6 +561,34 @@ func (s *Server) registerRoutes() {
 		api.GET("/video-projects/:id/download", s.AuthMiddleware(), s.handleVideoProjectDownload)
 		api.GET("/video-projects/:id/shots.zip", s.AuthMiddleware(), s.handleVideoProjectShotsZip)
 		api.GET("/system-agent", s.AuthMiddleware(), s.handleSystemAgentStatus)
+		// iOS distribution module (M1 — owner-scoped CRUD + IPA upload + OTA token).
+		// Signing pipeline lands in M2, see DEV_PLAN.md.
+		api.GET("/iosdist/apps", s.AuthMiddleware(), s.handleIOSAppList)
+		api.POST("/iosdist/apps", s.AuthMiddleware(), s.handleIOSAppCreate)
+		api.GET("/iosdist/apps/:id", s.AuthMiddleware(), s.handleIOSAppDetail)
+		api.DELETE("/iosdist/apps/:id", s.AuthMiddleware(), s.handleIOSAppDelete)
+		api.POST("/iosdist/apps/:id/icon", s.AuthMiddleware(), s.handleIOSAppIconUpload)
+		api.PUT("/iosdist/apps/:id/testflight", s.AuthMiddleware(), s.handleIOSAppTestFlightUpdate)
+		api.PUT("/iosdist/apps/:id/visibility", s.AuthMiddleware(), s.handleIOSAppVisibilityUpdate)
+		api.GET("/iosdist/apps/:id/test-requests", s.AuthMiddleware(), s.handleIOSAppTestRequestList)
+		api.POST("/iosdist/apps/:id/versions", s.AuthMiddleware(), s.handleIOSVersionUpload)
+		api.DELETE("/iosdist/apps/:id/versions/:versionId", s.AuthMiddleware(), s.handleIOSVersionDelete)
+		api.POST("/iosdist/apps/:id/versions/:versionId/install-token", s.AuthMiddleware(), s.handleIOSVersionInstallToken)
+		api.GET("/iosdist/certificates", s.AuthMiddleware(), s.handleIOSCertificateList)
+		api.POST("/iosdist/certificates", s.AuthMiddleware(), s.handleIOSCertificateUpload)
+		api.DELETE("/iosdist/certificates/:id", s.AuthMiddleware(), s.handleIOSCertificateDelete)
+		api.GET("/iosdist/profiles", s.AuthMiddleware(), s.handleIOSProfileList)
+		api.POST("/iosdist/profiles", s.AuthMiddleware(), s.handleIOSProfileUpload)
+		api.DELETE("/iosdist/profiles/:id", s.AuthMiddleware(), s.handleIOSProfileDelete)
+		// App Store Connect bridge: per-owner key + ASC API forwarders.
+		api.GET("/iosdist/asc/config", s.AuthMiddleware(), s.handleIOSASCConfigGet)
+		api.POST("/iosdist/asc/config", s.AuthMiddleware(), s.handleIOSASCConfigUpsert)
+		api.DELETE("/iosdist/asc/config", s.AuthMiddleware(), s.handleIOSASCConfigDelete)
+		api.GET("/iosdist/asc/apps", s.AuthMiddleware(), s.handleIOSASCAppList)
+		api.GET("/iosdist/asc/beta-groups", s.AuthMiddleware(), s.handleIOSASCBetaGroupList)
+		api.PUT("/iosdist/apps/:id/asc-binding", s.AuthMiddleware(), s.handleIOSAppASCBindingUpdate)
+		api.POST("/iosdist/apps/:id/invite-tester", s.AuthMiddleware(), s.handleIOSAppInviteTester)
+		api.POST("/iosdist/apps/:id/asc-sync", s.AuthMiddleware(), s.handleIOSAppASCSyncMeta)
 		api.GET("/admin/users", s.AuthMiddleware(), s.AdminMiddleware(), s.handleAdminUserList)
 		api.GET("/admin/users/:id/login-history", s.AuthMiddleware(), s.AdminMiddleware(), s.handleAdminUserLoginHistory)
 		api.PUT("/admin/users/:id/password", s.AuthMiddleware(), s.AdminMiddleware(), s.handleAdminUserPasswordUpdate)

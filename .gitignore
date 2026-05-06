@@ -6,7 +6,16 @@ ui/public/scripts/*.js.map
 .DS_Store
 .cache/
 .claude/
+.gocache/
 diary/
-dock/
+# `/dock` and `/main` are repo-root Go build artifacts. The previous
+# unanchored `dock/` pattern accidentally matched internal/app/dock/
+# and silently hid newly-added Go files in that package.
+/dock
+/main
+/dist/
 doc/memo.md
 doc/posts.json
+*.terminal
+ai.env
+cf.env
