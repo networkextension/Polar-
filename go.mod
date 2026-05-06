@@ -64,4 +64,5 @@ require (
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
+	howett.net/plist v1.0.1 // indirect
 )

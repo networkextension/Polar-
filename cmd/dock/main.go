@@ -85,6 +85,9 @@ func main() {
 		VideoSeedanceBaseURL:     envOrDefault("VIDEO_SEEDANCE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
 		VideoSeedanceModel:       envOrDefault("VIDEO_SEEDANCE_MODEL", "doubao-seedance-1-0-pro-250528"),
 		VideoSeedanceAPIKey:      os.Getenv("VIDEO_SEEDANCE_API_KEY"),
+
+		// iOS distribution
+		IOSDistResourceKey: os.Getenv("IOSDIST_RESOURCE_KEY"),
 	}
 
 	server, err := dock.NewServer(cfg)

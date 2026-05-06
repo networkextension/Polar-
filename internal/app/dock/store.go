@@ -1334,6 +1334,155 @@ CREATE TABLE IF NOT EXISTS video_assets (
 	created_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_video_assets_project ON video_assets(project_id, kind);
+
+CREATE TABLE IF NOT EXISTS iosdist_apps (
+	id BIGSERIAL PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	bundle_id TEXT NOT NULL,
+	description TEXT NOT NULL DEFAULT '',
+	icon_url TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_apps_owner ON iosdist_apps(owner_user_id, updated_at DESC);
+
+-- icon_source: '' (unset) | 'ipa' (auto-extracted from latest IPA upload) |
+-- 'manual' (operator uploaded). Manual wins forever — future IPA uploads
+-- never overwrite a manually-set icon.
+ALTER TABLE iosdist_apps
+	ADD COLUMN IF NOT EXISTS icon_source TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS testflight_url TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS asc_app_id TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS asc_beta_group_id TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS public_slug TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE,
+	ADD COLUMN IF NOT EXISTS keywords TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS whats_new TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS promotional_text TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS marketing_url TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS support_url TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_iosdist_apps_public_slug
+	ON iosdist_apps(public_slug) WHERE public_slug <> '';
+
+-- iosdist_test_requests: every "申请测试" submission from the public app
+-- page lands here. status: pending|sent|failed. asc_response carries the
+-- ASC error message (when sent failed) or the new tester id (when ok).
+CREATE TABLE IF NOT EXISTS iosdist_test_requests (
+	id BIGSERIAL PRIMARY KEY,
+	app_id BIGINT NOT NULL REFERENCES iosdist_apps(id) ON DELETE CASCADE,
+	email TEXT NOT NULL,
+	first_name TEXT NOT NULL DEFAULT '',
+	last_name TEXT NOT NULL DEFAULT '',
+	status TEXT NOT NULL DEFAULT 'pending',
+	asc_response TEXT NOT NULL DEFAULT '',
+	source_ip TEXT NOT NULL DEFAULT '',
+	user_agent TEXT NOT NULL DEFAULT '',
+	created_at TIMESTAMPTZ NOT NULL,
+	processed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_test_requests_app ON iosdist_test_requests(app_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_iosdist_test_requests_email ON iosdist_test_requests(email, created_at DESC);
+
+-- ASC API credentials, scoped per owner so multi-tenant deployments don't
+-- share keys. p8_cipher uses the same IOSDIST_RESOURCE_KEY AES-GCM as the
+-- cert password column. p8_encrypted=false means the operator hadn't set
+-- IOSDIST_RESOURCE_KEY at upload time — the file stays plaintext-on-disk
+-- and the UI flags it.
+CREATE TABLE IF NOT EXISTS iosdist_asc_configs (
+	owner_user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	issuer_id TEXT NOT NULL,
+	key_id TEXT NOT NULL,
+	p8_cipher TEXT NOT NULL,
+	p8_filename TEXT NOT NULL DEFAULT '',
+	p8_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+ALTER TABLE iosdist_asc_configs
+	ADD COLUMN IF NOT EXISTS account_holder_email TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS team_name TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS iosdist_versions (
+	id BIGSERIAL PRIMARY KEY,
+	app_id BIGINT NOT NULL REFERENCES iosdist_apps(id) ON DELETE CASCADE,
+	version TEXT NOT NULL,
+	build_number TEXT NOT NULL DEFAULT '',
+	ipa_url TEXT NOT NULL DEFAULT '',
+	ipa_filename TEXT NOT NULL DEFAULT '',
+	ipa_size BIGINT NOT NULL DEFAULT 0,
+	ipa_sha256 TEXT NOT NULL DEFAULT '',
+	release_notes TEXT NOT NULL DEFAULT '',
+	is_signed BOOLEAN NOT NULL DEFAULT TRUE,
+	created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_versions_app ON iosdist_versions(app_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS iosdist_install_tokens (
+	token TEXT PRIMARY KEY,
+	version_id BIGINT NOT NULL REFERENCES iosdist_versions(id) ON DELETE CASCADE,
+	created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	expires_at TIMESTAMPTZ NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL,
+	last_accessed_at TIMESTAMPTZ,
+	access_count INT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_install_tokens_version ON iosdist_install_tokens(version_id);
+CREATE INDEX IF NOT EXISTS idx_iosdist_install_tokens_expires ON iosdist_install_tokens(expires_at);
+
+-- Distribution type carries the Apple signing channel for the IPA. Only
+-- ad_hoc / enterprise / development can be installed OTA via itms-services;
+-- app_store builds go through ASC and we refuse to issue install tokens for
+-- them.
+ALTER TABLE iosdist_versions
+	ADD COLUMN IF NOT EXISTS distribution_type TEXT NOT NULL DEFAULT 'ad_hoc';
+
+-- IPA introspection: parsed from Info.plist on upload. Empty strings mean
+-- the file wasn't a valid IPA or the parser couldn't read its plist.
+ALTER TABLE iosdist_versions
+	ADD COLUMN IF NOT EXISTS ipa_bundle_id TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS ipa_short_version TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS ipa_build_number TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS ipa_display_name TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS ipa_min_os TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS ipa_has_embedded_profile BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS iosdist_certificates (
+	id BIGSERIAL PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	kind TEXT NOT NULL DEFAULT 'distribution',
+	file_url TEXT NOT NULL,
+	file_filename TEXT NOT NULL DEFAULT '',
+	file_size BIGINT NOT NULL DEFAULT 0,
+	password_cipher TEXT NOT NULL DEFAULT '',
+	password_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
+	team_id TEXT NOT NULL DEFAULT '',
+	common_name TEXT NOT NULL DEFAULT '',
+	notes TEXT NOT NULL DEFAULT '',
+	expires_at TIMESTAMPTZ,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_certificates_owner ON iosdist_certificates(owner_user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS iosdist_profiles (
+	id BIGSERIAL PRIMARY KEY,
+	owner_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name TEXT NOT NULL,
+	kind TEXT NOT NULL DEFAULT 'ad_hoc',
+	file_url TEXT NOT NULL,
+	file_filename TEXT NOT NULL DEFAULT '',
+	file_size BIGINT NOT NULL DEFAULT 0,
+	app_id TEXT NOT NULL DEFAULT '',
+	team_id TEXT NOT NULL DEFAULT '',
+	udid_count INT NOT NULL DEFAULT 0,
+	notes TEXT NOT NULL DEFAULT '',
+	expires_at TIMESTAMPTZ,
+	created_at TIMESTAMPTZ NOT NULL,
+	updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_profiles_owner ON iosdist_profiles(owner_user_id, updated_at DESC);
 `
 	if _, err := db.Exec(schema); err != nil {
 		_ = db.Close()
