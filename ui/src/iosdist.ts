@@ -24,7 +24,10 @@ import {
   fetchIOSApps,
   fetchIOSCertificates,
   fetchIOSProfiles,
+  fetchIOSAppSignTasks,
+  fetchIOSSignTask,
   inviteIOSAppTester,
+  submitIOSSignTask,
   syncIOSAppFromASC,
   updateIOSAppASCBinding,
   updateIOSAppTestFlight,
@@ -47,6 +50,7 @@ import type {
   IOSDistType,
   IOSInstallTokenResponse,
   IOSProfile,
+  IOSSignTask,
   IOSTestRequest,
   IOSVersion,
 } from "./types/iosdist.js";
@@ -110,6 +114,18 @@ const inviteFirstInput = byId<HTMLInputElement>("iosInviteFirst");
 const inviteLastInput = byId<HTMLInputElement>("iosInviteLast");
 const inviteSendBtn = byId<HTMLButtonElement>("iosInviteSendBtn");
 const inviteStatus = byId<HTMLElement>("iosInviteStatus");
+
+// Re-sign modal.
+const signModal = byId<HTMLElement>("iosSignModal");
+const signModalCloseBtn = byId<HTMLButtonElement>("iosSignModalCloseBtn");
+const signForm = byId<HTMLFormElement>("iosSignForm");
+const signCertSelect = byId<HTMLSelectElement>("iosSignCertSelect");
+const signProfileSelect = byId<HTMLSelectElement>("iosSignProfileSelect");
+const signNewBundleIDInput = byId<HTMLInputElement>("iosSignNewBundleID");
+const signNewAppNameInput = byId<HTMLInputElement>("iosSignNewAppName");
+const signFormStatus = byId<HTMLElement>("iosSignFormStatus");
+const signHint = byId<HTMLElement>("iosSignHint");
+let signTargetVersionID: number | null = null;
 
 const ascModal = byId<HTMLElement>("iosASCModal");
 const ascModalCloseBtn = byId<HTMLButtonElement>("iosASCModalCloseBtn");
@@ -183,6 +199,11 @@ let activeAppID: number | null = null;
 let activeVersions: IOSVersion[] = [];
 let certificates: IOSCertificate[] = [];
 let profiles: IOSProfile[] = [];
+// Sign tasks indexed by source_version_id → most recent. Used to render
+// inline status pills next to "重签" so the user sees pending/running/
+// success without an extra panel. Repopulated whenever versions reload.
+let activeSignTasksByVersion: Map<number, IOSSignTask> = new Map();
+const signPolls: Map<number, number> = new Map(); // taskID → setTimeout handle
 
 const distTypeLabels: Record<IOSDistType, string> = {
   ad_hoc: "Ad-hoc",
@@ -387,7 +408,7 @@ function renderAppDetail(): void {
         ${ipaPills.length > 0 ? `<div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:6px;">${ipaPills.join("")}</div>` : ""}
         ${v.release_notes ? `<div class="drawer-help" style="margin-top:6px;">${escapeHTML(v.release_notes)}</div>` : ""}
       </div>
-      <div class="inline-actions" style="flex-shrink:0; align-items:center;">
+      <div class="inline-actions" style="flex-shrink:0; align-items:center; flex-wrap:wrap;">
         ${installable
           ? `<button class="btn-inline btn-secondary" data-action="install" data-version="${v.id}">生成安装链接</button>`
           : (app?.testflight_url
@@ -395,12 +416,20 @@ function renderAppDetail(): void {
               : `<span class="settings-value-pill" title="App Store 类型 IPA 必须通过 App Store Connect 分发">OTA 不可装</span>`
             )
         }
+        <button class="btn-inline btn-secondary" data-action="sign" data-version="${v.id}" title="用 zsign 重签该版本（产生一个新版本行）">重签</button>
+        ${renderSignTaskPill(v.id)}
         <button class="btn-inline btn-secondary" data-action="delete" data-version="${v.id}">删除</button>
       </div>
     `;
     versionListEl.appendChild(li);
   });
 
+  versionListEl.querySelectorAll<HTMLButtonElement>("button[data-action='sign']").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.version);
+      if (Number.isFinite(id)) openSignModal(id);
+    });
+  });
   versionListEl.querySelectorAll<HTMLButtonElement>("button[data-action='install']").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = Number(btn.dataset.version);
@@ -467,18 +496,19 @@ async function openApp(id: number): Promise<void> {
 async function reloadActiveApp(): Promise<void> {
   if (!activeAppID) {
     activeVersions = [];
+    activeSignTasksByVersion.clear();
     renderAppDetail();
     return;
   }
   try {
     const { data } = await fetchIOSAppDetail(activeAppID);
-    // Sync the cached app entry too so name edits stay fresh.
     const idx = apps.findIndex((a) => a.id === data.app.id);
     if (idx >= 0) apps[idx] = data.app;
     activeVersions = data.versions ?? [];
   } catch (err) {
     activeVersions = [];
   }
+  await loadSignTasksForActiveApp();
   renderAppDetail();
 }
 
@@ -843,6 +873,149 @@ profileForm.addEventListener("submit", async (ev) => {
     profileFormStatus.textContent = "上传失败：" + describeError(err);
   }
 });
+
+// ---- Re-sign pipeline (zsign) ------------------------------------------
+
+function renderSignTaskPill(versionID: number): string {
+  const t = activeSignTasksByVersion.get(versionID);
+  if (!t) return "";
+  switch (t.status) {
+    case "pending":
+      return `<span class="settings-value-pill" style="background:#fff5cc;color:#7a5c00;">排队</span>`;
+    case "running":
+      return `<span class="settings-value-pill" style="background:#cce5ff;color:#004080;">签名中...</span>`;
+    case "success":
+      return `<span class="settings-value-pill" style="background:#e6f4ea;color:#0b6b2c;" title="新版本 #${t.output_version_id ?? "?"}">✓ 签名完成</span>`;
+    case "failed":
+      return `<span class="settings-value-pill" style="background:#fde2e1;color:#a30000;" title="${escapeHTML(t.error_message)}">签名失败</span>`;
+    default:
+      return "";
+  }
+}
+
+function populateSignSelects(): void {
+  if (certificates.length === 0) {
+    signCertSelect.innerHTML = `<option value="">（先到「签名资源」上传 .p12 证书）</option>`;
+  } else {
+    signCertSelect.innerHTML = certificates
+      .map((c) => `<option value="${c.id}">${escapeHTML(c.name)} · ${escapeHTML(c.kind)}${c.has_password ? (c.password_encrypted ? " 🔒" : " ⚠") : ""}</option>`)
+      .join("");
+  }
+  if (profiles.length === 0) {
+    signProfileSelect.innerHTML = `<option value="">（先到「签名资源」上传 .mobileprovision）</option>`;
+  } else {
+    signProfileSelect.innerHTML = profiles
+      .map((p) => `<option value="${p.id}">${escapeHTML(p.name)} · ${escapeHTML(distTypeLabels[p.kind] ?? p.kind)}${p.app_id ? ` · ${escapeHTML(p.app_id)}` : ""}</option>`)
+      .join("");
+  }
+}
+
+function openSignModal(versionID: number): void {
+  signTargetVersionID = versionID;
+  populateSignSelects();
+  const v = activeVersions.find((x) => x.id === versionID);
+  signHint.textContent = v
+    ? `当前版本：v${v.version}${v.build_number ? " build " + v.build_number : ""} · ${v.ipa_filename || ""}（${(v.ipa_size / (1024 * 1024)).toFixed(1)} MB）`
+    : "";
+  setModalOpen(signModal, true);
+  signFormStatus.textContent = "";
+}
+
+function closeSignModal(): void {
+  setModalOpen(signModal, false);
+}
+
+signModalCloseBtn.addEventListener("click", closeSignModal);
+signModal.querySelector(".modal-backdrop")?.addEventListener("click", closeSignModal);
+
+signForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!activeAppID || !signTargetVersionID) return;
+  const certID = Number(signCertSelect.value);
+  const profileID = Number(signProfileSelect.value);
+  if (!Number.isFinite(certID) || certID <= 0 || !Number.isFinite(profileID) || profileID <= 0) {
+    signFormStatus.textContent = "请同时选择证书和 Profile";
+    return;
+  }
+  signFormStatus.textContent = "提交中...";
+  try {
+    const { response, data } = await submitIOSSignTask(activeAppID, signTargetVersionID, {
+      cert_id: certID,
+      profile_id: profileID,
+      new_bundle_id: signNewBundleIDInput.value.trim() || undefined,
+      new_app_name: signNewAppNameInput.value.trim() || undefined,
+    });
+    if (!response.ok) {
+      const err = (data as unknown as { error?: string })?.error || "提交失败";
+      throw new Error(err);
+    }
+    activeSignTasksByVersion.set(signTargetVersionID, data.task);
+    closeSignModal();
+    renderAppDetail();
+    if (data.reused) {
+      // Already done before; the UI just needs to surface the existing
+      // success state. No polling needed.
+      void reloadActiveApp();
+    } else {
+      void pollSignTask(data.task.id);
+    }
+  } catch (err) {
+    signFormStatus.textContent = "提交失败：" + describeError(err);
+  }
+});
+
+async function pollSignTask(taskID: number): Promise<void> {
+  // Skip if already polling.
+  if (signPolls.has(taskID)) return;
+  const tick = async (): Promise<void> => {
+    try {
+      const { data } = await fetchIOSSignTask(taskID);
+      activeSignTasksByVersion.set(data.task.source_version_id, data.task);
+      renderAppDetail();
+      if (data.task.status === "pending" || data.task.status === "running") {
+        const handle = window.setTimeout(tick, 3000);
+        signPolls.set(taskID, handle);
+        return;
+      }
+      // terminal — clear poll handle and refresh app + version list so
+      // the new signed version row shows up.
+      signPolls.delete(taskID);
+      if (data.task.status === "success") {
+        await reloadActiveApp();
+      }
+    } catch {
+      // Network blip; retry in 5s.
+      const handle = window.setTimeout(tick, 5000);
+      signPolls.set(taskID, handle);
+    }
+  };
+  void tick();
+}
+
+async function loadSignTasksForActiveApp(): Promise<void> {
+  if (!activeAppID) {
+    activeSignTasksByVersion.clear();
+    return;
+  }
+  try {
+    const { data } = await fetchIOSAppSignTasks(activeAppID);
+    activeSignTasksByVersion = new Map();
+    (data.tasks ?? []).forEach((t) => {
+      const existing = activeSignTasksByVersion.get(t.source_version_id);
+      if (!existing || new Date(t.submitted_at).getTime() > new Date(existing.submitted_at).getTime()) {
+        activeSignTasksByVersion.set(t.source_version_id, t);
+      }
+    });
+    // Poll any in-flight tasks we just discovered.
+    activeSignTasksByVersion.forEach((t) => {
+      if (t.status === "pending" || t.status === "running") {
+        void pollSignTask(t.id);
+      }
+    });
+  } catch {
+    activeSignTasksByVersion = new Map();
+  }
+}
 
 // ---- Public share + test request inbox ---------------------------------
 

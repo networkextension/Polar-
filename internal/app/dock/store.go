@@ -1384,6 +1384,40 @@ CREATE TABLE IF NOT EXISTS iosdist_test_requests (
 CREATE INDEX IF NOT EXISTS idx_iosdist_test_requests_app ON iosdist_test_requests(app_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_iosdist_test_requests_email ON iosdist_test_requests(email, created_at DESC);
 
+-- iosdist_sign_tasks: every "re-sign with cert+profile" job. Worker picks
+-- pending → marks running → exec zsign → on success creates a new
+-- iosdist_versions row pointed at by output_version_id. idempotency_key
+-- = sha256(ipa_sha256 || cert_id || profile_id) so repeat clicks reuse
+-- the previous successful task instead of spamming Apple's servers /
+-- chatStorage with duplicate output IPAs.
+CREATE TABLE IF NOT EXISTS iosdist_sign_tasks (
+	id BIGSERIAL PRIMARY KEY,
+	app_id BIGINT NOT NULL REFERENCES iosdist_apps(id) ON DELETE CASCADE,
+	source_version_id BIGINT NOT NULL REFERENCES iosdist_versions(id) ON DELETE CASCADE,
+	output_version_id BIGINT,
+	cert_id BIGINT NOT NULL REFERENCES iosdist_certificates(id) ON DELETE CASCADE,
+	profile_id BIGINT NOT NULL REFERENCES iosdist_profiles(id) ON DELETE CASCADE,
+	idempotency_key TEXT NOT NULL,
+	status TEXT NOT NULL DEFAULT 'pending',
+	error_message TEXT NOT NULL DEFAULT '',
+	log_text TEXT NOT NULL DEFAULT '',
+	submitted_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	submitted_at TIMESTAMPTZ NOT NULL,
+	started_at TIMESTAMPTZ,
+	completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_iosdist_sign_tasks_app ON iosdist_sign_tasks(app_id, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_iosdist_sign_tasks_status ON iosdist_sign_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_iosdist_sign_tasks_idem ON iosdist_sign_tasks(idempotency_key);
+
+-- Optional bundle_id / display name rewrite at sign time. Empty string
+-- means "preserve original". Used for security-research workflows where
+-- the original bundle id collides with another developer's registration
+-- and zsign must rewrite (zsign auto-cascades to embedded extensions).
+ALTER TABLE iosdist_sign_tasks
+	ADD COLUMN IF NOT EXISTS new_bundle_id TEXT NOT NULL DEFAULT '',
+	ADD COLUMN IF NOT EXISTS new_app_name TEXT NOT NULL DEFAULT '';
+
 -- ASC API credentials, scoped per owner so multi-tenant deployments don't
 -- share keys. p8_cipher uses the same IOSDIST_RESOURCE_KEY AES-GCM as the
 -- cert password column. p8_encrypted=false means the operator hadn't set

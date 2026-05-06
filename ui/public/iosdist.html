@@ -408,6 +408,44 @@
       </div>
     </div>
 
+    <!-- Re-sign modal -->
+    <div id="iosSignModal" class="modal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>用 zsign 重签该版本</h3>
+          <button id="iosSignModalCloseBtn" class="btn-inline btn-secondary" type="button">关闭</button>
+        </div>
+        <form id="iosSignForm" class="modal-body">
+          <p class="drawer-help" id="iosSignHint">从下方选证书 + Profile，平台会调本地 zsign 把当前版本的 IPA 重签后产生一个新版本行。</p>
+          <label class="form-label">证书
+            <select id="iosSignCertSelect" class="input" required></select>
+          </label>
+          <label class="form-label">Provisioning Profile
+            <select id="iosSignProfileSelect" class="input" required></select>
+          </label>
+          <details style="margin:8px 0;">
+            <summary class="form-label" style="cursor:pointer; user-select:none;">高级：改写 Bundle ID / 应用名（可选）</summary>
+            <p class="drawer-help">
+              留空 = 保留原 IPA 的值。<br>
+              · 通配符 profile（如 <code>com.foo.*</code>）→ 留空即可，不用改<br>
+              · 原 bundle id 已被别人注册到 Apple 名下 → 必须填新 bundle id（zsign 会一并更新所有插件 / 扩展的命名空间）
+            </p>
+            <label class="form-label">新 Bundle ID
+              <input id="iosSignNewBundleID" class="input" type="text" placeholder="留空保持原样，如 com.research.target" />
+            </label>
+            <label class="form-label">新应用名
+              <input id="iosSignNewAppName" class="input" type="text" placeholder="留空保持原样，最多 64 字" maxlength="64" />
+            </label>
+          </details>
+          <div id="iosSignFormStatus" class="status-text"></div>
+          <div class="modal-actions">
+            <button class="btn-secondary" type="submit">开始签名</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- ASC config modal -->
     <div id="iosASCModal" class="modal" aria-hidden="true">
       <div class="modal-backdrop"></div>

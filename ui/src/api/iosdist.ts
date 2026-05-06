@@ -17,6 +17,8 @@ import type {
   IOSInstallTokenResponse,
   IOSProfileListResponse,
   IOSProfileUploadResponse,
+  IOSSignSubmitResponse,
+  IOSSignTask,
   IOSTestRequest,
   IOSVersionUploadResponse,
 } from "../types/iosdist.js";
@@ -217,4 +219,30 @@ export async function updateIOSAppVisibility(id: number, isPublic: boolean) {
 
 export async function fetchIOSAppTestRequests(id: number) {
   return requestJson<{ requests: IOSTestRequest[] | null }>(`/api/iosdist/apps/${id}/test-requests`);
+}
+
+// ---- Re-sign pipeline ----------------------------------------------------
+
+export async function submitIOSSignTask(
+  appID: number,
+  versionID: number,
+  body: {
+    cert_id: number;
+    profile_id: number;
+    new_bundle_id?: string;
+    new_app_name?: string;
+  },
+) {
+  return requestJson<IOSSignSubmitResponse>(
+    `/api/iosdist/apps/${appID}/versions/${versionID}/sign`,
+    { method: "POST", body },
+  );
+}
+
+export async function fetchIOSSignTask(taskID: number) {
+  return requestJson<{ task: IOSSignTask }>(`/api/iosdist/sign-tasks/${taskID}`);
+}
+
+export async function fetchIOSAppSignTasks(appID: number) {
+  return requestJson<{ tasks: IOSSignTask[] | null }>(`/api/iosdist/apps/${appID}/sign-tasks`);
 }

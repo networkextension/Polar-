@@ -316,6 +316,171 @@ func (s *Server) handleIOSAppVisibilityUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"app": updated})
 }
 
+// ---- Sign tasks: enqueue + list + detail --------------------------------
+
+type iosSignSubmitRequest struct {
+	CertID      int64  `json:"cert_id"`
+	ProfileID   int64  `json:"profile_id"`
+	NewBundleID string `json:"new_bundle_id"` // optional; empty = preserve
+	NewAppName  string `json:"new_app_name"`  // optional; empty = preserve
+}
+
+func (s *Server) handleIOSVersionSign(c *gin.Context) {
+	userID, ok := requireUserID(c)
+	if !ok {
+		return
+	}
+	if s.iosdistZsignPath == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "服务器未安装 zsign，无法签名。请把 zsign 加到 PATH 后重启服务。",
+		})
+		return
+	}
+	appID, ok := parseInt64Param(c, "id")
+	if !ok {
+		return
+	}
+	versionID, ok := parseInt64Param(c, "versionId")
+	if !ok {
+		return
+	}
+	app, err := s.getIOSApp(appID, userID)
+	if err != nil || app == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "应用不存在"})
+		return
+	}
+	source, err := s.getIOSVersion(versionID)
+	if err != nil || source == nil || source.AppID != app.ID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
+		return
+	}
+	if source.IPAUrl == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "源版本尚未上传 IPA"})
+		return
+	}
+
+	var req iosSignSubmitRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的输入数据"})
+		return
+	}
+	if req.CertID <= 0 || req.ProfileID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择证书与 Profile"})
+		return
+	}
+	newBundleID := strings.TrimSpace(req.NewBundleID)
+	newAppName := strings.TrimSpace(req.NewAppName)
+	if newBundleID != "" && !bundleIDLooksValid(newBundleID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "新 Bundle ID 格式无效（需为反向 DNS，如 com.foo.bar）"})
+		return
+	}
+	if len(newAppName) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "新应用名超过 64 字符"})
+		return
+	}
+	cert, err := s.getIOSCertificate(req.CertID, userID)
+	if err != nil || cert == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "证书不存在或无权访问"})
+		return
+	}
+	profile, err := s.getIOSProfileForOwner(req.ProfileID, userID)
+	if err != nil || profile == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Profile 不存在或无权访问"})
+		return
+	}
+
+	// Idempotency: same source IPA + cert + profile + rewrites → reuse
+	// the previous successful task instead of running zsign again.
+	idemKey := signIdempotencyKey(source.IPASHA256, req.CertID, req.ProfileID, newBundleID, newAppName)
+	if existing, _ := s.findIOSSuccessfulSignTaskByKey(idemKey); existing != nil {
+		c.JSON(http.StatusOK, gin.H{"task": existing, "reused": true})
+		return
+	}
+
+	task := &IOSSignTask{
+		AppID:           app.ID,
+		SourceVersionID: source.ID,
+		CertID:          cert.ID,
+		ProfileID:       profile.ID,
+		NewBundleID:     newBundleID,
+		NewAppName:      newAppName,
+		IdempotencyKey:  idemKey,
+		Status:          "pending",
+		SubmittedBy:     userID,
+	}
+	if err := s.createIOSSignTask(task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	// Enqueue without blocking the request; if the channel is full we
+	// surface a 503 and let the user retry.
+	select {
+	case s.iosdistSignQueue <- task.ID:
+	default:
+		_ = s.markIOSSignTaskFailed(task.ID, "签名队列已满，请稍后重试", "")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "签名队列已满，请稍后重试"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"task": task, "reused": false})
+}
+
+func (s *Server) handleIOSAppSignTaskList(c *gin.Context) {
+	userID, ok := requireUserID(c)
+	if !ok {
+		return
+	}
+	id, ok := parseInt64Param(c, "id")
+	if !ok {
+		return
+	}
+	app, err := s.getIOSApp(id, userID)
+	if err != nil || app == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "应用不存在"})
+		return
+	}
+	tasks, err := s.listIOSSignTasksForApp(app.ID, 100)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
+}
+
+func (s *Server) handleIOSSignTaskDetail(c *gin.Context) {
+	userID, ok := requireUserID(c)
+	if !ok {
+		return
+	}
+	id, ok := parseInt64Param(c, "id")
+	if !ok {
+		return
+	}
+	task, err := s.getIOSSignTask(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
+		return
+	}
+	if task == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "签名任务不存在"})
+		return
+	}
+	// Owner check via the task's app row.
+	app, err := s.getIOSApp(task.AppID, userID)
+	if err != nil || app == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "签名任务不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"task": task})
+}
+
+// signIdempotencyKey hashes source ipa sha + cert + profile + optional
+// rewrite fields so a repeat click with the same inputs reuses the
+// previous successful output. Different bundle id rewrite = different
+// output IPA, so it must be part of the key.
+func signIdempotencyKey(ipaSHA256 string, certID, profileID int64, newBundleID, newAppName string) string {
+	return fmt.Sprintf("%s|%d|%d|%s|%s", ipaSHA256, certID, profileID, newBundleID, newAppName)
+}
+
 func (s *Server) handleIOSAppTestRequestList(c *gin.Context) {
 	userID, ok := requireUserID(c)
 	if !ok {
@@ -396,16 +561,19 @@ func (s *Server) handleIOSVersionUpload(c *gin.Context) {
 	}
 	app, err := s.getIOSApp(appID, userID)
 	if err != nil || app == nil {
+		log.Printf("[iosdist upload] app=%d not found for user %s: %v", appID, userID, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "应用不存在"})
 		return
 	}
 	if s.uploadDir == "" {
+		log.Printf("[iosdist upload] app=%d aborted: upload dir not configured", app.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "上传目录未配置"})
 		return
 	}
 
 	version := strings.TrimSpace(c.PostForm("version"))
 	if version == "" || len(version) > 60 {
+		log.Printf("[iosdist upload] app=%d 400: version field invalid (len=%d)", app.ID, len(version))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "版本号不能为空"})
 		return
 	}
@@ -416,34 +584,44 @@ func (s *Server) handleIOSVersionUpload(c *gin.Context) {
 		distType = "ad_hoc"
 	}
 	if !iosdistAllowedDistTypes[distType] {
+		log.Printf("[iosdist upload] app=%d 400: distribution_type=%q invalid", app.ID, distType)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "签名类型必须是 ad_hoc / enterprise / development / app_store 之一"})
 		return
 	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
+		log.Printf("[iosdist upload] app=%d 400: no file in form: %v", app.ID, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择 IPA 文件"})
 		return
 	}
+	log.Printf("[iosdist upload] app=%d received file=%q size=%d ct=%q version=%q build=%q dist_type=%q",
+		app.ID, file.Filename, file.Size, file.Header.Get("Content-Type"), version, build, distType)
+
 	if file.Size > iosdistMaxIPASize {
+		log.Printf("[iosdist upload] app=%d 400: file too large (%d > %d)", app.ID, file.Size, iosdistMaxIPASize)
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("IPA 大小超过限制（最大 %d MiB）", iosdistMaxIPASize>>20)})
 		return
 	}
 	if !strings.HasSuffix(strings.ToLower(file.Filename), ".ipa") {
+		log.Printf("[iosdist upload] app=%d 400: filename %q not .ipa", app.ID, file.Filename)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "仅支持 .ipa 文件"})
 		return
 	}
 
 	if err := os.MkdirAll(s.uploadDir, 0o755); err != nil {
+		log.Printf("[iosdist upload] app=%d MkdirAll failed: %v", app.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "服务器错误"})
 		return
 	}
 	storedName := "iosdist_" + buildUploadFilename(file.Filename)
 	dstPath := filepath.Join(s.uploadDir, storedName)
 	if err := c.SaveUploadedFile(file, dstPath); err != nil {
+		log.Printf("[iosdist upload] app=%d SaveUploadedFile failed: %v", app.ID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "文件保存失败"})
 		return
 	}
+	log.Printf("[iosdist upload] app=%d staged %s", app.ID, dstPath)
 
 	// Introspect the IPA before shipping bytes anywhere. We do this
 	// against the local on-disk copy because zip.OpenReader needs random
@@ -453,18 +631,18 @@ func (s *Server) handleIOSVersionUpload(c *gin.Context) {
 	// metadata than reject it. Bundle-id mismatch is the only hard fail.
 	parsedIPA, parseErr := parseIPA(dstPath)
 	if parseErr != nil {
-		log.Printf("iosdist: ipa parse failed for %q: %v", file.Filename, parseErr)
+		log.Printf("[iosdist upload] app=%d ipa parse failed for %q (continuing): %v", app.ID, file.Filename, parseErr)
+	} else if parsedIPA != nil {
+		log.Printf("[iosdist upload] app=%d parsed: bundle=%q version=%q build=%q name=%q minOS=%q",
+			app.ID, parsedIPA.BundleID, parsedIPA.BundleShortVersion, parsedIPA.BundleVersion, parsedIPA.BundleDisplayName, parsedIPA.MinimumOSVersion)
 	}
+	// Bundle-id mismatch is a warning only — security-research workflows
+	// legitimately re-host other apps' IPAs, and the per-version
+	// ipa_bundle_id column captures the actual bundle for OTA manifests.
 	if parsedIPA != nil && parsedIPA.BundleID != "" && app.BundleID != "" {
 		if !strings.EqualFold(parsedIPA.BundleID, app.BundleID) {
-			removeLocalFile(dstPath)
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": fmt.Sprintf(
-					"IPA 内部 bundle id (%s) 与应用 bundle id (%s) 不一致；如果确实想换 bundle，请先在 App 设置中改名，再上传。",
-					parsedIPA.BundleID, app.BundleID,
-				),
-			})
-			return
+			log.Printf("[iosdist upload] app=%d bundle_id mismatch (ipa=%s app=%s) — allowing for security-research use case",
+				app.ID, parsedIPA.BundleID, app.BundleID)
 		}
 	}
 
@@ -702,7 +880,20 @@ func (s *Server) handleIOSInstallManifest(c *gin.Context) {
 	_ = s.bumpIOSInstallTokenAccess(token)
 
 	ipaURL := absolutizeURL(s.installPublicBaseURL(c), v.IPAUrl)
-	manifest := buildOTAManifest(ipaURL, app.BundleID, v.Version, app.Name)
+	// Apple requires manifest.plist's `bundle-identifier` to exactly
+	// match the IPA's embedded CFBundleIdentifier — otherwise the device
+	// rejects the install. Use the parsed value from the upload step
+	// when available; fall back to the app's bundle id only when the
+	// IPA wasn't introspectable (rare).
+	bundleForManifest := v.IPABundleID
+	if bundleForManifest == "" {
+		bundleForManifest = app.BundleID
+	}
+	titleForManifest := v.IPADisplayName
+	if titleForManifest == "" {
+		titleForManifest = app.Name
+	}
+	manifest := buildOTAManifest(ipaURL, bundleForManifest, v.Version, titleForManifest)
 	c.Header("Content-Type", "application/xml; charset=utf-8")
 	c.Header("Cache-Control", "no-store")
 	c.String(http.StatusOK, manifest)
