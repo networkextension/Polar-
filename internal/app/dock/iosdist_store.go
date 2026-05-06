@@ -31,6 +31,27 @@ type IOSApp struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+// IOSSignTask is one re-signing job (zsign run). Status transitions:
+// pending → running → success (output_version_id set) | failed (error_message).
+type IOSSignTask struct {
+	ID              int64      `json:"id"`
+	AppID           int64      `json:"app_id"`
+	SourceVersionID int64      `json:"source_version_id"`
+	OutputVersionID *int64     `json:"output_version_id,omitempty"`
+	CertID          int64      `json:"cert_id"`
+	ProfileID       int64      `json:"profile_id"`
+	NewBundleID     string     `json:"new_bundle_id"` // empty = preserve
+	NewAppName      string     `json:"new_app_name"`  // empty = preserve
+	IdempotencyKey  string     `json:"idempotency_key"`
+	Status          string     `json:"status"` // pending|running|success|failed
+	ErrorMessage    string     `json:"error_message"`
+	LogText         string     `json:"log_text"`
+	SubmittedBy     string     `json:"submitted_by"`
+	SubmittedAt     time.Time  `json:"submitted_at"`
+	StartedAt       *time.Time `json:"started_at,omitempty"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty"`
+}
+
 // IOSTestRequest is one "申请测试" submission from the public app page.
 type IOSTestRequest struct {
 	ID          int64      `json:"id"`
@@ -529,6 +550,160 @@ func (s *Server) listIOSTestRequests(appID int64, limit int) ([]IOSTestRequest, 
 	return out, rows.Err()
 }
 
+// ---- Sign tasks ----------------------------------------------------------
+
+const iosSignTaskColumns = `id, app_id, source_version_id, output_version_id, cert_id, profile_id,
+	new_bundle_id, new_app_name, idempotency_key, status, error_message, log_text,
+	submitted_by, submitted_at, started_at, completed_at`
+
+func scanIOSSignTask(rs interface {
+	Scan(dest ...any) error
+}, t *IOSSignTask) error {
+	return rs.Scan(
+		&t.ID, &t.AppID, &t.SourceVersionID, &t.OutputVersionID, &t.CertID, &t.ProfileID,
+		&t.NewBundleID, &t.NewAppName, &t.IdempotencyKey, &t.Status, &t.ErrorMessage, &t.LogText,
+		&t.SubmittedBy, &t.SubmittedAt, &t.StartedAt, &t.CompletedAt,
+	)
+}
+
+func (s *Server) createIOSSignTask(t *IOSSignTask) error {
+	if t == nil {
+		return errors.New("sign task is nil")
+	}
+	t.SubmittedAt = time.Now()
+	if t.Status == "" {
+		t.Status = "pending"
+	}
+	return s.db.QueryRow(
+		`INSERT INTO iosdist_sign_tasks
+			(app_id, source_version_id, cert_id, profile_id, new_bundle_id, new_app_name,
+			 idempotency_key, status, submitted_by, submitted_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
+		t.AppID, t.SourceVersionID, t.CertID, t.ProfileID, t.NewBundleID, t.NewAppName,
+		t.IdempotencyKey, t.Status, t.SubmittedBy, t.SubmittedAt,
+	).Scan(&t.ID)
+}
+
+func (s *Server) getIOSSignTask(id int64) (*IOSSignTask, error) {
+	var t IOSSignTask
+	row := s.db.QueryRow(`SELECT `+iosSignTaskColumns+` FROM iosdist_sign_tasks WHERE id = $1`, id)
+	if err := scanIOSSignTask(row, &t); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+// findIOSSuccessfulSignTaskByKey returns the most recent succeeded task
+// for an idempotency key, used by the handler to skip a redundant
+// re-sign and just return the existing result.
+func (s *Server) findIOSSuccessfulSignTaskByKey(key string) (*IOSSignTask, error) {
+	if key == "" {
+		return nil, nil
+	}
+	var t IOSSignTask
+	row := s.db.QueryRow(
+		`SELECT `+iosSignTaskColumns+`
+		 FROM iosdist_sign_tasks
+		 WHERE idempotency_key = $1 AND status = 'success'
+		 ORDER BY submitted_at DESC LIMIT 1`,
+		key,
+	)
+	if err := scanIOSSignTask(row, &t); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (s *Server) listIOSSignTasksForApp(appID int64, limit int) ([]IOSSignTask, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.db.Query(
+		`SELECT `+iosSignTaskColumns+`
+		 FROM iosdist_sign_tasks WHERE app_id = $1 ORDER BY submitted_at DESC LIMIT $2`,
+		appID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []IOSSignTask
+	for rows.Next() {
+		var t IOSSignTask
+		if err := scanIOSSignTask(rows, &t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (s *Server) markIOSSignTaskRunning(id int64) error {
+	now := time.Now()
+	_, err := s.db.Exec(
+		`UPDATE iosdist_sign_tasks SET status = 'running', started_at = $1 WHERE id = $2`,
+		now, id,
+	)
+	return err
+}
+
+func (s *Server) markIOSSignTaskSuccess(id, outputVersionID int64, logText string) error {
+	now := time.Now()
+	_, err := s.db.Exec(
+		`UPDATE iosdist_sign_tasks
+		 SET status = 'success', output_version_id = $1, log_text = $2, completed_at = $3
+		 WHERE id = $4`,
+		outputVersionID, logText, now, id,
+	)
+	return err
+}
+
+func (s *Server) markIOSSignTaskFailed(id int64, errMsg, logText string) error {
+	now := time.Now()
+	_, err := s.db.Exec(
+		`UPDATE iosdist_sign_tasks
+		 SET status = 'failed', error_message = $1, log_text = $2, completed_at = $3
+		 WHERE id = $4`,
+		errMsg, logText, now, id,
+	)
+	return err
+}
+
+// recoverIOSSignTasks runs at server startup. Rows stuck in 'running'
+// imply a crash mid-job; mark them failed with a clear message. Rows
+// in 'pending' get re-enqueued so they get a chance after restart.
+func (s *Server) recoverIOSSignTasks() ([]int64, error) {
+	now := time.Now()
+	if _, err := s.db.Exec(
+		`UPDATE iosdist_sign_tasks
+		 SET status = 'failed', error_message = '服务在签名中途重启，任务已中止', completed_at = $1
+		 WHERE status = 'running'`,
+		now,
+	); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT id FROM iosdist_sign_tasks WHERE status = 'pending' ORDER BY submitted_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // countIOSTestRequestsByEmail is the rate-limit primitive: how many
 // requests for this app + email arrived in the trailing window.
 func (s *Server) countIOSTestRequestsByEmail(appID int64, email string, since time.Time) (int, error) {
@@ -763,6 +938,26 @@ func (s *Server) listIOSProfiles(ownerUserID string) ([]IOSProvisioningProfile, 
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+func (s *Server) getIOSProfileForOwner(id int64, ownerUserID string) (*IOSProvisioningProfile, error) {
+	var p IOSProvisioningProfile
+	err := s.db.QueryRow(
+		`SELECT id, owner_user_id, name, kind, file_url, file_filename, file_size,
+			app_id, team_id, udid_count, notes, expires_at, created_at, updated_at
+		 FROM iosdist_profiles WHERE id = $1 AND owner_user_id = $2`,
+		id, ownerUserID,
+	).Scan(
+		&p.ID, &p.OwnerUserID, &p.Name, &p.Kind, &p.FileURL, &p.FileFilename, &p.FileSize,
+		&p.AppID, &p.TeamID, &p.UDIDCount, &p.Notes, &p.ExpiresAt, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 func (s *Server) deleteIOSProfile(id int64, ownerUserID string) error {

@@ -20,6 +20,28 @@ export type IOSApp = {
   updated_at: string;
 };
 
+export type IOSSignTask = {
+  id: number;
+  app_id: number;
+  source_version_id: number;
+  output_version_id?: number | null;
+  cert_id: number;
+  profile_id: number;
+  idempotency_key: string;
+  status: "pending" | "running" | "success" | "failed";
+  error_message: string;
+  log_text: string;
+  submitted_by: string;
+  submitted_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+export type IOSSignSubmitResponse = {
+  task: IOSSignTask;
+  reused: boolean;
+};
+
 export type IOSTestRequest = {
   id: number;
   app_id: number;

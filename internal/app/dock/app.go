@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,13 @@ type Server struct {
 	// passwords). nil means encryption is disabled and we'll store
 	// cleartext with a flag so the UI can warn.
 	iosdistResourceKey []byte
+
+	// iosdistZsignPath is the resolved path to the zsign binary, set
+	// once at server boot via exec.LookPath. When empty, the sign
+	// endpoint returns a 503 with a helpful "install zsign" message
+	// instead of crashing the worker.
+	iosdistZsignPath  string
+	iosdistSignQueue  chan int64
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -202,6 +210,34 @@ func NewServer(cfg Config) (*Server, error) {
 	if err := server.backfillIOSAppSlugs(); err != nil {
 		log.Printf("iosdist: slug backfill failed: %v", err)
 	}
+
+	// zsign discovery — if the binary is on PATH, the sign worker can run.
+	// Otherwise the sign endpoint will refuse with a clear 503.
+	if zsignPath, lookErr := exec.LookPath("zsign"); lookErr == nil {
+		server.iosdistZsignPath = zsignPath
+		log.Printf("[iosdist sign] zsign found at %s — sign worker enabled", zsignPath)
+	} else {
+		log.Printf("[iosdist sign] zsign NOT on PATH — sign endpoint will return 503 until installed")
+	}
+
+	// Sign worker queue + recovery: re-enqueue pending tasks, fail any
+	// stuck "running" task left over from a crash.
+	server.iosdistSignQueue = make(chan int64, 64)
+	if recoverIDs, err := server.recoverIOSSignTasks(); err != nil {
+		log.Printf("[iosdist sign] recovery failed: %v", err)
+	} else if len(recoverIDs) > 0 {
+		log.Printf("[iosdist sign] re-enqueueing %d pending task(s) after restart", len(recoverIDs))
+		go func(ids []int64) {
+			for _, id := range ids {
+				select {
+				case server.iosdistSignQueue <- id:
+				case <-server.backgroundCtx.Done():
+					return
+				}
+			}
+		}(recoverIDs)
+	}
+	go server.runIOSSignWorker(server.backgroundCtx)
 
 	server.aiAgent = newAIAgent(server, cfg)
 	if server.aiAgent != nil {
@@ -574,6 +610,9 @@ func (s *Server) registerRoutes() {
 		api.POST("/iosdist/apps/:id/versions", s.AuthMiddleware(), s.handleIOSVersionUpload)
 		api.DELETE("/iosdist/apps/:id/versions/:versionId", s.AuthMiddleware(), s.handleIOSVersionDelete)
 		api.POST("/iosdist/apps/:id/versions/:versionId/install-token", s.AuthMiddleware(), s.handleIOSVersionInstallToken)
+		api.POST("/iosdist/apps/:id/versions/:versionId/sign", s.AuthMiddleware(), s.handleIOSVersionSign)
+		api.GET("/iosdist/apps/:id/sign-tasks", s.AuthMiddleware(), s.handleIOSAppSignTaskList)
+		api.GET("/iosdist/sign-tasks/:id", s.AuthMiddleware(), s.handleIOSSignTaskDetail)
 		api.GET("/iosdist/certificates", s.AuthMiddleware(), s.handleIOSCertificateList)
 		api.POST("/iosdist/certificates", s.AuthMiddleware(), s.handleIOSCertificateUpload)
 		api.DELETE("/iosdist/certificates/:id", s.AuthMiddleware(), s.handleIOSCertificateDelete)
